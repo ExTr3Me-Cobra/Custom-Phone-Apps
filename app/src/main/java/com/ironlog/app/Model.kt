@@ -168,6 +168,8 @@ data class Profile(
     val devGemini: Boolean = false,
     /** Developer: rank with the V2 trial standards. */
     val devV2: Boolean = false,
+    /** PERSONAL-USE (removable): rank with the non-commercial personal-use standards only. */
+    val devPersonal: Boolean = false,
     /** Developer: show Research mode (a standing list of 1 Rep Max tests for improving the standards) under 1 Rep Max mode. */
     val devResearch: Boolean = false,
     /** Body fat picture you chose, 1 (leanest) to 5; null = not set (no adjustment). See [BodyFat]. */
@@ -251,7 +253,7 @@ object Json {
         .put("restSound", p.restSound).put("restVibrate", p.restVibrate).put("rankMode", p.rankMode)
         .put("dev", p.devUnlocked).put("devAi", p.devAi).put("range", p.homeRange).put("onb", p.onboarded).put("bk", p.cloud).put("cmp", p.compareAll).put("sort", p.exerciseSort).put("grip", p.gripRank)
         .put("gp", JSONObject(p.groupPicks.mapValues { JSONArray(it.value) } as Map<*, *>))
-        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent)
+        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dper", p.devPersonal).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent)
         .put("lay", JSONObject(p.layouts.mapValues { JSONArray(it.value) } as Map<*, *>))
         .put("stk", JSONObject(p.stacks as Map<*, *>))
         .put("pul", JSONObject(p.pulleys as Map<*, *>))
@@ -269,6 +271,7 @@ object Json {
         dev1rm = o.optBoolean("d1rm"),
         devGemini = o.optBoolean("dgem"),
         devV2 = o.optBoolean("dv2"),
+        devPersonal = o.optBoolean("dper"),
         devResearch = o.optBoolean("dres"),
         bodyFat = o.optIntOrNull("bf")?.takeIf { it in 1..5 },
         appLock = o.optBoolean("lock"),

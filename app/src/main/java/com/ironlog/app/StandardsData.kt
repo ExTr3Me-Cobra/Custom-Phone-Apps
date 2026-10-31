@@ -44,10 +44,14 @@ object StandardsData {
 
     /** Developer: the V2 trial build (standards_v2.json). */
     @Volatile private var v2: List<Std> = emptyList()
+    // PERSONAL-USE (removable): standards from non-commercial sources, kept entirely apart (tools/personal/README.md).
+    @Volatile private var personal: List<Std> = emptyList()
+    val personalCount get() = personal.size
 
     /** The standards in use: normally standards.json (V1); the V2 or Gemini-favored set while that developer setting is on. */
     val all: List<Std> get() = Store.profile.value.let { p ->
         when {
+            p.devPersonal -> personal // PERSONAL-USE (removable)
             p.devV2 && v2.isNotEmpty() -> v2
             p.devGemini && gemini.isNotEmpty() -> gemini
             else -> normal
@@ -60,6 +64,7 @@ object StandardsData {
         normal = load(c, "standards.json")
         gemini = load(c, "standards_gemini.json")
         v2 = load(c, "standards_v2.json")
+        personal = load(c, "personal/standards_personal.json") // PERSONAL-USE (removable)
     }
 
     private fun load(c: Context, file: String): List<Std> =
