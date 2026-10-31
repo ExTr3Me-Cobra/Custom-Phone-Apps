@@ -7,6 +7,12 @@ them, and they never read anything here.
 In the app: Developer settings → "Personal-use rankings". When it's on, only these standards rank you, and exercises
 they don't cover aren't ranked.
 
+## The data
+`inputs/standards_filled.csv`: all 739 exercises, filled in by another AI for the owner, mostly from Strength Level's
+tables (its terms forbid copying its standards; the owner's choice, for personal use in a private repo). 545 exercises
+are ranked; timed holds and blank rows aren't. `build_personal.py` turns it into the app's file (see its header for
+the body-weight scaling and stars).
+
 ## Files (everything to delete to remove it)
 - `tools/personal/` (this folder: build scripts and fetched inputs)
 - `app/src/main/assets/personal/standards_personal.json`

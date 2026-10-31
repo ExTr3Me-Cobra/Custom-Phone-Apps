@@ -1,0 +1,740 @@
+id,exercise,equipment,category,unit,weight_logged_as,men_180lb_beginner,men_180lb_novice,men_180lb_intermediate,men_180lb_advanced,men_180lb_elite,women_140lb_beginner,women_140lb_novice,women_140lb_intermediate,women_140lb_advanced,women_140lb_elite,confidence_1_to_10,source
+Bicycling,Bicycling,Other,cardio,skip,,,,,,,,,,,,,
+Bicycling_Stationary,"Bicycling, Stationary",Machine,cardio,skip,,,,,,,,,,,,,
+Elliptical_Trainer,Elliptical Trainer,Machine,cardio,skip,,,,,,,,,,,,,
+Jogging_Treadmill,"Jogging, Treadmill",Machine,cardio,skip,,,,,,,,,,,,,
+Recumbent_Bike,Recumbent Bike,Machine,cardio,skip,,,,,,,,,,,,,
+Rope_Jumping,Rope Jumping,Other,cardio,skip,,,,,,,,,,,,,
+Rowing_Stationary,"Rowing, Stationary",Machine,cardio,skip,,,,,,,,,,,,,
+Running_Treadmill,"Running, Treadmill",Machine,cardio,skip,,,,,,,,,,,,,
+Skating,Skating,Other,cardio,skip,,,,,,,,,,,,,
+Stairmaster,Stairmaster,Machine,cardio,skip,,,,,,,,,,,,,
+Trail_Running_Walking,Trail Running/Walking,Other,cardio,skip,,,,,,,,,,,,,
+Walking_Treadmill,"Walking, Treadmill",Machine,cardio,skip,,,,,,,,,,,,,
+Clean,Clean,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),130,165,215,265,320,68,92,120,150,185,8,"Strength Level (strengthlevel.com) user data 2015-2026, Clean community standards adjusted to 180/140 lb"
+Clean_Deadlift,Clean Deadlift,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,295,370,455,79,120,165,225,285,5,estimate from deadlift (x0.85)
+Clean_Pull,Clean Pull,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),100,165,240,335,430,66,88,115,145,175,6,"Strength Level (strengthlevel.com) user data 2015-2026, Clean Pull community standards adjusted to 180/140 lb"
+Clean_Shrug,Clean Shrug,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),155,200,255,320,385,82,110,145,180,220,4,estimate from clean (x1.2)
+Clean_and_Jerk,Clean and Jerk,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,155,210,275,340,61,86,115,150,190,8,"Strength Level (strengthlevel.com) user data 2015-2026, Clean and Jerk community standards adjusted to 180/140 lb"
+Clean_from_Blocks,Clean from Blocks,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),130,170,220,270,325,69,94,120,155,190,5,estimate from clean
+Frankenstein_Squat,Frankenstein Squat,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,150,195,245,300,48,74,105,145,190,3,estimate from back squat (front-squat ratio x0.8)
+Hang_Clean,Hang Clean,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),120,155,200,245,300,63,86,110,140,170,6,estimate from clean (x0.93)
+Hang_Clean_-_Below_the_Knees,Hang Clean - Below the Knees,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),120,160,205,255,305,65,88,115,145,175,5,estimate from clean (x0.95)
+Hang_Snatch,Hang Snatch,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),81,115,160,210,260,45,60,84,115,145,6,estimate from snatch (x0.92)
+Hang_Snatch_-_Below_Knees,Hang Snatch - Below Knees,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),84,120,165,215,270,45,62,87,115,145,5,estimate from snatch (x0.95)
+Heaving_Snatch_Balance,Heaving Snatch Balance,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),89,125,175,225,285,45,66,91,125,155,4,estimate from snatch
+Jerk_Balance,Jerk Balance,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),89,125,170,220,270,49,69,93,120,150,3,estimate from clean and jerk (x0.8)
+Jerk_Dip_Squat,Jerk Dip Squat,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),180,250,340,435,540,98,140,185,240,300,3,estimate from clean and jerk (partial movement x1.6)
+Kneeling_Jump_Squat,Kneeling Jump Squat,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),59,80,105,130,160,45,46,58,79,100,2,estimate from back squat (x0.35)
+Muscle_Snatch,Muscle Snatch,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),59,99,155,215,285,45,56,80,110,140,6,"Strength Level (strengthlevel.com) user data 2015-2026, Muscle Snatch community standards adjusted to 180/140 lb"
+Olympic_Squat,Olympic Squat,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),165,220,290,365,450,72,110,160,220,285,7,estimate from Strength Level squat (high-bar x0.97)
+Overhead_Squat,Overhead Squat,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),69,120,185,265,350,46,69,96,130,165,6,"Strength Level (strengthlevel.com) user data 2015-2026, Overhead Squat (female from snatch) community standards adjusted to 180/140 lb"
+Power_Clean_from_Blocks,Power Clean from Blocks,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,155,200,250,300,63,86,115,150,185,5,estimate from power clean
+Power_Jerk,Power Jerk,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,150,205,265,330,62,84,110,140,175,6,"Strength Level (strengthlevel.com) user data 2015-2026, Push Jerk community standards adjusted to 180/140 lb"
+Power_Snatch,Power Snatch,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),75,105,150,195,240,45,56,78,105,130,6,estimate from snatch (x0.85)
+Power_Snatch_from_Blocks,Power Snatch from Blocks,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),75,105,150,195,240,45,56,78,105,130,5,estimate from snatch (x0.85)
+Push_Press,Push Press,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),94,135,190,250,315,49,72,98,130,165,8,"Strength Level (strengthlevel.com) user data 2015-2026, Push Press community standards adjusted to 180/140 lb"
+Push_Press_-_Behind_the_Neck,Push Press - Behind the Neck,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),91,130,185,245,305,48,69,95,125,160,5,estimate from push press
+Romanian_Deadlift_from_Deficit,Romanian Deadlift from Deficit,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,180,250,325,405,58,93,140,195,255,5,estimate from Romanian deadlift (x0.9)
+Snatch,Snatch,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),89,125,175,225,285,45,66,91,125,155,8,"Strength Level (strengthlevel.com) user data 2015-2026, Snatch community standards adjusted to 180/140 lb"
+Snatch_Balance,Snatch Balance,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),93,135,185,240,300,46,69,96,130,165,5,estimate from snatch (x1.05)
+Snatch_Deadlift,Snatch Deadlift,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,300,380,455,63,94,135,180,230,6,"Strength Level (strengthlevel.com) user data 2015-2026, Snatch Deadlift (male from deadlift) community standards adjusted to 180/140 lb"
+Snatch_Shrug,Snatch Shrug,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,165,225,295,370,57,85,120,160,200,3,estimate from snatch (x1.3)
+Snatch_from_Blocks,Snatch from Blocks,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),90,130,180,230,290,45,67,93,125,160,5,estimate from snatch
+Split_Clean,Split Clean,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,165,210,260,315,67,90,115,150,180,4,estimate from clean
+Split_Jerk,Split Jerk,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,160,220,280,350,63,89,120,155,195,5,estimate from clean and jerk
+Split_Snatch,Split Snatch,Barbell,olympic weightlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),86,125,170,220,275,45,64,88,120,150,4,estimate from snatch
+Alternate_Leg_Diagonal_Bound,Alternate Leg Diagonal Bound,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Bench_Jump,Bench Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Box_Jump_Multiple_Response,Box Jump (Multiple Response),Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,6,12,20,30,42,2,"estimate (continuous reps to failure, no dataset)"
+Box_Skip,Box Skip,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Double_Leg_Butt_Kick,Double Leg Butt Kick,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),10,20,30,45,60,8,16,25,38,52,2,estimate (no dataset)
+Fast_Skipping,Fast Skipping,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Front_Box_Jump,Front Box Jump,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Hurdle_Hops,Hurdle Hops,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,6,12,20,30,42,2,estimate (no dataset)
+Knee_Tuck_Jump,Knee Tuck Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,5,10,18,27,38,2,estimate (no dataset)
+Lateral_Bound,Lateral Bound,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Lateral_Box_Jump,Lateral Box Jump,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,6,12,20,30,42,2,estimate (no dataset)
+Linear_Depth_Jump,Linear Depth Jump,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Medicine_Ball_Full_Twist,Medicine Ball Full Twist,Medicine Ball,plyometrics,1RM_lb,total external weight lifted,10,15,20,30,40,6,8,12,16,20,2,estimate from common medicine-ball weights
+Mountain_Climbers,Mountain Climbers,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),20,40,70,100,150,15,30,55,85,125,2,estimate (no dataset)
+Overhead_Slam,Overhead Slam,Medicine Ball,plyometrics,1RM_lb,total external weight lifted,15,20,30,40,50,8,12,15,20,30,2,estimate from common slam-ball weights
+Plyo_Push-up,Plyo Push-up,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),3,8,15,25,35,1,3,7,12,20,3,estimate from push-up rep standards
+Scissors_Jump,Scissors Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,8,16,28,42,60,2,estimate (no dataset)
+Side_Standing_Long_Jump,Side Standing Long Jump,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Side_to_Side_Box_Shuffle,Side to Side Box Shuffle,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,8,16,28,42,60,2,estimate (no dataset)
+Single_Leg_Butt_Kick,Single Leg Butt Kick,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Single-Leg_Lateral_Hop,Single-Leg Lateral Hop,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,6,12,20,30,42,2,estimate (no dataset)
+Sledgehammer_Swings,Sledgehammer Swings,Other,plyometrics,max_reps,reps with body weight only (people who can do at least 1),15,30,50,75,100,10,20,35,55,75,2,estimate (no dataset)
+Split_Jump,Split Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,8,16,28,42,60,2,estimate (no dataset)
+Standing_Long_Jump,Standing Long Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Star_Jump,Star Jump,Bodyweight,plyometrics,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,8,16,28,42,60,2,estimate (no dataset)
+Vertical_Swing,Vertical Swing,Dumbbell,plyometrics,1RM_lb,weight of the single dumbbell held,25,40,60,80,100,15,20,30,40,55,3,estimate from Strength Level Kettlebell Swing
+Band_Good_Morning,Band Good Morning,Bands,powerlifting,1RM_lb,band resistance (lb rating),40,60,80,110,150,20,30,50,70,90,2,estimate from common band ratings
+Band_Good_Morning_Pull_Through,Band Good Morning (Pull Through),Bands,powerlifting,1RM_lb,band resistance (lb rating),35,55,75,100,135,18,28,45,62,80,2,estimate from common band ratings
+Barbell_Glute_Bridge,Barbell Glute Bridge,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),82,160,270,400,550,67,120,195,285,390,7,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Glute Bridge community standards adjusted to 180/140 lb"
+Barbell_Hip_Thrust,Barbell Hip Thrust,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),97,180,295,430,585,66,120,195,290,395,8,"Strength Level (strengthlevel.com) user data 2015-2026, Hip Thrust community standards adjusted to 180/140 lb"
+Bench_Press_-_Powerlifting,Bench Press - Powerlifting,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),130,175,225,285,350,45,74,110,155,205,7,estimate from Strength Level bench (competition arch x1.03)
+Board_Press,Board Press,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),140,185,240,305,375,48,79,120,165,220,5,estimate from bench (2-board x1.1)
+Box_Squat,Box Squat,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,235,305,385,470,75,115,170,230,300,6,estimate from Strength Level squat (SL box-squat data skews advanced)
+Box_Squat_with_Bands,Box Squat with Bands,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,170,225,285,345,56,86,125,170,220,3,estimate from squat (bar weight only x0.75)
+Deadlift_with_Bands,Deadlift with Bands,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),150,200,260,330,400,70,105,145,200,255,3,estimate from deadlift (bar weight only x0.75)
+Deficit_Deadlift,Deficit Deadlift,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),180,240,315,395,480,84,125,175,240,305,6,estimate from deadlift; SL deficit deadlift ~0.85-0.9x
+Dumbbell_Floor_Press,Dumbbell Floor Press,Dumbbell,powerlifting,1RM_lb,weight of ONE dumbbell (one of the pair),40,59,82,110,140,15,26,40,58,78,6,estimate from SL dumbbell floor press vs dumbbell bench
+Floor_Press,Floor Press,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,150,200,250,305,45,65,97,135,180,6,estimate from bench (x0.9)
+Glute_Ham_Raise,Glute Ham Raise,Machine,powerlifting,1RM_lb,weight shown on the machine (stack or plates loaded),,,,,,,,,,,,
+Good_Morning,Good Morning,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),60,120,200,295,405,45,56,93,140,195,6,"Strength Level (strengthlevel.com) user data 2015-2026, Good Morning community standards adjusted to 180/140 lb"
+Good_Morning_off_Pins,Good Morning off Pins,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),57,110,190,280,385,45,53,88,135,185,4,estimate from good morning
+Pin_Presses,Pin Presses,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),120,160,210,265,320,45,68,105,145,190,4,estimate from bench (x0.95)
+Rack_Pull_with_Bands,Rack Pull with Bands,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),180,240,315,395,480,84,125,175,240,305,3,estimate from rack pull (bar weight only)
+Rack_Pulls,Rack Pulls,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),230,310,400,505,615,105,160,225,305,390,5,estimate from deadlift (below-knee x1.15)
+Seated_Good_Mornings,Seated Good Mornings,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,88,150,220,305,45,46,70,105,145,3,estimate from good morning (x0.75)
+Speed_Box_Squat,Speed Box Squat,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,300,375,460,74,115,165,225,290,4,estimate: 1RM equals box squat 1RM
+Sumo_Deadlift,Sumo Deadlift,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),215,285,370,470,570,100,150,210,280,360,7,"Strength Level (strengthlevel.com) user data 2015-2026, Sumo Deadlift community vs Deadlift ratio (~1.07)"
+Sumo_Deadlift_with_Bands,Sumo Deadlift with Bands,Barbell,powerlifting,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),160,215,280,350,430,74,110,155,210,270,3,estimate from sumo deadlift (bar weight only)
+x_Ankle_Alphabet,Ankle Alphabet,Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Ankle_Pumps,Ankle Pumps,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Band_External_Rotation_at_90,Band External Rotation at 90°,Bands,rehab,1RM_lb,band resistance (lb rating),5,8,12,17,23,3,5,8,11,15,2,estimate from common light-band ratings
+x_Band_Finger_Extensions,Band Finger Extensions,Bands,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Band_Serratus_Punch,Band Serratus Punch,Bands,rehab,1RM_lb,band resistance (lb rating),10,20,30,40,55,5,10,17,25,35,2,estimate from common band ratings
+x_Bird_Dog,Bird Dog,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Chin_Tuck,Chin Tuck,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Clamshell,Clamshell,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Fire_Hydrant,Fire Hydrant,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Full_Can_Scaption,Full Can Scaption,Dumbbell,rehab,1RM_lb,weight of ONE dumbbell (one of the pair),9,18,32,49,68,5,11,17,26,37,4,estimate from dumbbell lateral raise (x0.9)
+x_Glute_Bridge,Glute Bridge,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),20,35,50,75,100,20,35,50,75,100,2,"estimate (bodyweight bridge to failure, no dataset)"
+x_Heel_Raise,Heel Raise,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),25,40,60,85,110,20,35,55,80,105,3,estimate; double-leg; single-leg norms ~25-30 reps (Hebert-Losier 2017)
+x_Heel_Slide,Heel Slide,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Incline_Push_Up_Plus,Incline Push-Up Plus,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),8,28,53,84,116,3,13,27,45,66,3,estimate from push-up reps (x1.4)
+x_Isometric_External_Rotation_Wall,Isometric External Rotation (Wall),Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Isometric_Internal_Rotation_Wall,Isometric Internal Rotation (Wall),Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Lateral_Band_Walk,Lateral Band Walk,Bands,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Mini_Squat,Mini Squat,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Pelvic_Tilt,Pelvic Tilt,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Prone_Hip_Extension,Prone Hip Extension,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Prone_Press_Up_McKenzie,Prone Press-Up (McKenzie),Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Prone_Y_T_W_Raises,Prone Y-T-W Raises,Dumbbell,rehab,1RM_lb,weight of ONE dumbbell (one of the pair),4,9,16,24,34,3,5,9,13,18,3,estimate from dumbbell lateral raise (x0.45)
+x_Push_Up_Plus,Push-Up Plus,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),5,18,34,54,75,2,8,17,29,42,4,estimate from push-up reps (x0.9)
+x_Quad_Set,Quad Set,Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Rice_Bucket_Grip_Training,Rice Bucket Grip Training,Other,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Scapular_Retraction,Scapular Retraction,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Serratus_Wall_Slide_with_Foam_Roller,Serratus Wall Slide with Foam Roller,Other,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Short_Arc_Quad,Short Arc Quad,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Shoulder_Flexion_with_Wand,Shoulder Flexion with Wand,Other,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Shoulder_Pendulum,Shoulder Pendulum,Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+x_Side_Lying_External_Rotation_Dumbbell,Side-Lying External Rotation (Dumbbell),Dumbbell,rehab,1RM_lb,weight of ONE dumbbell (one of the pair),5,8,12,17,22,3,5,7,10,13,3,estimate (no dataset)
+x_Side_Lying_Hip_Abduction,Side-Lying Hip Abduction,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Single_Leg_Balance,Single-Leg Balance,Bodyweight,rehab,max_seconds,"longest hold in seconds, body weight only",15,30,45,60,90,15,30,45,60,90,3,estimate; Springer et al. 2007 eyes-open norms ~43 s (age 18-39) with test cap removed
+x_Sit_to_Stand,Sit-to-Stand,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Step_Down,Step-Down,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Straight_Leg_Raise,Straight Leg Raise,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Terminal_Knee_Extension,Terminal Knee Extension,Bands,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Toe_Raise,Toe Raise,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Wall_Push_Up,Wall Push-Up,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Wall_Slide,Wall Slide,Bodyweight,rehab,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Ab_Crunch_Machine,Ab Crunch Machine,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),37,79,140,215,300,21,51,97,160,230,3,estimate from cable crunch (x0.8)
+x_Ab_Wheel_Rollout,Ab Wheel Rollout,Other,strength,max_reps,reps with body weight only (people who can do at least 1),3,8,15,25,35,1,4,9,16,25,3,"estimate (kneeling rollouts, no dataset)"
+Air_Bike,Air Bike,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,22,52,90,133,3,14,37,66,101,2,estimate from crunch reps
+Alternate_Hammer_Curl,Alternate Hammer Curl,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",21,35,53,75,99,10,18,28,40,54,6,"Strength Level (strengthlevel.com) user data 2015-2026, Hammer Curl community standards adjusted to 180/140 lb"
+Alternate_Heel_Touchers,Alternate Heel Touchers,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),5,24,58,100,148,3,15,41,73,112,2,estimate from crunch reps
+Alternate_Incline_Dumbbell_Curl,Alternate Incline Dumbbell Curl,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",16,28,45,64,86,7,13,21,31,43,5,"Strength Level (strengthlevel.com) user data 2015-2026, Incline Dumbbell Curl community standards adjusted to 180/140 lb"
+Alternating_Cable_Shoulder_Press,Alternating Cable Shoulder Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),30,46,66,90,115,11,19,29,43,58,3,estimate from dumbbell shoulder press
+Alternating_Deltoid_Raise,Alternating Deltoid Raise,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",10,21,37,57,80,6,13,20,30,43,4,estimate from lateral raise
+Alternating_Floor_Press,Alternating Floor Press,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",37,54,76,100,130,14,24,37,54,72,4,estimate from dumbbell bench (kettlebell x0.85)
+Alternating_Hang_Clean,Alternating Hang Clean,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Alternating_Kettlebell_Press,Alternating Kettlebell Press,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",30,46,66,90,115,11,19,29,43,58,4,estimate from dumbbell shoulder press (x0.9)
+Alternating_Kettlebell_Row,Alternating Kettlebell Row,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",21,38,62,90,120,10,18,29,42,58,3,estimate from dumbbell row (kettlebell sizes cap load)
+Alternating_Renegade_Row,Alternating Renegade Row,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",10,19,31,45,61,5,9,14,21,29,3,estimate from dumbbell row (x0.4)
+Arnold_Dumbbell_Press,Arnold Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),24,37,54,74,95,12,19,26,35,45,7,"Strength Level (strengthlevel.com) user data 2015-2026, Arnold Press community standards adjusted to 180/140 lb"
+Around_The_Worlds,Around The Worlds,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,11,16,22,30,38,4,7,11,16,21,2,estimate from dumbbell bench (x0.25)
+Back_Flyes_-_With_Bands,Back Flyes - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),10,15,25,35,50,5,10,15,20,30,2,estimate from common band ratings
+Balance_Board,Balance Board,Other,strength,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+Ball_Leg_Curl,Ball Leg Curl,Exercise Ball,strength,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,8,15,25,35,50,2,estimate (no dataset)
+Band_Assisted_Pull-Up,Band Assisted Pull-Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Band_Hip_Adductions,Band Hip Adductions,Bands,strength,1RM_lb,band resistance (lb rating),15,25,35,50,70,10,15,25,35,50,2,estimate from common band ratings
+Band_Pull_Apart,Band Pull Apart,Bands,strength,1RM_lb,band resistance (lb rating),10,20,30,45,60,5,10,20,30,40,2,estimate from common band ratings
+Band_Skull_Crusher,Band Skull Crusher,Bands,strength,1RM_lb,band resistance (lb rating),15,25,40,55,75,8,15,22,32,45,2,estimate from common band ratings
+Barbell_Ab_Rollout,Barbell Ab Rollout,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),,,,,,,,,,,,
+Barbell_Ab_Rollout_-_On_Knees,Barbell Ab Rollout - On Knees,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),,,,,,,,,,,,
+Barbell_Bench_Press_-_Medium_Grip,Barbell Bench Press - Medium Grip,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,170,220,275,340,45,72,110,150,200,9,"Strength Level (strengthlevel.com) user data 2015-2026, Bench Press bodyweight table (180/140 lb)"
+Barbell_Curl,Barbell Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),49,73,105,140,180,20,33,53,78,105,9,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Curl bodyweight table (180/140 lb)"
+Barbell_Deadlift,Barbell Deadlift,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),200,270,350,440,535,93,140,195,265,340,9,"Strength Level (strengthlevel.com) user data 2015-2026, Deadlift bodyweight table (180/140 lb)"
+Barbell_Full_Squat,Barbell Full Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),165,220,290,365,450,72,110,160,220,285,8,Strength Level squat (ATG x0.97)
+Barbell_Guillotine_Bench_Press,Barbell Guillotine Bench Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),95,125,165,210,255,45,54,81,115,150,3,estimate from bench (x0.75)
+Barbell_Hack_Squat,Barbell Hack Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,200,290,395,505,45,68,100,140,185,6,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Hack Squat community standards adjusted to 180/140 lb"
+Barbell_Incline_Bench_Press_-_Medium_Grip,Barbell Incline Bench Press - Medium Grip,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,155,205,260,320,45,57,93,140,190,8,"Strength Level (strengthlevel.com) user data 2015-2026, Incline Bench Press community standards adjusted to 180/140 lb"
+Barbell_Incline_Shoulder_Raise,Barbell Incline Shoulder Raise,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),51,68,88,110,135,20,29,43,61,80,2,estimate from bench (x0.4)
+Barbell_Lunge,Barbell Lunge,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),96,140,190,250,315,45,70,105,150,200,6,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Lunge female standards; male scaled from squat by female lunge:squat ratio"
+Barbell_Rear_Delt_Row,Barbell Rear Delt Row,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),65,89,120,155,190,45,46,58,80,105,3,estimate from bent over row (x0.6)
+Barbell_Rollout_from_Bench,Barbell Rollout from Bench,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),,,,,,,,,,,,
+Barbell_Seated_Calf_Raise,Barbell Seated Calf Raise,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,100,185,285,400,24,61,120,190,270,3,estimate from seated calf raise (x0.8)
+Barbell_Shoulder_Press,Barbell Shoulder Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),75,105,140,180,225,45,47,70,98,130,9,"Strength Level (strengthlevel.com) user data 2015-2026, Shoulder Press bodyweight table (180/140 lb)"
+Barbell_Shrug,Barbell Shrug,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),120,195,300,420,555,45,74,125,190,260,5,estimate from SL behind-the-back shrug
+Barbell_Shrug_Behind_The_Back,Barbell Shrug Behind The Back,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),120,195,300,420,555,45,74,125,190,260,6,"Strength Level (strengthlevel.com) user data 2015-2026, Behind The Back Barbell Shrug community standards adjusted to 180/140 lb"
+Barbell_Side_Bend,Barbell Side Bend,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,94,120,155,185,45,49,69,92,120,2,estimate from deadlift (x0.35)
+Barbell_Side_Split_Squat,Barbell Side Split Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),93,125,165,205,255,45,63,91,125,160,3,estimate from squat (x0.55)
+Barbell_Squat,Barbell Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,300,375,460,74,115,165,225,290,9,"Strength Level (strengthlevel.com) user data 2015-2026, Squat bodyweight table (180/140 lb)"
+Barbell_Squat_To_A_Bench,Barbell Squat To A Bench,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,235,305,385,470,75,115,170,230,300,6,estimate from Strength Level squat
+Barbell_Step_Ups,Barbell Step Ups,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),82,120,160,210,265,45,60,90,125,170,4,estimate from barbell lunge (x0.85)
+Barbell_Walking_Lunge,Barbell Walking Lunge,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),91,130,180,235,300,45,66,100,140,190,5,estimate from barbell lunge (x0.95)
+Battling_Ropes,Battling Ropes,Other,strength,max_seconds,"longest hold in seconds, body weight only",20,35,60,90,150,15,30,50,75,120,2,"estimate (continuous work to failure, no dataset)"
+x_Bear_Crawl,Bear Crawl,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",20,40,70,110,180,15,30,55,90,150,2,estimate (no dataset)
+Bench_Dips,Bench Dips,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,12,31,54,79,2,7,18,32,47,6,"Strength Level (strengthlevel.com) user data 2015-2026, Bench Dips reps (female estimated)"
+Bench_Press_-_With_Bands,Bench Press - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),40,60,80,110,150,20,30,45,60,80,2,estimate from common band ratings
+Bent_Over_Barbell_Row,Bent Over Barbell Row,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,150,200,255,315,45,66,97,135,175,9,"Strength Level (strengthlevel.com) user data 2015-2026, Bent Over Row bodyweight table (180/140 lb)"
+Bent_Over_Dumbbell_Rear_Delt_Raise_With_Head_On_Bench,Bent Over Dumbbell Rear Delt Raise With Head On Bench,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),8,16,28,43,61,5,10,15,23,33,4,estimate from lateral raise (x0.8)
+Bent_Over_Low-Pulley_Side_Lateral,Bent Over Low-Pulley Side Lateral,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),4,11,22,38,58,3,6,12,20,30,3,estimate from cable lateral raise
+Bent_Over_Two-Dumbbell_Row,Bent Over Two-Dumbbell Row,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),23,43,70,100,135,11,20,32,47,65,5,estimate from dumbbell row (x0.9)
+Bent_Over_Two-Dumbbell_Row_With_Palms_In,Bent Over Two-Dumbbell Row With Palms In,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),23,43,70,100,135,11,20,32,47,65,5,estimate from dumbbell row (x0.9)
+Bent-Arm_Barbell_Pullover,Bent-Arm Barbell Pullover,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),30,50,75,105,140,20,30,45,62,85,3,"Strength Level (strengthlevel.com) user data 2015-2026, Bent Arm Barbell Pullover (low end) + estimate"
+Bent-Arm_Dumbbell_Pullover,Bent-Arm Dumbbell Pullover,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,25,40,60,85,110,12,20,30,42,55,4,estimate from Strength Level Dumbbell Pullover
+Bent-Knee_Hip_Raise,Bent-Knee Hip Raise,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,2,estimate from crunch reps (x0.6)
+Bodyweight_Mid_Row,Bodyweight Mid Row,Other,strength,max_reps,reps with body weight only (people who can do at least 1),5,12,20,30,40,2,6,12,20,28,3,estimate from pull-up and push-up rep standards
+Bodyweight_Squat,Bodyweight Squat,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),15,30,50,75,100,12,25,45,70,95,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Bodyweight Squat
+Bodyweight_Walking_Lunge,Bodyweight Walking Lunge,Other,strength,max_reps,reps with body weight only (people who can do at least 1),15,30,50,80,110,12,25,45,70,100,2,estimate (no dataset)
+x_Bottoms_Up_Kettlebell_Hold,Bottoms-Up Kettlebell Hold,Kettlebell,strength,skip,,,,,,,,,,,,,
+Bradford_Rocky_Presses,Bradford/Rocky Presses,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),60,83,110,145,180,45,46,56,78,105,3,estimate from shoulder press (x0.8)
+Butterfly,Butterfly,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),50,85,130,185,245,25,45,70,100,135,4,estimate from Strength Level Machine Chest Fly
+Cable_Chest_Press,Cable Chest Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),64,84,110,140,170,22,36,54,76,100,3,estimate from bench (x0.5)
+Cable_Crossover,Cable Crossover,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),12,22,35,50,70,6,12,20,30,42,3,estimate from Strength Level Cable Fly (per side)
+Cable_Crunch,Cable Crunch,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),46,99,175,270,375,26,64,120,200,285,7,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Crunch community standards adjusted to 180/140 lb"
+Cable_Deadlifts,Cable Deadlifts,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),100,135,175,220,270,46,70,98,130,170,2,estimate from deadlift (stack-limited x0.5)
+x_Cable_External_Rotation_at_90,Cable External Rotation at 90°,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),6,12,20,30,42,4,7,12,18,24,3,estimate from cable external rotation
+Cable_Hammer_Curls_-_Rope_Attachment,Cable Hammer Curls - Rope Attachment,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),42,69,105,150,195,16,31,51,77,105,5,estimate from cable bicep curl
+Cable_Hip_Adduction,Cable Hip Adduction,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),15,25,40,55,75,10,18,28,40,55,2,estimate (no dataset)
+Cable_Incline_Triceps_Extension,Cable Incline Triceps Extension,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),24,45,75,110,150,10,22,38,59,83,3,estimate from cable overhead extension
+Cable_Internal_Rotation,Cable Internal Rotation,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),10,20,32,49,68,6,12,20,29,39,3,estimate from cable external rotation (x1.3)
+Cable_Iron_Cross,Cable Iron Cross,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),11,20,32,45,63,5,11,18,27,38,2,estimate from cable crossover
+Cable_Lying_Triceps_Extension,Cable Lying Triceps Extension,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),27,51,84,125,165,12,25,43,67,93,3,estimate from cable overhead extension
+Cable_One_Arm_Tricep_Extension,Cable One Arm Tricep Extension,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",20,36,58,85,115,9,17,30,46,64,4,estimate from tricep pushdown (one arm x0.45)
+Cable_Preacher_Curl,Cable Preacher Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),39,65,100,140,185,15,29,48,73,100,4,estimate from cable bicep curl
+Cable_Rear_Delt_Fly,Cable Rear Delt Fly,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),8,15,25,37,50,5,9,15,22,30,3,estimate from Strength Level Cable Reverse Fly
+Cable_Reverse_Crunch,Cable Reverse Crunch,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),18,40,70,110,150,10,25,48,79,115,2,estimate from cable crunch (x0.4)
+Cable_Rope_Overhead_Triceps_Extension,Cable Rope Overhead Triceps Extension,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),30,56,94,135,185,13,27,48,74,105,6,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Overhead Tricep Extension community standards adjusted to 180/140 lb"
+Cable_Rope_Rear-Delt_Rows,Cable Rope Rear-Delt Rows,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),31,62,105,155,215,22,42,70,105,145,4,estimate from face pull
+Cable_Russian_Twists,Cable Russian Twists,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),15,30,45,65,85,8,15,25,35,50,2,estimate (no dataset)
+Cable_Seated_Crunch,Cable Seated Crunch,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),37,79,140,215,300,21,51,97,160,230,3,estimate from cable crunch
+Cable_Seated_Lateral_Raise,Cable Seated Lateral Raise,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),5,14,28,48,72,4,8,15,25,37,4,estimate from Strength Level Cable Lateral Raise (trimmed outliers)
+x_Cable_Serratus_Punch,Cable Serratus Punch,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),15,25,40,55,75,8,15,22,32,45,2,estimate (no dataset)
+Cable_Shoulder_Press,Cable Shoulder Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),45,62,84,110,135,17,28,42,59,77,2,estimate from shoulder press
+Cable_Shrugs,Cable Shrugs,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),94,155,230,320,420,31,66,115,180,250,6,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Shrug community standards adjusted to 180/140 lb"
+Cable_Wrist_Curl,Cable Wrist Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),29,44,62,84,110,11,20,32,47,64,3,estimate from barbell curl (x0.6)
+Calf_Press,Calf Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),71,155,275,425,590,30,79,155,260,385,4,estimate from machine calf raise
+Calf_Press_On_The_Leg_Press_Machine,Calf Press On The Leg Press Machine,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),185,275,385,520,665,86,150,240,350,470,4,estimate from sled leg press (x0.75)
+Calf_Raise_On_A_Dumbbell,Calf Raise On A Dumbbell,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),18,32,50,72,100,9,16,25,36,50,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Dumbbell Calf Raise
+Calf_Raises_-_With_Bands,Calf Raises - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),50,80,120,160,200,30,50,70,100,130,2,estimate from common band ratings
+Car_Drivers,Car Drivers,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,50,60,75,90,25,30,35,45,55,2,"estimate (plate/bar rotation, no dataset)"
+Chair_Squat,Chair Squat,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),,,,,,,,,,,,
+Chin-Up,Chin-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,7,14,23,33,1,3,9,15,21,7,"Strength Level (strengthlevel.com) user data 2015-2026, Chin Ups reps; rescaled to those who can do 1+"
+Clean_and_Press,Clean and Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),90,130,185,240,305,45,59,88,125,165,7,"Strength Level (strengthlevel.com) user data 2015-2026, Clean and Press community standards adjusted to 180/140 lb"
+Close-Grip_Barbell_Bench_Press,Close-Grip Barbell Bench Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,150,200,250,305,45,65,97,135,180,7,estimate from Strength Level bench (x0.9)
+Close-Grip_Dumbbell_Press,Close-Grip Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),34,51,71,95,120,13,22,34,50,68,4,estimate from dumbbell bench (x0.8)
+Close-Grip_EZ_Bar_Curl,Close-Grip EZ Bar Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),47,69,99,135,170,20,31,50,74,100,6,estimate from barbell curl
+Close-Grip_EZ-Bar_Press,Close-Grip EZ-Bar Press,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),100,135,175,220,270,35,58,86,120,160,4,estimate from bench (x0.8)
+Close-Grip_Front_Lat_Pulldown,Close-Grip Front Lat Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),115,160,205,260,320,52,76,105,140,185,7,"Strength Level (strengthlevel.com) user data 2015-2026, Close Grip Lat Pulldown community standards adjusted to 180/140 lb"
+Close-Grip_Standing_Barbell_Curl,Close-Grip Standing Barbell Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),47,69,99,135,170,20,31,50,74,100,6,estimate from barbell curl
+Cocoons,Cocoons (Lying Tuck Crunch),Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,2,estimate from crunch reps
+Concentration_Curls,Concentration Curls,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,27,42,60,81,8,14,23,34,47,6,estimate from dumbbell curl (x0.85)
+Cross_Body_Hammer_Curl,Cross Body Hammer Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,33,50,71,94,10,17,26,38,51,5,estimate from hammer curl
+Cross_Over_-_With_Bands,Cross Over - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),10,20,30,40,55,5,10,15,22,30,2,estimate from common band ratings
+Cross-Body_Crunch,Cross-Body Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,17,41,70,104,2,10,29,51,78,2,estimate from crunch reps
+Crunch_-_Legs_On_Exercise_Ball,Crunch - Legs On Exercise Ball,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,22,52,90,133,3,14,37,66,101,3,estimate from crunch reps
+Crunches,Crunches,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),5,24,58,100,148,3,15,41,73,112,5,Strength Level (strengthlevel.com) user data 2015-2026/FitnessVolt Crunches reps
+Cuban_Press,Cuban Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),6,12,21,32,46,4,7,11,17,25,3,estimate from lateral raise (x0.6)
+Dead_Bug,Dead Bug,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+x_Dead_Hang,Dead Hang,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",20,40,60,90,130,10,25,40,60,90,4,estimate from published dead-hang benchmarks (~60-90 s typical trained men)
+Decline_Barbell_Bench_Press,Decline Barbell Bench Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),130,180,240,310,385,45,73,115,170,230,7,"Strength Level (strengthlevel.com) user data 2015-2026, Decline Bench Press community standards adjusted to 180/140 lb"
+Decline_Crunch,Decline Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,3,estimate from crunch reps
+Decline_Dumbbell_Bench_Press,Decline Dumbbell Bench Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),45,67,93,125,160,17,29,45,66,89,5,estimate from dumbbell bench (x1.05)
+Decline_Dumbbell_Flyes,Decline Dumbbell Flyes,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,29,40,54,68,7,13,19,28,38,4,estimate from dumbbell bench press (x0.45)
+Decline_Dumbbell_Triceps_Extension,Decline Dumbbell Triceps Extension,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),15,25,38,52,70,8,13,20,28,38,4,estimate from skullcrusher (per dumbbell)
+Decline_EZ_Bar_Triceps_Extension,Decline EZ Bar Triceps Extension,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,65,90,120,155,25,32,48,68,90,5,estimate from Strength Level Lying Tricep Extension / bench ratios
+Decline_Oblique_Crunch,Decline Oblique Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,12,29,50,74,2,8,20,36,56,2,estimate from crunch reps
+Decline_Push-Up,Decline Push-Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),5,16,30,48,66,2,7,15,26,38,4,estimate from push-up reps (x0.8)
+Decline_Reverse_Crunch,Decline Reverse Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,10,23,40,59,1,6,16,29,45,2,estimate from crunch reps
+Decline_Smith_Press,Decline Smith Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),125,170,220,275,340,44,72,110,150,200,4,estimate from bench
+Dip_Machine,Dip Machine,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),90,140,200,270,350,40,65,100,140,185,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Machine Tricep Dip
+Dips_-_Chest_Version,Dips - Chest Version,Other,strength,max_reps,reps with body weight only (people who can do at least 1),2,9,20,33,47,1,4,11,18,27,6,"Strength Level (strengthlevel.com) user data 2015-2026, Dips reps; rescaled to those who can do 1+"
+Dips_-_Triceps_Version,Dips - Triceps Version,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,9,19,31,45,1,4,10,17,26,6,estimate from dips
+Donkey_Calf_Raises,Donkey Calf Raises,Other,strength,1RM_lb,total external weight lifted,45,90,160,250,350,25,50,90,140,200,2,estimate (external load only)
+Double_Kettlebell_Jerk,Double Kettlebell Jerk,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),37,56,81,110,140,13,24,36,52,70,3,estimate from dumbbell shoulder press (x1.1)
+Double_Kettlebell_Push_Press,Double Kettlebell Push Press,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),35,53,78,105,135,13,23,34,50,67,3,estimate from dumbbell shoulder press
+Double_Kettlebell_Snatch,Double Kettlebell Snatch,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),18,26,35,44,53,9,13,18,22,26,3,estimate from common kettlebell sizes (8-24 kg)
+Double_Kettlebell_Windmill,Double Kettlebell Windmill,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,18,26,35,53,70,9,13,18,26,35,3,estimate from kettlebell sizes
+Drag_Curl,Drag Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),42,62,88,120,155,20,28,45,66,91,5,estimate from barbell curl
+Dumbbell_Alternate_Bicep_Curl,Dumbbell Alternate Bicep Curl,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",19,33,50,72,97,9,17,28,41,56,7,Strength Level dumbbell curl
+Dumbbell_Bench_Press,Dumbbell Bench Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),43,64,89,120,150,16,28,43,63,85,9,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Bench Press bodyweight table (180/140 lb)"
+Dumbbell_Bench_Press_with_Neutral_Grip,Dumbbell Bench Press with Neutral Grip,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),41,61,85,115,145,15,27,41,60,81,6,estimate from dumbbell bench
+Dumbbell_Bicep_Curl,Dumbbell Bicep Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),19,32,49,71,95,9,17,27,40,55,9,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Curl bodyweight table (180/140 lb)"
+Dumbbell_Clean,Dumbbell Clean,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),30,45,62,82,105,13,20,30,42,55,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Dumbbell Clean
+Dumbbell_Flyes,Dumbbell Flyes,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,29,40,54,68,7,13,19,28,38,5,estimate from dumbbell bench press (x0.45)
+Dumbbell_Incline_Row,Dumbbell Incline Row,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),29,54,85,130,180,15,24,38,55,75,6,"Strength Level (strengthlevel.com) user data 2015-2026, Chest Supported Dumbbell Row community standards adjusted to 180/140 lb"
+Dumbbell_Incline_Shoulder_Raise,Dumbbell Incline Shoulder Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),22,32,44,60,76,8,14,22,32,42,2,estimate from dumbbell bench (x0.5)
+Dumbbell_Lunges,Dumbbell Lunges,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,35,55,80,105,10,18,28,40,55,5,estimate from Strength Level Dumbbell Lunge
+Dumbbell_Lying_Pronation,Dumbbell Lying Pronation,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),5,8,12,17,22,3,5,7,10,14,2,estimate (no dataset)
+Dumbbell_Lying_Rear_Lateral_Raise,Dumbbell Lying Rear Lateral Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),8,15,26,40,57,4,9,14,22,31,4,estimate from lateral raise
+Dumbbell_Lying_Supination,Dumbbell Lying Supination,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),5,8,12,17,22,3,5,7,10,14,2,estimate (no dataset)
+Dumbbell_One-Arm_Shoulder_Press,Dumbbell One-Arm Shoulder Press,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",35,53,78,105,135,13,23,34,50,67,5,estimate from dumbbell shoulder press
+Dumbbell_One-Arm_Triceps_Extension,Dumbbell One-Arm Triceps Extension,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",12,22,35,50,65,6,11,18,26,35,4,estimate from two-hand dumbbell triceps extension
+Dumbbell_One-Arm_Upright_Row,Dumbbell One-Arm Upright Row,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",20,35,50,70,95,10,16,25,35,48,3,estimate from upright row
+Dumbbell_Prone_Incline_Curl,Dumbbell Prone Incline Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),14,24,38,54,73,6,11,18,27,37,4,estimate from incline dumbbell curl
+Dumbbell_Rear_Lunge,Dumbbell Rear Lunge,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,35,55,80,105,10,18,28,40,55,4,estimate from Strength Level Dumbbell Lunge
+Dumbbell_Scaption,Dumbbell Scaption,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),10,20,35,54,76,6,12,19,29,41,4,estimate from lateral raise
+Dumbbell_Seated_One-Leg_Calf_Raise,Dumbbell Seated One-Leg Calf Raise,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",25,45,70,100,135,12,22,35,50,70,2,estimate (no dataset)
+Dumbbell_Shoulder_Press,Dumbbell Shoulder Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),33,51,74,100,130,12,22,33,48,64,8,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Shoulder Press community standards adjusted to 180/140 lb"
+Dumbbell_Shrug,Dumbbell Shrug,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),40,65,95,130,170,15,28,45,65,90,5,estimate from Strength Level Dumbbell Shrug
+Dumbbell_Side_Bend,Dumbbell Side Bend,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),30,50,70,95,120,15,25,35,50,65,3,estimate (no dataset)
+Dumbbell_Squat,Dumbbell Squat,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),25,45,70,100,130,12,22,35,50,68,4,estimate from goblet squat / dumbbell lunge
+Dumbbell_Squat_To_A_Bench,Dumbbell Squat To A Bench,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),25,45,70,100,130,12,22,35,50,68,3,estimate from goblet squat / dumbbell lunge
+Dumbbell_Step_Ups,Dumbbell Step Ups,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,35,55,75,100,10,17,27,38,52,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Dumbbell Step Up
+EZ-Bar_Curl,EZ-Bar Curl,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),48,71,100,135,175,25,32,51,76,105,8,Strength Level barbell/EZ bar curl
+EZ-Bar_Skullcrusher,EZ-Bar Skullcrusher,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,65,90,120,155,25,32,48,68,90,6,estimate from Strength Level Lying Tricep Extension / bench ratios
+Elbow_to_Knee,Elbow to Knee,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,17,41,70,104,2,10,29,51,78,2,estimate from crunch reps
+Elevated_Back_Lunge,Elevated Back Lunge,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),86,125,170,225,285,45,63,95,135,180,3,estimate from barbell lunge
+Elevated_Cable_Rows,Elevated Cable Rows,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),94,130,175,220,275,42,64,91,120,155,3,estimate from seated cable row
+Exercise_Ball_Crunch,Exercise Ball Crunch,Exercise Ball,strength,max_reps,reps with body weight only (people who can do at least 1),4,22,52,90,133,3,14,37,66,101,3,estimate from crunch reps
+Exercise_Ball_Pull-In,Exercise Ball Pull-In,Exercise Ball,strength,max_reps,reps with body weight only (people who can do at least 1),8,15,25,35,50,6,12,20,30,42,2,estimate (no dataset)
+External_Rotation,External Rotation,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),6,10,15,20,27,4,6,9,12,16,3,estimate (no dataset)
+External_Rotation_with_Band,External Rotation with Band,Bands,strength,1RM_lb,band resistance (lb rating),5,10,15,20,30,3,5,10,15,20,2,estimate from common band ratings
+External_Rotation_with_Cable,External Rotation with Cable,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),8,15,25,38,52,5,9,15,22,30,4,estimate; Strength Level Cable External Rotation data judged inflated
+Face_Pull,Face Pull,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),31,62,105,155,215,22,42,70,105,145,7,"Strength Level (strengthlevel.com) user data 2015-2026, Face Pull community standards adjusted to 180/140 lb"
+x_Fat_Grip_Dumbbell_Hold,Fat Grip Dumbbell Hold,Dumbbell,strength,skip,,,,,,,,,,,,,
+Finger_Curls,Finger Curls,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),60,90,120,160,200,30,45,65,85,110,2,estimate from wrist curl
+Flat_Bench_Cable_Flyes,Flat Bench Cable Flyes,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),12,22,35,50,70,6,12,20,30,42,3,estimate from Strength Level Cable Fly (per side)
+Flat_Bench_Leg_Pull-In,Flat Bench Leg Pull-In,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,2,estimate from crunch reps
+Flat_Bench_Lying_Leg_Raise,Flat Bench Lying Leg Raise,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,12,27,46,68,2,8,21,38,56,2,estimate from hanging leg raise reps
+Floor_Glute-Ham_Raise,Floor Glute-Ham Raise,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,3,6,10,15,1,2,4,7,11,3,"estimate (Nordic curl reps, no dataset)"
+Flutter_Kicks,Flutter Kicks,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),20,40,70,100,150,20,40,70,100,150,2,estimate (no dataset)
+Body-Up,Forearm Plank to Push-Up (Body-Up),Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),5,12,20,30,45,3,8,14,22,32,2,estimate (no dataset)
+Freehand_Jump_Squat,Freehand Jump Squat,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,8,16,28,42,60,2,estimate (no dataset)
+Front_Barbell_Squat,Front Barbell Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),135,180,240,300,370,59,91,130,180,235,7,estimate from Strength Level squat (front squat ~0.8x)
+Front_Cable_Raise,Front Cable Raise,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),6,15,31,53,79,4,9,16,28,41,3,estimate from cable lateral raise
+Front_Dumbbell_Raise,Front Dumbbell Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),11,22,38,59,84,7,13,21,32,45,6,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Front Raise vs Lateral Raise ratio"
+Front_Incline_Dumbbell_Raise,Front Incline Dumbbell Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),9,18,32,49,68,5,11,17,26,37,3,estimate from lateral raise
+Front_Plate_Raise,Front Plate Raise,Other,strength,1RM_lb,total external weight lifted,25,35,45,55,70,10,15,25,30,40,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Plate Front Raise
+Front_Squats_With_Two_Kettlebells,Front Squats With Two Kettlebells,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Gironda_Sternum_Chins,Gironda Sternum Chins,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,4,8,13,17,1,2,5,8,12,3,estimate from pull-up reps
+Glute_Kickback,Glute Kickback,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Goblet_Squat,Goblet Squat,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,34,60,97,140,185,20,36,56,81,110,7,"Strength Level (strengthlevel.com) user data 2015-2026, Goblet Squat community standards adjusted to 180/140 lb"
+x_Grip_Dynamometer_Test,Grip Dynamometer Test,Other,strength,1RM_lb,total external weight lifted,90,105,125,145,160,55,66,78,90,100,7,"Mathiowetz et al. 1985 grip norms (age 30-34), mean shifted up ~4 lb for lifters"
+Hack_Squat,Hack Squat,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),135,230,360,510,675,49,110,200,315,445,6,"Strength Level (strengthlevel.com) user data 2015-2026, Hack Squat community standards adjusted to 180/140 lb"
+Hammer_Curls,Hammer Curls,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),21,35,53,75,99,10,18,28,40,54,8,"Strength Level (strengthlevel.com) user data 2015-2026, Hammer Curl community standards adjusted to 180/140 lb"
+Hammer_Grip_Incline_DB_Bench_Press,Hammer Grip Incline DB Bench Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),47,63,84,105,130,17,27,41,57,75,5,estimate from incline dumbbell bench
+x_Hand_Gripper_Squeeze,Hand Gripper Squeeze,Other,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Handstand_Push-Ups,Handstand Push-Ups,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,3,7,12,20,1,2,4,7,12,3,"estimate (people who can do 1+, no dataset)"
+Hanging_Leg_Raise,Hanging Leg Raise,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,8,18,31,45,1,5,14,25,37,6,"Strength Level (strengthlevel.com) user data 2015-2026, Hanging Leg Raise reps; rescaled to 1+"
+Hanging_Pike,Hanging Pike,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,5,11,19,27,1,3,8,15,22,3,estimate from hanging leg raise reps
+High_Cable_Curls,High Cable Curls,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),26,43,67,94,125,10,19,32,48,67,3,estimate from cable bicep curl
+Thigh_Abductor,Hip Abduction (Machine),Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),76,140,230,335,455,52,96,155,230,315,6,"Strength Level (strengthlevel.com) user data 2015-2026, Hip Abduction community standards adjusted to 180/140 lb"
+Thigh_Adductor,Hip Adduction (Machine),Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),80,150,240,355,480,55,100,165,240,330,5,"Strength Level (strengthlevel.com) user data 2015-2026, Hip Adduction (similar to abduction)"
+Hip_Extension_with_Bands,Hip Extension with Bands,Bands,strength,1RM_lb,band resistance (lb rating),20,35,50,70,95,15,25,40,55,75,2,estimate from common band ratings
+Hip_Flexion_with_Band,Hip Flexion with Band,Bands,strength,1RM_lb,band resistance (lb rating),10,20,30,40,55,8,12,20,28,38,2,estimate from common band ratings
+Hyperextensions_Back_Extensions,Hyperextensions (Back Extensions),Other,strength,max_reps,reps with body weight only (people who can do at least 1),10,20,30,45,60,8,16,25,38,52,3,"estimate (bodyweight reps, no dataset)"
+Incline_Barbell_Triceps_Extension,Incline Barbell Triceps Extension,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),40,58,81,110,140,22,29,43,61,81,3,estimate from skullcrusher
+Incline_Bench_Pull,Incline Bench Pull,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,97,130,165,205,45,46,63,87,115,3,estimate from bent over row
+Incline_Cable_Chest_Press,Incline Cable Chest Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),53,71,92,115,140,18,30,45,64,84,2,estimate from bench
+Incline_Cable_Flye,Incline Cable Flye,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),11,20,32,45,63,5,11,18,27,38,3,estimate from cable crossover
+Incline_Dumbbell_Curl,Incline Dumbbell Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,28,45,64,86,7,13,21,31,43,6,"Strength Level (strengthlevel.com) user data 2015-2026, Incline Dumbbell Curl community standards adjusted to 180/140 lb"
+Incline_Dumbbell_Flyes,Incline Dumbbell Flyes,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),19,27,37,50,63,7,12,18,26,35,4,estimate from dumbbell flyes
+Incline_Dumbbell_Press,Incline Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),49,66,88,115,140,18,28,43,60,79,9,"Strength Level (strengthlevel.com) user data 2015-2026, Incline Dumbbell Bench Press bodyweight table (180/140 lb)"
+Incline_Hammer_Curls,Incline Hammer Curls,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),19,32,49,69,91,9,16,26,37,49,5,"Strength Level (strengthlevel.com) user data 2015-2026, Incline Hammer Curl"
+Incline_Inner_Biceps_Curl,Incline Inner Biceps Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),14,25,40,58,78,6,11,19,28,39,3,estimate from incline curl
+Incline_Push-Up,Incline Push-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),8,28,53,84,116,3,13,27,45,66,4,estimate from push-up reps (x1.4)
+Incline_Push-Up_Close-Grip,Incline Push-Up Close-Grip,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),7,23,44,69,95,2,10,22,37,54,3,estimate from push-up reps
+Incline_Push-Up_Wide,Incline Push-Up Wide,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),8,27,51,81,112,3,12,26,43,63,3,estimate from push-up reps
+Internal_Rotation_with_Band,Internal Rotation with Band,Bands,strength,1RM_lb,band resistance (lb rating),8,12,20,28,38,5,8,12,18,25,2,estimate from common band ratings
+Inverted_Row,Inverted Row,Other,strength,max_reps,reps with body weight only (people who can do at least 1),5,12,20,30,40,2,6,12,20,28,4,estimate from pull-up and push-up rep standards
+Iron_Cross,Iron Cross,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),6,12,21,32,46,4,7,11,17,25,2,estimate from lateral raise
+Isometric_Neck_Exercise_-_Front_And_Back,Isometric Neck Exercise - Front And Back,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+Isometric_Neck_Exercise_-_Sides,Isometric Neck Exercise - Sides,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+JM_Press,JM Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),83,110,145,180,220,45,47,70,99,130,4,estimate from bench (x0.65)
+Jackknife_Sit-Up,Jackknife Sit-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),5,12,22,35,50,3,8,15,25,38,2,estimate (no dataset)
+Janda_Sit-Up,Janda Sit-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,6,12,20,30,1,4,8,14,22,2,estimate (no dataset)
+Jefferson_Squats,Jefferson Squats,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),150,200,260,330,400,70,105,145,200,255,3,estimate from deadlift
+Kettlebell_Arnold_Press,Kettlebell Arnold Press,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),22,33,49,67,86,11,17,23,32,41,3,estimate from Arnold press
+Kettlebell_Dead_Clean,Kettlebell Dead Clean,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+x_Kettlebell_Farmer_s_Carry,Kettlebell Farmer's Carry,Kettlebell,strength,skip,,,,,,,,,,,,,
+Kettlebell_Figure_8,Kettlebell Figure 8,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),18,26,35,44,53,9,13,18,22,26,2,estimate from common kettlebell sizes (8-24 kg)
+Kettlebell_Halo,Kettlebell Halo,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,18,26,35,44,53,9,13,18,22,26,3,estimate from common kettlebell sizes (8-24 kg)
+Kettlebell_Halo_With_Overhead_Extension,Kettlebell Halo with Overhead Extension,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,18,26,35,44,53,9,13,18,22,26,2,estimate from common kettlebell sizes (8-24 kg)
+Kettlebell_Hang_Clean,Kettlebell Hang Clean,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Kettlebell_One-Legged_Deadlift,Kettlebell One-Legged Deadlift,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",19,34,56,81,110,12,21,33,47,64,3,estimate from dumbbell RDL
+Kettlebell_Overhead_Triceps_Extension,Kettlebell Overhead Triceps Extension,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,27,40,58,81,105,14,20,29,40,54,3,estimate from two-hand dumbbell triceps extension
+Kettlebell_Pirate_Ships,Kettlebell Pirate Ships,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),18,26,35,44,53,9,13,18,22,26,2,estimate from common kettlebell sizes (8-24 kg)
+Kettlebell_Pistol_Squat,Kettlebell Pistol Squat,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),9,18,26,35,53,4,9,13,18,26,2,estimate from kettlebell sizes
+Kettlebell_Seated_Press,Kettlebell Seated Press,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),27,41,59,80,100,10,17,26,38,51,3,estimate from dumbbell shoulder press
+Kettlebell_Seesaw_Press,Kettlebell Seesaw Press,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),28,43,63,85,110,10,18,28,40,54,3,estimate from dumbbell shoulder press
+Kettlebell_Sumo_High_Pull,Kettlebell Sumo High Pull,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),35,53,70,88,105,18,26,35,44,53,3,estimate from kettlebell sizes
+Kettlebell_Thruster,Kettlebell Thruster,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),28,45,67,91,120,17,25,36,49,64,3,estimate from barbell thruster (per kettlebell)
+Kettlebell_Turkish_Get-Up_Lunge_style,Kettlebell Turkish Get-Up (Lunge style),Kettlebell,strength,1RM_lb,weight of the single kettlebell held,26,35,53,70,88,13,18,26,35,44,4,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Kettlebell_Turkish_Get-Up_Squat_style,Kettlebell Turkish Get-Up (Squat style),Kettlebell,strength,1RM_lb,weight of the single kettlebell held,26,35,53,70,88,13,18,26,35,44,4,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Kettlebell_Windmill,Kettlebell Windmill,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+Kipping_Muscle_Up,Kipping Muscle Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,2,5,9,15,1,2,3,5,8,3,estimate (people who can do 1+)
+Knee_Hip_Raise_On_Parallel_Bars,Knee/Hip Raise On Parallel Bars,Other,strength,max_reps,reps with body weight only (people who can do at least 1),3,11,25,43,63,1,7,20,35,52,3,estimate from hanging leg raise reps
+Kneeling_Cable_Crunch_With_Alternating_Oblique_Twists,Kneeling Cable Crunch With Alternating Oblique Twists,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),32,70,125,190,260,18,45,85,140,200,2,estimate from cable crunch
+Kneeling_Cable_Triceps_Extension,Kneeling Cable Triceps Extension,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),27,51,84,125,165,12,25,43,67,93,3,estimate from cable overhead extension
+Kneeling_High_Pulley_Row,Kneeling High Pulley Row,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),88,125,170,220,270,39,60,87,120,155,3,estimate from lat pulldown
+Kneeling_Single-Arm_High_Pulley_Row,Kneeling Single-Arm High Pulley Row,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",30,55,89,130,175,16,27,41,58,76,3,"Strength Level (strengthlevel.com) user data 2015-2026, One Arm Lat Pulldown community standards adjusted to 180/140 lb"
+Landmine_180s,Landmine 180's,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),55,65,80,95,115,45,50,55,65,75,2,"estimate (total incl. bar, no dataset)"
+Landmine_Linear_Jammer,Landmine Linear Jammer,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,95,125,160,200,45,55,70,90,110,2,estimate (total incl. bar)
+x_Landmine_Press,Landmine Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,90,115,140,170,45,55,70,85,105,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Landmine Press
+Lateral_Raise_-_With_Bands,Lateral Raise - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),5,10,15,22,30,3,5,8,12,18,2,estimate from common band ratings
+Leg_Extensions,Leg Extensions,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),90,145,220,305,400,39,74,125,185,250,7,"Strength Level (strengthlevel.com) user data 2015-2026, Leg Extension community standards adjusted to 180/140 lb"
+Leg_Press,Leg Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),245,365,515,690,885,115,200,320,465,630,8,"Strength Level (strengthlevel.com) user data 2015-2026, Sled Leg Press bodyweight table (180/140 lb)"
+Leg_Pull-In,Leg Pull-In,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,2,estimate from crunch reps
+Leverage_Chest_Press,Leverage Chest Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),120,160,210,265,320,42,68,105,145,190,4,estimate from bench (plate-loaded machine)
+Leverage_Deadlift,Leverage Deadlift,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),190,255,330,415,510,88,130,185,250,320,3,estimate from deadlift
+Leverage_Decline_Chest_Press,Leverage Decline Chest Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),135,175,230,290,355,46,76,115,160,210,3,estimate from bench
+Leverage_High_Row,Leverage High Row,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),98,135,185,245,305,43,67,97,135,175,3,estimate from lat pulldown
+Leverage_Incline_Chest_Press,Leverage Incline Chest Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),105,145,195,245,305,28,54,88,135,180,4,estimate from incline bench
+Leverage_Iso_Row,Leverage Iso Row,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),110,150,200,255,315,41,66,97,135,175,3,estimate from bent over row
+Leverage_Shoulder_Press,Leverage Shoulder Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),62,110,175,255,340,17,39,73,115,160,5,"Strength Level (strengthlevel.com) user data 2015-2026, Machine Shoulder Press community standards adjusted to 180/140 lb"
+Leverage_Shrug,Leverage Shrug,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),87,140,210,290,380,23,50,89,140,200,5,"Strength Level (strengthlevel.com) user data 2015-2026, Machine Shrug community standards adjusted to 180/140 lb"
+Low_Cable_Crossover,Low Cable Crossover,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),11,20,32,45,63,5,11,18,27,38,3,estimate from cable crossover
+Low_Cable_Triceps_Extension,Low Cable Triceps Extension,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),27,51,84,125,165,12,25,43,67,93,3,estimate from cable overhead extension
+Lying_Cable_Curl,Lying Cable Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),33,70,125,190,260,13,33,63,105,150,6,"Strength Level (strengthlevel.com) user data 2015-2026, Lying Cable Curl community standards adjusted to 180/140 lb"
+Lying_Close-Grip_Barbell_Triceps_Extension_Behind_The_Head,Lying Close-Grip Barbell Triceps Extension Behind The Head,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),47,68,94,125,165,26,34,50,71,94,4,estimate from skullcrusher
+Lying_Dumbbell_Tricep_Extension,Lying Dumbbell Tricep Extension,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),15,25,38,52,70,8,13,20,28,38,4,estimate from skullcrusher (per dumbbell)
+Lying_Face_Down_Plate_Neck_Resistance,Lying Face Down Plate Neck Resistance,Other,strength,1RM_lb,total external weight lifted,10,25,35,45,55,5,10,15,25,35,2,estimate from plate sizes
+Lying_Face_Up_Plate_Neck_Resistance,Lying Face Up Plate Neck Resistance,Other,strength,1RM_lb,total external weight lifted,10,25,35,45,55,5,10,15,25,35,2,estimate from plate sizes
+Lying_High_Bench_Barbell_Curl,Lying High Bench Barbell Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),37,55,78,105,135,20,25,40,58,80,3,estimate from barbell curl
+Lying_Leg_Curls,Lying Leg Curls,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),57,96,145,205,270,30,52,80,115,150,7,"Strength Level (strengthlevel.com) user data 2015-2026, Lying Leg Curl community standards adjusted to 180/140 lb"
+Lying_Machine_Squat,Lying Machine Squat,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),125,210,325,460,605,44,99,180,280,400,3,estimate from hack squat
+Lying_Rear_Delt_Raise,Lying Rear Delt Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),8,15,26,40,57,4,9,14,22,31,3,estimate from lateral raise
+Lying_T-Bar_Row,Lying T-Bar Row,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),92,125,170,215,270,35,56,82,115,150,3,estimate from bent over row
+Lying_Triceps_Press,Lying Triceps Press,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,65,90,120,155,25,32,48,68,90,6,estimate from Strength Level Lying Tricep Extension / bench ratios
+Machine_Bench_Press,Machine Bench Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),115,150,200,250,305,40,65,97,135,180,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Machine Chest Press
+Machine_Bicep_Curl,Machine Bicep Curl,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),39,65,100,140,185,15,29,48,73,100,4,estimate from cable curl
+Machine_Preacher_Curls,Machine Preacher Curls,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),37,62,95,135,175,14,27,46,69,94,4,estimate from cable curl
+Machine_Shoulder_Military_Press,Machine Shoulder (Military) Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),62,110,175,255,340,17,39,73,115,160,6,"Strength Level (strengthlevel.com) user data 2015-2026, Machine Shoulder Press community standards adjusted to 180/140 lb"
+Machine_Triceps_Extension,Machine Triceps Extension,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),39,72,115,170,230,17,34,60,91,130,4,estimate from tricep pushdown
+x_Medium_Grip_Lat_Pulldown,Medium-Grip Lat Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),98,135,185,245,305,43,67,97,135,175,9,"Strength Level (strengthlevel.com) user data 2015-2026, Lat Pulldown community standards adjusted to 180/140 lb"
+x_Medium_Grip_Neutral_Lat_Pulldown,Medium-Grip Neutral Lat Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),115,155,200,255,310,50,74,105,140,180,6,estimate from close-grip lat pulldown
+Middle_Back_Shrug,Middle Back Shrug,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,29,47,68,91,7,13,22,31,43,2,estimate from dumbbell row
+Mixed_Grip_Chin,Mixed Grip Chin,Other,strength,max_reps,reps with body weight only (people who can do at least 1),2,7,13,22,31,1,3,9,14,20,4,estimate from chin-up reps
+Monster_Walk,Monster Walk,Bands,strength,1RM_lb,band resistance (lb rating),,,,,,,,,,,,
+Muscle_Up,Muscle Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,2,4,8,13,1,2,3,4,6,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Muscle Ups (people who can do 1+)
+Narrow_Stance_Hack_Squats,Narrow Stance Hack Squats,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),125,210,325,460,605,44,99,180,280,400,4,estimate from hack squat
+Narrow_Stance_Leg_Press,Narrow Stance Leg Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),220,330,465,625,795,105,180,290,420,565,4,estimate from leg press
+Narrow_Stance_Squats,Narrow Stance Squats,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),155,210,275,345,425,68,105,150,210,270,5,estimate from squat
+Natural_Glute_Ham_Raise,Natural Glute Ham Raise,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,3,6,10,15,1,2,4,7,11,3,estimate (no dataset)
+Oblique_Crunches,Oblique Crunches,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,17,41,70,104,2,10,29,51,78,2,estimate from crunch reps
+One_Arm_Chin-Up,One Arm Chin-Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,2,3,5,8,1,2,3,4,6,2,estimate (very few lifters can do 1)
+One_Arm_Dumbbell_Bench_Press,One Arm Dumbbell Bench Press,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",39,58,80,105,135,14,25,39,57,76,4,estimate from dumbbell bench
+One_Arm_Dumbbell_Preacher_Curl,One Arm Dumbbell Preacher Curl,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",16,27,42,60,81,8,14,23,34,47,5,estimate from dumbbell curl
+One_Arm_Lat_Pulldown,One Arm Lat Pulldown,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",30,55,89,130,175,16,27,41,58,76,6,"Strength Level (strengthlevel.com) user data 2015-2026, One Arm Lat Pulldown community standards adjusted to 180/140 lb"
+One_Leg_Barbell_Squat,One Leg Barbell Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,86,150,225,310,45,46,77,115,165,6,"Strength Level (strengthlevel.com) user data 2015-2026, Bulgarian Split Squat community standards adjusted to 180/140 lb"
+One-Arm_Dumbbell_Row,One-Arm Dumbbell Row,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",26,48,78,115,150,12,22,36,52,72,7,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Row / Bent Over Dumbbell Row standards"
+One-Arm_Flat_Bench_Dumbbell_Flye,One-Arm Flat Bench Dumbbell Flye,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",19,27,37,50,63,7,12,18,26,35,3,estimate from dumbbell flyes
+One-Arm_Incline_Lateral_Raise,One-Arm Incline Lateral Raise,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",8,16,28,43,61,5,10,15,23,33,3,estimate from lateral raise
+One-Arm_Kettlebell_Clean,One-Arm Kettlebell Clean,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",26,35,53,70,88,13,18,26,35,44,3,estimate from common kettlebell sizes (12-40 kg) and StrongFirst benchmarks
+One-Arm_Kettlebell_Clean_and_Jerk,One-Arm Kettlebell Clean and Jerk,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",18,26,35,53,70,9,13,18,26,35,3,estimate from Strength Level Kettlebell Snatch and kettlebell sizes
+One-Arm_Kettlebell_Floor_Press,One-Arm Kettlebell Floor Press,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",37,54,76,100,130,14,24,37,54,72,3,estimate from dumbbell bench
+One-Arm_Kettlebell_Jerk,One-Arm Kettlebell Jerk,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",18,26,40,53,70,9,13,20,26,35,3,estimate from kettlebell sizes
+One-Arm_Kettlebell_Push_Press,One-Arm Kettlebell Push Press,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",18,26,40,53,70,9,13,20,26,35,3,estimate from kettlebell sizes
+One-Arm_Kettlebell_Row,One-Arm Kettlebell Row,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",22,41,66,96,130,10,19,31,44,61,3,estimate from dumbbell row
+One-Arm_Kettlebell_Snatch,One-Arm Kettlebell Snatch,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",18,26,35,53,70,9,13,18,26,35,4,estimate from Strength Level Kettlebell Snatch and kettlebell sizes
+One-Arm_Kettlebell_Swings,One-Arm Kettlebell Swings,Kettlebell,strength,1RM_lb,weight of the single kettlebell held,26,35,53,70,88,13,18,26,35,53,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Kettlebell Swing
+One-Arm_Long_Bar_Row,One-Arm Long Bar Row,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,95,125,160,200,45,55,70,90,110,3,estimate (total incl. bar)
+One-Arm_Medicine_Ball_Slam,One-Arm Medicine Ball Slam,Medicine Ball,strength,1RM_lb,total external weight lifted,6,8,12,15,20,4,6,8,10,12,2,estimate from ball weights
+One-Arm_Overhead_Kettlebell_Squats,One-Arm Overhead Kettlebell Squats,Kettlebell,strength,1RM_lb,"weight of ONE kettlebell (one per hand, or the one used)",18,26,35,44,53,9,13,18,22,26,2,estimate from common kettlebell sizes (8-24 kg)
+One-Arm_Side_Laterals,One-Arm Side Laterals,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",10,21,37,57,80,6,13,20,30,43,5,estimate from lateral raise
+x_One_Leg_Standing_Calf_Raise_Weighted_Vest,One-Leg Standing Calf Raise (Weighted Vest),Other,strength,1RM_lb,total external weight lifted,10,20,30,45,60,5,10,20,30,40,2,estimate from vest sizes
+One-Legged_Cable_Kickback,One-Legged Cable Kickback,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),15,25,40,55,75,10,18,30,45,60,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Cable Kickback
+Overhead_Cable_Curl,Overhead Cable Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),22,36,56,78,105,8,16,27,40,55,3,estimate from cable curl (per side)
+Pallof_Press,Pallof Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),20,30,45,60,80,10,17,25,35,47,3,estimate (no dataset)
+Pallof_Press_With_Rotation,Pallof Press With Rotation,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),17,26,38,51,68,9,14,21,30,40,2,estimate from Pallof press
+Palms-Down_Dumbbell_Wrist_Curl_Over_A_Bench,Palms-Down Dumbbell Wrist Curl Over A Bench,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),12,20,28,38,50,6,10,14,19,25,3,estimate from palms-up dumbbell wrist curl
+Palms-Down_Wrist_Curl_Over_A_Bench,Palms-Down Wrist Curl Over A Bench,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,55,75,95,120,20,30,40,52,65,3,estimate from palms-up wrist curl (~0.7x)
+Palms-Up_Barbell_Wrist_Curl_Over_A_Bench,Palms-Up Barbell Wrist Curl Over A Bench,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),50,75,105,140,180,25,38,55,72,95,4,estimate from Strength Level Wrist Curl
+Palms-Up_Dumbbell_Wrist_Curl_Over_A_Bench,Palms-Up Dumbbell Wrist Curl Over A Bench,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,32,47,65,85,10,16,24,33,43,3,estimate from barbell wrist curl (per dumbbell)
+Parallel_Bar_Dip,Parallel Bar Dip,Other,strength,max_reps,reps with body weight only (people who can do at least 1),2,9,20,33,47,1,4,11,18,27,7,"Strength Level (strengthlevel.com) user data 2015-2026, Dips reps; rescaled to those who can do 1+"
+Physioball_Hip_Bridge,Physioball Hip Bridge,Exercise Ball,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Plank,Plank,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",40,65,110,170,260,30,52,85,135,210,5,"Strand et al. 2014 (J Hum Kinet) and Chase et al. 2014 plank norms, shifted for trained lifters"
+Plate_Pinch,Plate Pinch,Other,strength,skip,,,,,,,,,,,,,
+x_Plate_Pinch_Carry,Plate Pinch Carry,Other,strength,skip,,,,,,,,,,,,,
+Plate_Twist,Plate Twist,Other,strength,1RM_lb,total external weight lifted,25,35,45,55,70,10,15,25,35,45,2,estimate from plate sizes
+Platform_Hamstring_Slides,Platform Hamstring Slides,Other,strength,max_reps,reps with body weight only (people who can do at least 1),5,10,18,28,40,4,8,15,24,35,2,estimate (no dataset)
+Plie_Dumbbell_Squat,Plie Dumbbell Squat,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,34,60,97,140,185,20,36,56,81,110,4,"Strength Level (strengthlevel.com) user data 2015-2026, Goblet Squat community standards adjusted to 180/140 lb"
+Power_Clean,Power Clean,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),115,155,200,250,300,63,86,115,150,185,9,"Strength Level (strengthlevel.com) user data 2015-2026, Power Clean bodyweight table (180/140 lb)"
+Preacher_Curl,Preacher Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),42,62,88,120,155,20,28,45,66,91,6,"Strength Level (strengthlevel.com) user data 2015-2026, Preacher Curl vs barbell curl"
+Preacher_Hammer_Dumbbell_Curl,Preacher Hammer Dumbbell Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),17,28,42,60,79,8,14,22,32,43,4,estimate from hammer curl
+Pull_Through,Pull Through,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),33,76,135,215,300,22,49,88,140,200,6,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Pull Through community standards adjusted to 180/140 lb"
+Pullups,Pullups,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,7,13,21,28,1,3,8,14,20,8,"Strength Level (strengthlevel.com) user data 2015-2026, Pull Ups reps by bodyweight; rescaled to those who can do 1+"
+Push_Up_to_Side_Plank,Push Up to Side Plank,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",,,,,,,,,,,,
+Push-Up_Wide,Push-Up Wide,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),6,19,36,57,79,2,9,18,30,45,5,estimate from push-up reps
+Push-Ups_-_Close_Triceps_Position,Push-Ups - Close Triceps Position,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,14,27,42,58,1,6,13,22,33,5,estimate from push-up reps (x0.7)
+Push-Ups_With_Feet_Elevated,Push-Ups With Feet Elevated,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,15,28,45,62,2,7,14,24,35,4,estimate from push-up reps
+Push-Ups_With_Feet_On_An_Exercise_Ball,Push-Ups With Feet On An Exercise Ball,Exercise Ball,strength,max_reps,reps with body weight only (people who can do at least 1),4,12,23,36,50,1,5,11,19,28,3,estimate from push-up reps
+Pushups,Pushups,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),6,20,38,60,83,2,9,19,32,47,8,"Strength Level (strengthlevel.com) user data 2015-2026, Push Ups reps by bodyweight; female rescaled to 1+"
+Reverse_Barbell_Curl,Reverse Barbell Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),37,55,78,105,135,20,25,40,58,80,6,"Strength Level (strengthlevel.com) user data 2015-2026, Reverse Barbell Curl vs barbell curl"
+Reverse_Barbell_Preacher_Curls,Reverse Barbell Preacher Curls,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),32,47,68,91,115,25,26,34,51,70,4,estimate from barbell curl
+Reverse_Cable_Curl,Reverse Cable Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),33,54,84,120,155,13,24,40,61,83,4,estimate from cable curl
+Reverse_Crunch,Reverse Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,12,29,50,74,2,8,20,36,56,3,estimate from crunch reps
+Reverse_Flyes,Reverse Flyes,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),8,16,28,43,61,5,10,15,23,33,4,estimate from lateral raise
+Reverse_Flyes_With_External_Rotation,Reverse Flyes With External Rotation,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),6,12,21,32,46,4,7,11,17,25,3,estimate from lateral raise
+Reverse_Grip_Bent-Over_Rows,Reverse Grip Bent-Over Rows,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,150,200,255,315,45,66,97,135,175,6,"Strength Level (strengthlevel.com) user data 2015-2026, Bent Over Row bodyweight table (180/140 lb)"
+Reverse_Grip_Triceps_Pushdown,Reverse Grip Triceps Pushdown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),28,52,84,125,165,12,25,43,66,93,4,estimate from tricep pushdown
+Reverse_Hyperextension,Reverse Hyperextension,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),45,90,140,200,270,25,50,80,115,155,2,estimate (no dataset)
+Reverse_Machine_Flyes,Reverse Machine Flyes,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),35,60,95,135,180,15,30,50,72,95,4,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Reverse Machine Fly
+Reverse_Plate_Curls,Reverse Plate Curls,Other,strength,1RM_lb,total external weight lifted,10,25,35,45,55,5,10,15,25,35,2,estimate from plate sizes
+Reverse_Triceps_Bench_Press,Reverse Triceps Bench Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),95,125,165,210,255,33,54,81,115,150,3,estimate from bench
+Ring_Dips,Ring Dips,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,5,12,20,28,1,2,7,11,16,4,estimate from dip reps (x0.6)
+Romanian_Deadlift,Romanian Deadlift,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),140,200,275,360,450,64,105,155,215,285,8,"Strength Level (strengthlevel.com) user data 2015-2026, Romanian Deadlift (female from deadlift ratio) community standards adjusted to 180/140 lb"
+Rope_Climb,Rope Climb,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,2,4,7,10,1,2,3,4,6,3,"estimate (ascents, people who can do 1+)"
+Rope_Straight-Arm_Pulldown,Rope Straight-Arm Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),23,52,96,160,230,11,26,49,79,110,4,estimate from straight-arm pulldown
+Russian_Twist,Russian Twist,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),20,40,60,90,130,16,32,52,80,115,2,estimate (no dataset)
+Scapular_Pull-Up,Scapular Pull-Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),4,13,23,38,50,2,5,14,25,36,2,estimate from pull-up reps
+x_Scapular_Push_Up,Scapular Push-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Seated_Band_Hamstring_Curl,Seated Band Hamstring Curl,Other,strength,1RM_lb,total external weight lifted,20,30,45,60,80,15,22,32,45,60,2,estimate from band ratings
+Seated_Barbell_Military_Press,Seated Barbell Military Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),71,99,135,170,215,45,46,66,93,125,7,estimate from Strength Level shoulder press
+Seated_Bent-Over_Rear_Delt_Raise,Seated Bent-Over Rear Delt Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),8,16,28,43,61,5,10,15,23,33,4,estimate from lateral raise
+Seated_Cable_Rows,Seated Cable Rows,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),105,145,195,245,305,47,72,100,135,175,9,"Strength Level (strengthlevel.com) user data 2015-2026, Seated Cable Row community standards adjusted to 180/140 lb"
+Seated_Cable_Shoulder_Press,Seated Cable Shoulder Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),60,83,110,145,180,23,38,56,78,105,2,estimate from shoulder press
+Seated_Calf_Raise,Seated Calf Raise,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),56,125,230,360,500,30,76,145,240,340,6,"Strength Level (strengthlevel.com) user data 2015-2026, Seated Calf Raise community standards adjusted to 180/140 lb"
+Seated_Dumbbell_Curl,Seated Dumbbell Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),19,31,48,70,93,9,17,26,39,54,7,Strength Level dumbbell curl
+Seated_Dumbbell_Inner_Biceps_Curl,Seated Dumbbell Inner Biceps Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),17,29,44,64,86,8,15,24,36,50,3,estimate from dumbbell curl
+Seated_Dumbbell_Palms-Down_Wrist_Curl,Seated Dumbbell Palms-Down Wrist Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),12,20,28,38,50,6,10,14,19,25,3,estimate from palms-up dumbbell wrist curl
+Seated_Dumbbell_Palms-Up_Wrist_Curl,Seated Dumbbell Palms-Up Wrist Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,32,47,65,85,10,16,24,33,43,3,estimate from barbell wrist curl (per dumbbell)
+Seated_Dumbbell_Press,Seated Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),33,51,74,100,130,12,22,33,48,64,8,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Shoulder Press community standards adjusted to 180/140 lb"
+Seated_Head_Harness_Neck_Resistance,Seated Head Harness Neck Resistance,Other,strength,1RM_lb,total external weight lifted,15,35,60,90,130,8,15,25,38,52,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Neck Extension
+Seated_Leg_Curl,Seated Leg Curl,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),74,120,180,250,330,35,63,100,145,200,7,"Strength Level (strengthlevel.com) user data 2015-2026, Seated Leg Curl community standards adjusted to 180/140 lb"
+Seated_Leg_Tucks,Seated Leg Tucks,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),3,14,35,60,89,2,9,25,44,67,2,estimate from crunch reps
+Seated_One-arm_Cable_Pulley_Rows,Seated One-arm Cable Pulley Rows,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",51,86,135,190,250,22,39,62,90,120,6,"Strength Level (strengthlevel.com) user data 2015-2026, One Arm Seated Cable Row community standards adjusted to 180/140 lb"
+Seated_Palm-Up_Barbell_Wrist_Curl,Seated Palm-Up Barbell Wrist Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),50,75,105,140,180,25,38,55,72,95,4,estimate from Strength Level Wrist Curl
+Seated_Palms-Down_Barbell_Wrist_Curl,Seated Palms-Down Barbell Wrist Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,55,75,95,120,20,30,40,52,65,3,estimate from palms-up wrist curl (~0.7x)
+Seated_Side_Lateral_Raise,Seated Side Lateral Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),10,19,33,51,72,6,11,18,28,39,6,Strength Level lateral raise
+Seated_Triceps_Press,Seated Triceps Press,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,30,45,65,90,115,15,22,32,45,60,4,estimate from Strength Level Dumbbell Tricep Extension
+x_Serratus_Punch_Dumbbell_Lying,"Serratus Punch (Dumbbell, Lying)",Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),15,25,35,50,65,8,12,18,25,33,2,estimate (no dataset)
+Shotgun_Row,Shotgun Row,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),46,78,120,170,225,20,35,56,81,110,3,estimate from one-arm cable row
+Shoulder_Press_-_With_Bands,Shoulder Press - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),20,30,45,60,80,10,15,22,32,45,2,estimate from band ratings
+Side_Bridge,Side Bridge,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Side_Jackknife,Side Jackknife,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,12,29,50,74,2,8,20,36,56,2,estimate from crunch reps
+Side_Lateral_Raise,Side Lateral Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),10,20,35,54,76,6,12,19,29,41,8,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Lateral Raise (interpolated) bodyweight table (180/140 lb)"
+Side_Laterals_to_Front_Raise,Side Laterals to Front Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),9,18,32,49,68,5,11,17,26,37,4,estimate from lateral raise
+Side_To_Side_Chins,Side To Side Chins,Other,strength,max_reps,reps with body weight only (people who can do at least 1),1,4,8,13,17,1,2,5,8,12,3,estimate from pull-up reps
+Single_Leg_Glute_Bridge,Single Leg Glute Bridge,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),10,20,30,45,60,10,20,30,45,60,3,estimate; single-leg bridge test norms ~25-30 reps (Freckleton et al. 2014)
+Single-Arm_Cable_Crossover,Single-Arm Cable Crossover,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",12,22,35,50,70,6,12,20,30,42,3,estimate from Strength Level Cable Fly (per side)
+Single-Arm_Linear_Jammer,Single-Arm Linear Jammer,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),70,90,115,140,170,45,55,70,85,105,2,estimate from landmine press
+Single-Arm_Push-Up,Single-Arm Push-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,2,5,10,18,1,2,3,5,8,2,estimate (people who can do 1+)
+Single-Leg_High_Box_Squat,Single-Leg High Box Squat,Other,strength,max_reps,reps with body weight only (people who can do at least 1),3,8,15,22,30,2,6,12,18,26,2,estimate (no dataset)
+Single-Leg_Leg_Extension,Single-Leg Leg Extension,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),49,80,120,170,220,21,41,68,100,140,4,estimate from leg extension (x0.55)
+Sit-Up,Sit-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),5,25,55,92,135,3,16,41,72,108,7,"Strength Level (strengthlevel.com) user data 2015-2026, Sit Ups reps"
+Smith_Machine_Behind_the_Back_Shrug,Smith Machine Behind the Back Shrug,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),120,185,275,375,485,31,70,125,190,265,4,estimate from Smith machine shrug
+Smith_Machine_Bench_Press,Smith Machine Bench Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),125,170,220,275,340,44,72,110,150,200,5,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Smith Machine Bench Press
+Smith_Machine_Bent_Over_Row,Smith Machine Bent Over Row,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),110,150,200,255,315,41,66,97,135,175,4,estimate from bent over row
+Smith_Machine_Calf_Raise,Smith Machine Calf Raise,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),99,175,270,390,520,37,86,160,245,350,4,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Calf Raise community standards adjusted to 180/140 lb"
+Smith_Machine_Close-Grip_Bench_Press,Smith Machine Close-Grip Bench Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),115,150,200,250,305,40,65,97,135,180,4,estimate from bench
+Smith_Machine_Decline_Press,Smith Machine Decline Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),135,175,230,290,355,46,76,115,160,210,4,estimate from bench
+Smith_Machine_Hip_Raise,Smith Machine Hip Raise,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),87,160,265,390,525,59,110,175,260,355,4,estimate from hip thrust
+Smith_Machine_Incline_Bench_Press,Smith Machine Incline Bench Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),115,155,205,260,320,29,57,93,140,190,5,estimate from incline bench
+Smith_Machine_Overhead_Shoulder_Press,Smith Machine Overhead Shoulder Press,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),75,105,140,180,225,29,47,70,98,130,5,estimate from shoulder press
+Smith_Machine_Squat,Smith Machine Squat,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),120,190,275,375,480,49,88,140,205,280,6,"Strength Level (strengthlevel.com) user data 2015-2026, Smith Machine Squat community standards adjusted to 180/140 lb"
+Smith_Machine_Stiff-Legged_Deadlift,Smith Machine Stiff-Legged Deadlift,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),130,190,265,345,430,61,99,145,205,270,4,estimate from Romanian deadlift
+Smith_Machine_Upright_Row,Smith Machine Upright Row,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),65,85,110,140,175,45,50,60,75,95,4,estimate from Strength Level Upright Row
+Smith_Single-Leg_Split_Squat,Smith Single-Leg Split Squat,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),43,86,150,225,310,22,45,77,115,165,4,"Strength Level (strengthlevel.com) user data 2015-2026, Bulgarian Split Squat community standards adjusted to 180/140 lb"
+Snatch_Pull,Snatch Pull,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),100,145,200,260,325,54,74,100,130,160,6,"Strength Level (strengthlevel.com) user data 2015-2026, Snatch Pull (male from snatch x1.15) community standards adjusted to 180/140 lb"
+Speed_Squats,Speed Squats,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,300,375,460,74,115,165,225,290,4,estimate: 1RM equals squat 1RM
+Spider_Crawl,Spider Crawl,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Spider_Curl,Spider Curl,EZ Bar,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),37,55,78,105,135,25,26,40,58,80,4,estimate from barbell curl
+Split_Squat_with_Dumbbells,Split Squat with Dumbbells,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),25,43,68,97,130,10,18,29,43,58,6,"Strength Level (strengthlevel.com) user data 2015-2026, Dumbbell Bulgarian Split Squat community standards adjusted to 180/140 lb"
+Squat_Jerk,Squat Jerk,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),105,150,200,260,320,58,82,110,145,180,3,estimate from clean and jerk
+Squats_-_With_Bands,Squats - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),40,60,90,120,160,25,40,55,75,100,2,estimate from band ratings
+Standing_Alternating_Dumbbell_Press,Standing Alternating Dumbbell Press,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",32,48,70,95,120,11,20,31,45,61,5,estimate from dumbbell shoulder press
+Standing_Barbell_Calf_Raise,Standing Barbell Calf Raise,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),99,175,270,390,520,37,86,160,245,350,6,"Strength Level (strengthlevel.com) user data 2015-2026, Barbell Calf Raise community standards adjusted to 180/140 lb"
+Standing_Barbell_Press_Behind_Neck,Standing Barbell Press Behind Neck,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),68,94,125,165,205,26,42,63,88,115,5,estimate from shoulder press (x0.9)
+Standing_Bent-Over_One-Arm_Dumbbell_Triceps_Extension,Standing Bent-Over One-Arm Dumbbell Triceps Extension,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",12,20,30,42,55,6,10,15,21,28,4,estimate from Strength Level Dumbbell Tricep Kickback
+Standing_Biceps_Cable_Curl,Standing Biceps Cable Curl,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),44,72,110,155,210,17,32,54,81,110,7,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Bicep Curl community standards adjusted to 180/140 lb"
+Standing_Cable_Chest_Press,Standing Cable Chest Press,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),57,76,99,125,155,20,32,49,68,90,2,estimate from bench
+Standing_Cable_Lift,Standing Cable Lift,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),20,35,50,70,90,10,17,25,35,47,2,estimate (no dataset)
+Standing_Cable_Wood_Chop,Standing Cable Wood Chop,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),25,40,60,80,105,12,20,30,42,55,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Cable Woodchop
+x_Standing_Calf_Raise_Weighted_Vest,Standing Calf Raise (Weighted Vest),Other,strength,1RM_lb,total external weight lifted,20,35,50,70,90,10,20,30,40,55,2,estimate from vest sizes
+Standing_Calf_Raises,Standing Calf Raises,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),79,175,305,470,660,33,88,175,290,425,6,"Strength Level (strengthlevel.com) user data 2015-2026, Machine Calf Raise community standards adjusted to 180/140 lb"
+Standing_Concentration_Curl,Standing Concentration Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,27,42,60,81,8,14,23,34,47,4,estimate from dumbbell curl
+Standing_Dumbbell_Calf_Raise,Standing Dumbbell Calf Raise,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,35,55,80,110,10,18,28,40,55,3,estimate from Strength Level (strengthlevel.com) user data 2015-2026 Dumbbell Calf Raise
+Standing_Dumbbell_Press,Standing Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),32,48,70,95,120,11,20,31,45,61,7,Strength Level dumbbell shoulder press
+Standing_Dumbbell_Reverse_Curl,Standing Dumbbell Reverse Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),14,24,37,53,71,7,13,20,30,41,4,estimate from dumbbell curl
+Standing_Dumbbell_Triceps_Extension,Standing Dumbbell Triceps Extension,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,30,45,65,90,115,15,22,32,45,60,5,estimate from Strength Level Dumbbell Tricep Extension
+Standing_Dumbbell_Upright_Row,Standing Dumbbell Upright Row,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),20,32,47,65,85,10,15,23,32,42,3,estimate from upright row
+Standing_Front_Barbell_Raise_Over_Head,Standing Front Barbell Raise Over Head,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),35,50,65,85,105,20,28,38,50,62,2,estimate (no dataset)
+Leg_Lift,Standing Glute Kickback (Bodyweight),Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),,,,,,,,,,,,
+Standing_Inner-Biceps_Curl,Standing Inner-Biceps Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),17,29,44,64,86,8,15,24,36,50,3,estimate from dumbbell curl
+Standing_Leg_Curl,Standing Leg Curl,Machine,strength,1RM_lb,weight shown on the machine (stack or plates loaded),30,50,75,105,140,20,32,48,68,90,3,estimate; Strength Level (strengthlevel.com) user data 2015-2026 Standing Leg Curl data noisy
+Standing_Low-Pulley_Deltoid_Raise,Standing Low-Pulley Deltoid Raise,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),5,14,28,48,72,4,8,15,25,37,3,estimate from Strength Level Cable Lateral Raise (trimmed outliers)
+Standing_Low-Pulley_One-Arm_Triceps_Extension,Standing Low-Pulley One-Arm Triceps Extension,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",17,32,52,76,100,8,15,26,41,57,3,estimate from tricep pushdown
+Standing_Military_Press,Standing Military Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),79,110,145,185,225,45,50,70,95,120,8,"Strength Level (strengthlevel.com) user data 2015-2026, Military Press community standards adjusted to 180/140 lb"
+Standing_Olympic_Plate_Hand_Squeeze,Standing Olympic Plate Hand Squeeze,Other,strength,1RM_lb,total external weight lifted,20,25,35,45,55,10,15,20,25,35,2,estimate from plate sizes
+Standing_One-Arm_Cable_Curl,Standing One-Arm Cable Curl,Cable,strength,1RM_lb,"cable stack weight as shown on the stack (1:1 pulley), one arm",22,36,56,78,105,8,16,27,40,55,3,estimate from cable curl
+Standing_One-Arm_Dumbbell_Curl_Over_Incline_Bench,Standing One-Arm Dumbbell Curl Over Incline Bench,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",16,27,42,60,81,8,14,23,34,47,3,estimate from dumbbell curl
+Standing_One-Arm_Dumbbell_Triceps_Extension,Standing One-Arm Dumbbell Triceps Extension,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",12,22,35,50,65,6,11,18,26,35,4,estimate from two-hand dumbbell triceps extension
+Standing_Overhead_Barbell_Triceps_Extension,Standing Overhead Barbell Triceps Extension,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),38,55,76,100,130,21,27,41,58,76,4,estimate from skullcrusher
+Standing_Palm-In_One-Arm_Dumbbell_Press,Standing Palm-In One-Arm Dumbbell Press,Dumbbell,strength,1RM_lb,"weight of ONE dumbbell (one per hand, or the one used)",32,48,70,95,120,11,20,31,45,61,4,estimate from dumbbell shoulder press
+Standing_Palms-In_Dumbbell_Press,Standing Palms-In Dumbbell Press,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),32,48,70,95,120,11,20,31,45,61,4,estimate from dumbbell shoulder press
+Standing_Palms-Up_Barbell_Behind_The_Back_Wrist_Curl,Standing Palms-Up Barbell Behind The Back Wrist Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),95,135,185,245,315,45,65,90,120,155,2,estimate from wrist curl
+Standing_Rope_Crunch,Standing Rope Crunch,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),55,105,180,265,360,26,68,130,215,310,5,"Strength Level (strengthlevel.com) user data 2015-2026, Standing Cable Crunch community standards adjusted to 180/140 lb"
+x_Static_Barbell_Hold,Static Barbell Hold,Barbell,strength,skip,,,,,,,,,,,,,
+Step-up_with_Knee_Raise,Step-up with Knee Raise,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),10,20,35,50,70,10,20,35,50,70,2,estimate (no dataset)
+Stiff_Leg_Barbell_Good_Morning,Stiff Leg Barbell Good Morning,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),57,110,190,280,385,45,53,88,135,185,4,estimate from good morning
+Stiff-Legged_Barbell_Deadlift,Stiff-Legged Barbell Deadlift,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),130,190,265,345,430,61,99,145,205,270,7,"Strength Level (strengthlevel.com) user data 2015-2026, Stiff Leg Deadlift vs RDL"
+Stiff-Legged_Dumbbell_Deadlift,Stiff-Legged Dumbbell Deadlift,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),29,54,89,130,175,19,33,52,75,100,6,estimate from dumbbell RDL
+Straight-Arm_Dumbbell_Pullover,Straight-Arm Dumbbell Pullover,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,21,34,51,72,94,10,17,26,36,47,3,estimate from dumbbell pullover
+Straight-Arm_Pulldown,Straight-Arm Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),25,58,105,175,255,12,29,55,87,125,6,"Strength Level (strengthlevel.com) user data 2015-2026, Straight Arm Pulldown community standards adjusted to 180/140 lb"
+x_Suitcase_Carry,Suitcase Carry,Dumbbell,strength,skip,,,,,,,,,,,,,
+Suspended_Fallout,Suspended Fallout,Other,strength,max_reps,reps with body weight only (people who can do at least 1),3,8,15,22,30,2,6,11,17,24,2,estimate (no dataset)
+Suspended_Push-Up,Suspended Push-Up,Other,strength,max_reps,reps with body weight only (people who can do at least 1),4,12,23,36,50,1,5,11,19,28,3,estimate from push-up reps
+Suspended_Reverse_Crunch,Suspended Reverse Crunch,Other,strength,max_reps,reps with body weight only (people who can do at least 1),2,10,23,40,59,1,6,16,29,45,2,estimate from crunch reps
+Suspended_Row,Suspended Row,Other,strength,max_reps,reps with body weight only (people who can do at least 1),6,14,24,36,48,2,7,14,24,34,3,estimate from inverted row reps
+Suspended_Split_Squat,Suspended Split Squat,Other,strength,max_reps,reps with body weight only (people who can do at least 1),5,12,20,30,40,4,10,18,27,36,2,estimate (no dataset)
+Svend_Press,Svend Press,Other,strength,1RM_lb,total external weight lifted,10,25,35,45,55,10,15,20,25,35,2,estimate from plate sizes
+T-Bar_Row_with_Handle,T-Bar Row with Handle,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),110,150,200,255,315,45,66,97,135,175,5,estimate from Strength Level (strengthlevel.com) user data 2015-2026 T-Bar Row
+Tate_Press,Tate Press,Dumbbell,strength,1RM_lb,weight of the single dumbbell held,15,25,35,50,65,8,12,18,25,33,3,estimate (no dataset)
+x_Towel_Hang,Towel Hang,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",10,20,30,45,65,5,12,20,30,45,3,estimate from dead hang (x0.5)
+x_Towel_Pull_Up,Towel Pull-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,4,6,10,14,1,2,4,7,10,3,estimate from pull-up reps (x0.5)
+Trap_Bar_Deadlift,Trap Bar Deadlift,Other,strength,1RM_lb,total external weight lifted,210,280,365,460,560,98,145,205,275,355,7,"Strength Level (strengthlevel.com) user data 2015-2026, Hex Bar Deadlift vs Deadlift"
+Tricep_Dumbbell_Kickback,Tricep Dumbbell Kickback,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),12,20,30,42,55,6,10,15,21,28,5,estimate from Strength Level Dumbbell Tricep Kickback
+Triceps_Pushdown,Triceps Pushdown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),44,80,130,190,255,19,38,66,100,145,8,"Strength Level (strengthlevel.com) user data 2015-2026, Tricep Pushdown community standards adjusted to 180/140 lb"
+Triceps_Pushdown_-_Rope_Attachment,Triceps Pushdown - Rope Attachment,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),38,67,110,155,210,17,33,56,85,115,8,"Strength Level (strengthlevel.com) user data 2015-2026, Tricep Rope Pushdown community standards adjusted to 180/140 lb"
+Triceps_Pushdown_-_V-Bar_Attachment,Triceps Pushdown - V-Bar Attachment,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),44,80,130,190,255,19,38,66,100,145,6,Strength Level tricep pushdown
+Tuck_Crunch,Tuck Crunch,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),4,17,41,70,104,2,10,29,51,78,2,estimate from crunch reps
+Two-Arm_Dumbbell_Preacher_Curl,Two-Arm Dumbbell Preacher Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,27,42,60,81,8,14,23,34,47,5,estimate from dumbbell curl
+Two-Arm_Kettlebell_Clean,Two-Arm Kettlebell Clean,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),26,35,44,62,79,13,18,26,35,44,3,estimate from kettlebell sizes
+Two-Arm_Kettlebell_Military_Press,Two-Arm Kettlebell Military Press,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),28,43,63,85,110,10,18,28,40,54,3,estimate from dumbbell shoulder press
+Two-Arm_Kettlebell_Row,Two-Arm Kettlebell Row,Kettlebell,strength,1RM_lb,weight of ONE kettlebell (one of the pair),21,38,62,90,120,10,18,29,42,58,3,estimate from dumbbell row
+Underhand_Cable_Pulldowns,Underhand Cable Pulldowns,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),105,145,195,255,320,45,70,100,140,180,5,estimate from lat pulldown
+Upright_Barbell_Row,Upright Barbell Row,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),65,85,110,140,175,45,50,60,75,95,5,estimate from Strength Level Upright Row
+Upright_Cable_Row,Upright Cable Row,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),53,97,160,230,310,19,39,67,105,140,5,"Strength Level (strengthlevel.com) user data 2015-2026, Cable Upright Row community standards adjusted to 180/140 lb"
+Upright_Row_-_With_Bands,Upright Row - With Bands,Bands,strength,1RM_lb,band resistance (lb rating),15,25,35,50,65,8,13,20,28,38,2,estimate from band ratings
+V-Bar_Pulldown,V-Bar Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),115,160,205,260,320,52,76,105,140,185,6,"Strength Level (strengthlevel.com) user data 2015-2026, Close Grip Lat Pulldown community standards adjusted to 180/140 lb"
+V-Bar_Pullup,V-Bar Pullup,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),2,7,13,22,31,1,3,9,14,20,4,estimate from chin-up reps
+x_Wall_Sit,Wall Sit,Bodyweight,strength,max_seconds,"longest hold in seconds, body weight only",30,50,80,120,180,25,40,65,100,150,4,estimate from wall-sit test norms (Topend Sports) shifted for lifters
+Weighted_Ball_Hyperextension,Weighted Ball Hyperextension,Exercise Ball,strength,1RM_lb,total external weight lifted,10,25,35,50,70,5,10,20,30,40,2,estimate (plate held)
+Weighted_Ball_Side_Bend,Weighted Ball Side Bend,Exercise Ball,strength,1RM_lb,total external weight lifted,10,20,30,40,55,5,10,15,22,30,2,estimate (no dataset)
+Weighted_Bench_Dip,Weighted Bench Dip,Other,strength,1RM_lb,total external weight lifted,25,45,70,100,135,10,20,35,50,70,3,estimate (plates on lap)
+Weighted_Crunches,Weighted Crunches,Medicine Ball,strength,1RM_lb,total external weight lifted,10,25,35,50,70,5,10,20,30,40,2,estimate (plate/ball held)
+Weighted_Jump_Squat,Weighted Jump Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),51,68,89,115,140,45,46,50,68,88,2,estimate from squat (x0.3)
+Weighted_Pull_Ups,Weighted Pull Ups,Other,strength,1RM_lb,total external weight lifted,10,32,74,120,170,5,10,19,52,86,6,"Strength Level (strengthlevel.com) user data 2015-2026, Weighted Pull Ups added load (beginner set to minimum loadable) community standards adjusted to 180/140 lb"
+Weighted_Sissy_Squat,Weighted Sissy Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),45,55,70,90,115,45,50,55,65,80,2,estimate (no dataset)
+Weighted_Squat,Weighted Squat,Other,strength,1RM_lb,total external weight lifted,135,180,240,300,370,59,91,130,180,235,2,estimate from squat (belt/loaded squat x0.8)
+Wide_Stance_Barbell_Squat,Wide Stance Barbell Squat,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),170,230,300,375,460,74,115,165,225,290,6,Strength Level squat
+Wide-Grip_Barbell_Bench_Press,Wide-Grip Barbell Bench Press,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),125,165,215,270,330,45,70,105,145,195,7,"Strength Level (strengthlevel.com) user data 2015-2026, Wide Grip Bench vs Bench"
+Wide-Grip_Lat_Pulldown,Wide-Grip Lat Pulldown,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),95,135,180,235,295,42,65,94,130,170,7,Strength Level lat pulldown
+Wide-Grip_Pulldown_Behind_The_Neck,Wide-Grip Pulldown Behind The Neck,Cable,strength,1RM_lb,cable stack weight as shown on the stack (1:1 pulley),83,115,160,205,255,37,57,82,115,145,4,estimate from lat pulldown
+Wide-Grip_Rear_Pull-Up,Wide-Grip Rear Pull-Up,Bodyweight,strength,max_reps,reps with body weight only (people who can do at least 1),1,4,8,13,17,1,2,5,8,12,3,estimate from pull-up reps
+Wide-Grip_Standing_Barbell_Curl,Wide-Grip Standing Barbell Curl,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),47,69,99,135,170,20,31,50,74,100,6,estimate from barbell curl
+Wrist_Roller,Wrist Roller,Other,strength,1RM_lb,total external weight lifted,10,20,30,45,60,5,10,15,22,30,3,estimate (no dataset)
+Wrist_Rotations_with_Straight_Bar,Wrist Rotations with Straight Bar,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),,,,,,,,,,,,
+Zercher_Squats,Zercher Squats,Barbell,strength,1RM_lb,total weight including the bar (45 lb bar / 25 lb EZ bar),135,180,240,300,370,59,91,130,180,235,5,estimate from squat (x0.8)
+Zottman_Curl,Zottman Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),16,27,42,60,81,8,14,23,34,47,5,"Strength Level (strengthlevel.com) user data 2015-2026, Zottman Curl vs dumbbell curl"
+Zottman_Preacher_Curl,Zottman Preacher Curl,Dumbbell,strength,1RM_lb,weight of ONE dumbbell (one of the pair),14,24,37,53,71,7,13,20,30,41,3,estimate from dumbbell curl
+90_90_Hamstring,90/90 Hamstring,Bodyweight,stretching,skip,,,,,,,,,,,,,
+All_Fours_Quad_Stretch,All Fours Quad Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Ankle_Circles,Ankle Circles,Other,stretching,skip,,,,,,,,,,,,,
+Arm_Circles,Arm Circles,Other,stretching,skip,,,,,,,,,,,,,
+Behind_Head_Chest_Stretch,Behind Head Chest Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Calf_Stretch_Hands_Against_Wall,Calf Stretch Hands Against Wall,Other,stretching,skip,,,,,,,,,,,,,
+Cat_Stretch,Cat Stretch,Other,stretching,skip,,,,,,,,,,,,,
+x_Cat_Cow,Cat-Cow,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Chair_Leg_Extended_Stretch,Chair Leg Extended Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Chair_Lower_Back_Stretch,Chair Lower Back Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Chair_Upper_Body_Stretch,Chair Upper Body Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Chest_And_Front_Of_Shoulder_Stretch,Chest And Front Of Shoulder Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Chest_Stretch_on_Stability_Ball,Chest Stretch on Stability Ball,Exercise Ball,stretching,skip,,,,,,,,,,,,,
+Childs_Pose,Child's Pose,Other,stretching,skip,,,,,,,,,,,,,
+Chin_To_Chest_Stretch,Chin To Chest Stretch,Other,stretching,skip,,,,,,,,,,,,,
+x_Cross_Body_Shoulder_Stretch,Cross-Body Shoulder Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Crossover_Reverse_Lunge,Crossover Reverse Lunge,Other,stretching,skip,,,,,,,,,,,,,
+Dancers_Stretch,Dancer's Stretch,Other,stretching,skip,,,,,,,,,,,,,
+x_Doorway_Pec_Stretch,Doorway Pec Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Dynamic_Back_Stretch,Dynamic Back Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Dynamic_Chest_Stretch,Dynamic Chest Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Elbow_Circles,Elbow Circles,Other,stretching,skip,,,,,,,,,,,,,
+Adductor,Foam Roll: Adductors,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Calves-SMR,Foam Roll: Calves,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Hamstring-SMR,Foam Roll: Hamstrings,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Iliotibial_Tract-SMR,Foam Roll: IT Band,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Latissimus_Dorsi-SMR,Foam Roll: Lats,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Lower_Back-SMR,Foam Roll: Lower Back,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Peroneals-SMR,Foam Roll: Outer Shin (Peroneals),Foam Roll,stretching,skip,,,,,,,,,,,,,
+Piriformis-SMR,Foam Roll: Piriformis,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Quadriceps-SMR,Foam Roll: Quads,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Anterior_Tibialis-SMR,Foam Roll: Shins,Other,stretching,skip,,,,,,,,,,,,,
+Brachialis-SMR,Foam Roll: Upper Arm (Brachialis),Foam Roll,stretching,skip,,,,,,,,,,,,,
+Rhomboids-SMR,Foam Roll: Upper Back,Foam Roll,stretching,skip,,,,,,,,,,,,,
+Foot-SMR,Foot Massage Ball Roll,Other,stretching,skip,,,,,,,,,,,,,
+Frog_Hops,Frog Hops,Other,stretching,skip,,,,,,,,,,,,,
+Front_Leg_Raises,Front Leg Raises,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Groin_and_Back_Stretch,Groin and Back Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Groiners,Groiners,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Hamstring_Stretch,Hamstring Stretch,Other,stretching,skip,,,,,,,,,,,,,
+x_Hamstring_Stretch_Lying_Strap,"Hamstring Stretch (Lying, Strap)",Other,stretching,skip,,,,,,,,,,,,,
+Hip_Circles_prone,Hip Circles (prone),Bodyweight,stretching,skip,,,,,,,,,,,,,
+Hug_Knees_To_Chest,Hug Knees To Chest,Other,stretching,skip,,,,,,,,,,,,,
+IT_Band_and_Glute_Stretch,IT Band and Glute Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Inchworm,Inchworm,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Intermediate_Groin_Stretch,Intermediate Groin Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Intermediate_Hip_Flexor_and_Quad_Stretch,Intermediate Hip Flexor and Quad Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Knee_Circles,Knee Circles,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Kneeling_Forearm_Stretch,Kneeling Forearm Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Kneeling_Hip_Flexor,Kneeling Hip Flexor Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Leg-Up_Hamstring_Stretch,Leg-Up Hamstring Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Lying_Crossover,Lying Crossover,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Ankle_On_The_Knee,Lying Figure-4 Glute Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Knee_Across_The_Body,Lying Spinal Twist Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Neck-SMR,Massage Ball: Neck,Other,stretching,skip,,,,,,,,,,,,,
+Middle_Back_Stretch,Middle Back Stretch,Other,stretching,skip,,,,,,,,,,,,,
+On_Your_Side_Quad_Stretch,On Your Side Quad Stretch,Other,stretching,skip,,,,,,,,,,,,,
+One_Handed_Hang,One Handed Hang,Other,stretching,skip,,,,,,,,,,,,,
+One_Knee_To_Chest,One Knee To Chest,Other,stretching,skip,,,,,,,,,,,,,
+Overhead_Stretch,Overhead Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Pelvic_Tilt_Into_Bridge,Pelvic Tilt Into Bridge,Other,stretching,skip,,,,,,,,,,,,,
+Peroneals_Stretch,Peroneals Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Posterior_Tibialis_Stretch,Posterior Tibialis Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Quad_Stretch,Quad Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Rear_Leg_Raises,Rear Leg Raises,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Round_The_World_Shoulder_Stretch,Round The World Shoulder Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Runners_Stretch,Runner's Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Scissor_Kick,Scissor Kick,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Seated_Calf_Stretch,Seated Calf Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Seated_Floor_Hamstring_Stretch,Seated Floor Hamstring Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Seated_Hamstring_and_Calf_Stretch,Seated Hamstring and Calf Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Seated_Overhead_Stretch,Seated Overhead Stretch,Other,stretching,skip,,,,,,,,,,,,,
+The_Straddle,Seated Straddle Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Shoulder_Circles,Shoulder Circles,Other,stretching,skip,,,,,,,,,,,,,
+Shoulder_Stretch,Shoulder Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Side_Leg_Raises,Side Leg Raises,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Side_Lying_Groin_Stretch,Side Lying Groin Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Side_Neck_Stretch,Side Neck Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Side-Lying_Floor_Stretch,Side-Lying Floor Stretch,Other,stretching,skip,,,,,,,,,,,,,
+x_Sleeper_Stretch,Sleeper Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Spinal_Stretch,Spinal Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Split_Squats,Split Squats,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Biceps_Stretch,Standing Biceps Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Elevated_Quad_Stretch,Standing Elevated Quad Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Gastrocnemius_Calf_Stretch,Standing Gastrocnemius Calf Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Hamstring_and_Calf_Stretch,Standing Hamstring and Calf Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Hip_Circles,Standing Hip Circles,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Standing_Hip_Flexors,Standing Hip Flexor Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Lateral_Stretch,Standing Lateral Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Pelvic_Tilt,Standing Pelvic Tilt,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Soleus_And_Achilles_Stretch,Standing Soleus And Achilles Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Standing_Toe_Touches,Standing Toe Touches,Other,stretching,skip,,,,,,,,,,,,,
+Stomach_Vacuum,Stomach Vacuum,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Superman,Superman,Bodyweight,stretching,skip,,,,,,,,,,,,,
+x_Thoracic_Extension_Foam_Roller,Thoracic Extension (Foam Roller),Foam Roll,stretching,skip,,,,,,,,,,,,,
+Toe_Touchers,Toe Touchers,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Torso_Rotation,Torso Rotation,Exercise Ball,stretching,skip,,,,,,,,,,,,,
+Tricep_Side_Stretch,Tricep Side Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Triceps_Stretch,Triceps Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Upper_Back_Stretch,Upper Back Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Windmills,Windmills,Other,stretching,skip,,,,,,,,,,,,,
+Worlds_Greatest_Stretch,World's Greatest Stretch,Other,stretching,skip,,,,,,,,,,,,,
+Wrist_Circles,Wrist Circles,Bodyweight,stretching,skip,,,,,,,,,,,,,
+x_Wrist_Extensor_Stretch,Wrist Extensor Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+x_Wrist_Flexor_Stretch,Wrist Flexor Stretch,Bodyweight,stretching,skip,,,,,,,,,,,,,
+Axle_Deadlift,Axle Deadlift,Other,strongman,1RM_lb,total external weight lifted,180,240,315,395,480,84,125,175,240,305,5,estimate from deadlift (x0.9)
+Crucifix,Crucifix,Other,strongman,1RM_lb,total external weight lifted,30,45,60,80,100,15,22,30,40,50,2,estimate (both implements combined)
+Farmers_Walk,Farmer's Walk,Other,strongman,skip,,,,,,,,,,,,,
+Sandbag_Load,Sandbag Load,Other,strongman,1RM_lb,total external weight lifted,100,150,200,260,320,50,80,110,140,180,3,estimate (no dataset)
+Sled_Drag_-_Harness,Sled Drag - Harness,Other,strongman,skip,,,,,,,,,,,,,
+Sled_Push,Sled Push,Other,strongman,skip,,,,,,,,,,,,,
+Tire_Flip,Tire Flip,Other,strongman,1RM_lb,total external weight lifted,250,350,500,650,850,150,200,300,400,500,3,estimate (no dataset)
