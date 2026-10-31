@@ -56,7 +56,7 @@ Every number in the standards comes from the inputs above.
 | Tate press | Per dumbbell (it uses two) | The exercise's directions |
 | Variants | Full squat = back squat; powerlifting bench = bench (assumed); dumbbell shoulder press and seated dumbbell press (same seated movement) share the geometric mean | Assumptions, labelled in each note |
 | High-rep sets on machines and isolation lifts | Sets over 12 reps count as 12 for the ranked estimated max (`rc` in the file) | Reynolds J.M., Gordon T.J., Robergs R.A. (2006). *J Strength Cond Res* 20:584-592; Nuzzo J.L. et al. (2024). *Sports Med* (CC BY) |
-| Owner's tests | `inputs/owner_tests.json`: the owner's tested ratios (no body weight or loads) count as one vote next to the AI databases, men only, never on research lifts | The owner's Research mode tests, Oct 2026 |
+| Owner's tests | `inputs/owner_tests.json`: the owner's tested ratio to the same person's tested anchor (no body weight or loads) counts as one vote next to the AI databases, men only, never on research lifts. Anchors are never converted into each other, so exercises whose anchor wasn't tested are left out | The owner's Research mode tests, Oct 2026 |
 
 Checked and left unchanged:
 - **Spread between levels.** Isenmann et al. 2026 (Supplement S16-S17), from beginners to elite, measured an SD of ln 1RM of

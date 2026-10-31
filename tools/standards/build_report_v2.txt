@@ -46,7 +46,7 @@ Bodyweight-rep model (men 180 lb / women 140 lb, Beginner..Elite):
   Inverted Row with Straps                 load 0.57 / 0.76 x BW   men 8/15/23/32/41   women 2/4/7/13/19
   * no AI women's data: women scaled from men by the median women/men load ratio of the same anchor
 
-Coverage: 311 exercises; exercise x sex by star: blue 565, gold 17, purple 40
+Coverage: 311 exercises; exercise x sex by star: blue 566, gold 17, purple 39
 
 Corrections to the AI databases:
   kept    x0 DeepSeek female Pullups (source is 3.30x the others)
