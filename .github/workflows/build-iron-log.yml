@@ -63,19 +63,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Every build must be signed with the same key, or Android refuses to install it as an
-      # update ("App not installed"). The key is the repository secret LOADOUT_KEYSTORE (base64 of the
-      # keystore). It isn't kept in the build cache: GitHub deletes caches unused for 7 days, and a build
-      # once made a new key by itself after a week's gap (build 231). A build never makes a key now.
-      - name: Signing key
-        env:
-          KEYSTORE_B64: ${{ secrets.LOADOUT_KEYSTORE }}
+      # update ("App not installed"). The key is made once and kept in the build cache.
+      - name: Reuse the same signing key
+        uses: actions/cache@v4
+        with:
+          path: signing/ironlog.keystore
+          key: ironlog-signing-key-v1
+
+      - name: Make the signing key (first build only)
         run: |
           mkdir -p signing
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "::error::The LOADOUT_KEYSTORE secret is missing, so this build can't be signed with Loadout's key."
-            exit 1
+          if [ ! -f signing/ironlog.keystore ]; then
+            keytool -genkeypair -v -keystore signing/ironlog.keystore -alias ironlog \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass android -keypass android -dname "CN=Iron Log"
           fi
-          echo "$KEYSTORE_B64" | base64 -d > signing/ironlog.keystore
           keytool -list -v -keystore signing/ironlog.keystore -storepass android | grep SHA256
 
       - name: Build
