@@ -6,6 +6,8 @@ Loadout (package `com.ironlog.app`): Kotlin + Jetpack Compose. No local SDK; CI 
 ## Standing rules
 - After every push, give the direct APK link
   `https://github.com/ExTr3Me-Cobra/Phone-App-Test/releases/download/loadout-N/Loadout.apk` and check it returns 302.
+- When a job finishes (a build published, research done, anything the owner is waiting on), send a push notification
+  with the outcome and the APK link if there is one.
 - No AI model IDs anywhere in the repo. No pull requests unless asked.
 - Never compare our data with Strength Level, for any reason, not even as a reference point or sanity check.
 - Nothing copyrighted, trademarked or not free for commercial use (Strength Level, ExRx, StrengthLog,
