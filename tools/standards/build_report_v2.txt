@@ -1,0 +1,108 @@
+LOADOUT STRENGTH STANDARDS - BUILD REPORT
+
+Reps vs relative load (Nuzzo 2024 fit, upper body): reps = 26.64 x (1/I - 1)^0.773
+V2 men's Pullups: load 0.80 x BW, median 12.0; at the same load women 6.7
+V2 women's Pullups: load 1.08 x BW, 1.34 x men's (median reps 0.41 x men's)
+V2 men's Pushups: load 0.37 x BW, median 44.7; at the same load women 22.4
+V2 women's Pushups: load 0.35 x BW, 0.94 x men's (median reps 0.55 x men's)
+
+Hold-out test (each calibration research lift predicted from the calibrated AI ratios without using it): median | 90th percentile miss
+  all       men  14: 8.4% | 14.2%    women  14: 7.2% | 23.6%
+  barbell   men   7: 12.5% | 14.9%    women   7: 13.5% | 20.5%
+  dumbbell  men   2: 6.4% | 8.0%    women   2: 6.1% | 7.1%
+  cable     men   1: 4.1% | 4.1%    women   1: 3.2% | 3.2%
+  machine   men   1: 8.8% | 8.8%    women   1: 26.8% | 26.8%
+  olympic   men   2: 7.9% | 8.0%    women   2: 5.7% | 6.7%
+  other     men   1: 14.3% | 14.3%    women   1: 13.6% | 13.6%
+
+Source bias vs the research lifts (removed by calibration), men / women: Claude -8.1% / -6.2%, Gemini -4.0% / -2.6%, ChatGPT -11.0% / -7.7%, DeepSeek -3.9% / -7.2%
+
+Bodyweight-rep model (men 180 lb / women 140 lb, Beginner..Elite):
+  Pullups                                  load 0.80 / 1.08 x BW   men 3/6/12/19/27    women 1/2/5/9/14
+  Chin-Up                                  load 0.76 / 1.02 x BW   men 3/7/13/21/29    women 1/3/5/9/14
+  Pushups                                  load 0.37 / 0.35 x BW   men 25/34/45/57/71  women 8/16/25/35/46
+  Dips - Triceps Version                   load 0.68 / 0.64 x BW   men 5/11/19/27/36   women 2/4/9/15/23
+  Parallel Bar Dip                         load 0.67 / 0.63 x BW   men 6/12/20/28/37   women 2/5/9/16/23
+  Dips - Chest Version                     load 0.68 / 0.64 x BW   men 5/11/19/27/36   women 2/4/9/15/23
+  Inverted Row                             load 0.57 / 0.77 x BW   men 8/14/22/31/41   women 2/3/7/13/19
+  Handstand Push-Ups                       load 0.58 / 0.65 x BW   men 2/5/10/17/24    women 1/3/6/10/16
+  Push-Up Wide                             load 0.41 / 0.39 x BW   men 21/30/40/51/64  women 6/13/21/31/42
+  Pushups (Close and Wide Hand Positions)  load 0.37 / 0.35 x BW   men 25/34/45/57/71  women 8/16/25/35/46
+  Push-Ups - Close Triceps Position        load 0.50 / 0.47 x BW   men 14/22/31/41/52  women 4/8/15/24/33
+  Decline Push-Up                          load 0.53 / 0.50 x BW   men 12/20/28/38/49  women 3/7/14/22/31
+  Push-Ups With Feet Elevated              load 0.52 / 0.49 x BW   men 13/20/29/39/50  women 3/7/14/22/32
+  Incline Push-Up                          load 0.30 / 0.28 x BW   men 35/45/57/72/88  women 15/24/34/46/59
+  Incline Push-Up Medium                   load 0.30 / 0.28 x BW   men 35/45/57/72/88  women 15/24/34/46/59
+  Incline Push-Up Wide                     load 0.31 / 0.30 x BW   men 32/42/54/68/84  women 13/22/32/43/56
+  Incline Push-Up Close-Grip               load 0.36 / 0.34 x BW   men 26/35/46/59/72  women 9/16/26/36/48
+  Ring Dips                                load 0.85 / 0.80 x BW   men 3/7/12/20/27    women 2/3/7/12/18
+  Bench Dips                               load 0.49 / 0.47 x BW   men 14/22/31/41/53  women 4/8/15/24/33
+  V-Bar Pullup                             load 0.78 / 1.05 x BW   men 3/7/13/20/28    women 1/3/5/9/14
+  Mixed Grip Chin                          load 0.76 / 1.02 x BW   men 3/7/13/20/29    women 1/3/5/9/14
+  Wide-Grip Rear Pull-Up                   load 0.88 / 1.17 x BW   men 2/5/10/17/24    women 1/2/5/8/13
+  Side To Side Chins                       load 0.86 / 1.16 x BW   men 2/5/10/17/24    women 1/2/5/8/13
+  Gironda Sternum Chins                    load 0.85 / 1.14 x BW   men 2/5/11/17/25    women 1/2/5/8/13
+  Towel Pull-Up                            load 0.86 / 1.16 x BW   men 2/5/10/17/24    women 1/2/5/8/13
+  Inverted Row with Straps                 load 0.57 / 0.76 x BW   men 8/15/23/32/41   women 2/4/7/13/19
+  * no AI women's data: women scaled from men by the median women/men load ratio of the same anchor
+
+Coverage: 311 exercises; exercise x sex by star: blue 565, gold 17, purple 40
+
+Corrections to the AI databases:
+  kept    x0 DeepSeek female Pullups (source is 3.30x the others)
+  kept    x0 Gemini female Pushups (source is 2.41x the others)
+  dropped x0 DeepSeek female Pushups (source is 1.86x the others)
+  dropped x0 DeepSeek female Dips - Triceps Version (source is 2.12x the others)
+  kept    x0 DeepSeek female Parallel Bar Dip (source is 2.36x the others)
+  kept    x0 DeepSeek female Dips - Chest Version (source is 2.36x the others)
+  kept    x0 ChatGPT male Standing Dumbbell Calf Raise (source is 3.58x the others)
+  kept    x0 ChatGPT female Standing Dumbbell Calf Raise (source is 4.07x the others)
+  kept    x0 ChatGPT male Reverse Machine Flyes (source is 0.44x the others)
+  dropped x0 ChatGPT female Reverse Machine Flyes (source is 0.60x the others)
+  kept    x0 ChatGPT male Butterfly (source is 0.26x the others)
+  kept    x0 ChatGPT female Butterfly (source is 0.34x the others)
+  dropped x0 ChatGPT male Front Squats With Two Kettlebells (source is 1.79x the others)
+  dropped x0 ChatGPT female Front Squats With Two Kettlebells (source is 1.83x the others)
+  kept    x2 DeepSeek male Elevated Back Lunge (source is 0.51x the others)
+  dropped x2 DeepSeek female Elevated Back Lunge (source is 0.65x the others)
+  kept    x0.5 ChatGPT male Standing Dumbbell Upright Row (source is 2.80x the others)
+  kept    x0.5 ChatGPT female Standing Dumbbell Upright Row (source is 3.70x the others)
+  kept    x0.5 ChatGPT male Hammer Grip Incline DB Bench Press (source is 2.40x the others)
+  kept    x0.5 ChatGPT female Hammer Grip Incline DB Bench Press (source is 2.46x the others)
+  kept    x0 Gemini female Push-Up Wide (source is 2.55x the others)
+  dropped x0 DeepSeek female Push-Up Wide (source is 1.94x the others)
+  kept    x0 Gemini female Pushups (Close and Wide Hand Positions) (source is 2.41x the others)
+  dropped x0 DeepSeek female Pushups (Close and Wide Hand Positions) (source is 1.86x the others)
+  kept    x0 Gemini female Push-Ups - Close Triceps Position (source is 2.25x the others)
+  dropped x0 DeepSeek female Push-Ups - Close Triceps Position (source is 1.65x the others)
+  kept    x0 Gemini female Decline Push-Up (source is 2.41x the others)
+  dropped x0 DeepSeek female Decline Push-Up (source is 1.65x the others)
+  kept    x0 Gemini female Push-Ups With Feet Elevated (source is 2.41x the others)
+  dropped x0 DeepSeek female Push-Ups With Feet Elevated (source is 1.77x the others)
+  kept    x0 DeepSeek female V-Bar Pullup (source is 3.06x the others)
+  kept    x0 Gemini female Wide-Grip Rear Pull-Up (source is 4.34x the others)
+  kept    x0 Gemini female Side To Side Chins (source is 2.41x the others)
+  kept    x0 Gemini female Towel Pull-Up (source is 4.82x the others)
+  kept    x0 DeepSeek female Towel Pull-Up (source is 4.12x the others)
+  kept    x0.5 ChatGPT male Dumbbell Incline Row (source is 2.31x the others)
+  kept    x0.5 ChatGPT female Dumbbell Incline Row (source is 3.17x the others)
+  kept    x0 ChatGPT male Stiff-Legged Dumbbell Deadlift (source is 3.27x the others)
+  kept    x0 ChatGPT female Stiff-Legged Dumbbell Deadlift (source is 3.66x the others)
+  kept    x2 Gemini male Leverage Iso Row (source is 0.61x the others)
+  kept    x2 Gemini female Leverage Iso Row (source is 0.45x the others)
+  kept    x0.5 ChatGPT male Shotgun Row (source is 2.17x the others)
+  kept    x0.5 ChatGPT female Shotgun Row (source is 2.59x the others)
+  kept    x2 Claude male Incline Bench Pull (source is 0.36x the others)
+  kept    x2 Claude female Incline Bench Pull (source is 0.29x the others)
+  kept    x0.5 ChatGPT male Dumbbell One-Arm Upright Row (source is 2.36x the others)
+  kept    x0.5 ChatGPT female Dumbbell One-Arm Upright Row (source is 3.18x the others)
+  kept    x0 ChatGPT male Tate Press (source is 3.77x the others)
+  kept    x0 ChatGPT female Tate Press (source is 3.54x the others)
+  kept    x0.5 ChatGPT male Barbell Side Split Squat (source is 2.34x the others)
+  kept    x0.5 ChatGPT female Barbell Side Split Squat (source is 2.29x the others)
+  dropped x0 DeepSeek female Clean Pull (source is 1.65x the others)
+  dropped x0 DeepSeek female Snatch Pull (source is 2.01x the others)
+  dropped outlier Claude female Handstand Push-Ups (0.30x the others)
+  dropped outlier ChatGPT male Single-Arm Cable Crossover (0.31x the others)
+  dropped outlier Claude female Mixed Grip Chin (0.30x the others)
+  dropped outlier Claude female Gironda Sternum Chins (0.15x the others)

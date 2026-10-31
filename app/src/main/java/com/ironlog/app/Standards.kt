@@ -224,7 +224,7 @@ object Standards {
         if (isReps(id)) return (done.maxOfOrNull { it.reps ?: 0 } ?: 0).toDouble()
         val k = stackFactor(id)
         val single = done.filter { it.reps == 1 }.maxOfOrNull { rankWeight(it.weight) * k } ?: 0.0
-        return if (single > 0) single else done.maxOfOrNull { Stats.e1rm(rankWeight(it.weight) * k, it.reps) } ?: 0.0
+        return if (single > 0) single else done.maxOfOrNull { Stats.e1rm(rankWeight(it.weight) * k, capReps(id, it.reps)) } ?: 0.0
     }
 
     fun isOneLeg(id: String) = table[id]?.oneLeg == true
@@ -280,8 +280,11 @@ object Standards {
         if (isOneLeg(id)) return done.maxOfOrNull { oneLegValue(it) } ?: 0.0
         if (isReps(id)) return (done.maxOfOrNull { it.reps ?: 0 } ?: 0).toDouble()
         val k = stackFactor(id)
-        return done.maxOfOrNull { Stats.e1rm(rankWeight(it.weight) * k, it.reps) } ?: 0.0
+        return done.maxOfOrNull { Stats.e1rm(rankWeight(it.weight) * k, capReps(id, it.reps)) } ?: 0.0
     }
+
+    /** Reps counted toward a ranked estimated max: the standard's cap (12 on V2's machine and isolation lifts). */
+    private fun capReps(id: String, reps: Int?) = reps?.let { minOf(it, table[id]?.repCap ?: 20) }
 
     fun who(p: Profile) = (if (p.male) "men" else "women") +
         (p.bodyweight?.let { " around ${Units.weightU(it)}" } ?: "") + (p.age?.let { ", age $it" } ?: "")

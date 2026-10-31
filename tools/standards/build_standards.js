@@ -1,6 +1,7 @@
 // Builds the app's strength standards (app/src/main/assets/standards.json) from openly licensed inputs only.
 // Run: node tools/standards/build_standards.js   (writes the asset and tools/standards/build_report.txt)
 //      FAVOR=gemini node tools/standards/build_standards.js   (the developer variant, standards_gemini.json)
+//      V2=1 node tools/standards/build_standards.js            (the V2 trial, standards_v2.json and build_report_v2.txt)
 //
 // Levels: Beginner / Novice / Intermediate / Advanced / Elite = 5th / 20th / 50th / 80th / 95th percentile of people who
 // do resistance training, at the lifter's sex and bodyweight. 1RM in lb (dumbbells and kettlebells per hand, cables on
@@ -19,7 +20,12 @@ const AI = IN('ai_databases.json').exercises, RES = IN('research_lifts.json'), C
 const GRIP = IN('grip_tomkinson_2025.json'), CAND = IN('ai_corrections.json');
 const EXS = JSON.parse(fs.readFileSync(path.join(ASSETS, 'exercises.json'), 'utf8'));
 const SRC = ['claude', 'gemini', 'chatgpt', 'deepseek'], SN = { claude: 'Claude', gemini: 'Gemini', chatgpt: 'ChatGPT', deepseek: 'DeepSeek' };
-const SEXES = ['male', 'female'], REF = { male: 180, female: 140 }, SIG = { male: 0.26, female: 0.29 }, LBS = 2.20462;
+// V2 trial (developer setting "V2 rankings"): the fixes listed in README.md, section "V2".
+const V2 = !!process.env.V2;
+const SEXES = ['male', 'female'], REF = { male: 180, female: 140 }, LBS = 2.20462;
+// Spread (SD of ln 1RM at a given body weight). V2 keeps it: Isenmann et al. 2026 (Sci Rep 16:20797, CC BY), beginners to
+// elite, measured 0.19-0.23 for men and 0.26-0.28 for women (Supplement S16-S17), no wider than these.
+const SIG = { male: 0.26, female: 0.29 };
 const Z_OUT = [-1.6449, -0.8416, 0, 0.8416, 1.6449];   // the app's levels: 5/20/50/80/95th percentile
 const Z_AI = [-1.6449, -0.6745, 0, 0.6745, 1.6449];    // the AI databases' levels: 5/25/50/75/95th
 const GRID = { male: [], female: [] }; for (let b = 110; b <= 310; b += 10) GRID.male.push(b); for (let b = 90; b <= 260; b += 10) GRID.female.push(b);
@@ -32,7 +38,16 @@ const iPhi = u => { let lo = -8, hi = 8; for (let i = 0; i < 80; i++) { const m 
 // ---- Bodyweight shape: OpenPowerlifting / OpenWeightlifting median curves ----
 function shape(sex, lift, bw) { const [a, b, c, lo, hi] = CURVES.bodyweight[(sex == 'male' ? 'M' : 'F') + lift], x = Math.log(Math.min(Math.max(bw, lo), hi));
   return Math.exp(a * x * x + b * x + c) * (bw > hi ? Math.pow(bw / hi, 0.15) : 1) * (bw < lo ? Math.pow(bw / lo, 0.9) : 1); }
-const curve = (sex, lift, bw) => shape(sex, lift, bw) / shape(sex, lift, REF[sex]);
+const curve0 = (sex, lift, bw) => shape(sex, lift, bw) / shape(sex, lift, REF[sex]);
+// V2: below the reference weight, levels never fall faster than body weight (log-log slope at most 1). Strength scales
+// with body mass to about the 2/3 power (Jaric 2002, Sports Med 32:615-631), so a steeper slope at the light end is an
+// artefact of the light powerlifting classes, and it made light lifters' standards too easy.
+const capMemo = {};
+function curve(sex, lift, bw) { if (!V2 || bw >= REF[sex]) return curve0(sex, lift, bw);
+  const key = sex + lift; if (!capMemo[key]) { const m = {}; let prev = 1, pb = REF[sex];
+    for (let b = REF[sex] - 1; b >= 60; b--) { prev = Math.max(curve0(sex, lift, b), prev * b / pb); pb = b; m[b] = prev; } capMemo[key] = m; }
+  const lo = Math.floor(bw), m = capMemo[key]; if (lo < 60) return m[60] * bw / 60;
+  const a = lo == REF[sex] ? 1 : m[lo], b = lo + 1 >= REF[sex] ? 1 : m[lo + 1]; return a + (b - a) * (bw - lo); }
 
 // ---- Reading the AI databases at the reference bodyweight (each by its own stated rules) ----
 function table(t, bw) { if (!t || t.length < 2) return null; let i = 0; for (let j = 0; j < t.length - 1; j++) if (t[j][0] <= bw) i = j;
@@ -44,6 +59,9 @@ const DSR = [[50, 1.35], [60, 1.22], [70, 1.10], [80, 1.00], [90, 0.88], [100, 0
 function lin(t, x) { let i = 0; for (let j = 0; j < t.length - 1; j++) if (t[j][0] <= x) i = j; const [x0, y0] = t[i], [x1, y1] = t[i + 1]; return Math.max(0.15, y0 + (y1 - y0) * (x - x0) / (x1 - x0)); }
 // Sources that measured an exercise a different way from the app (inputs/ai_conventions.json), converted or left out.
 const CONV = Object.fromEntries(IN('ai_conventions.json').entries.map(c => [c.exercise + '|' + c.source, c.multiplier]));
+// V2: Gemini, ChatGPT and DeepSeek gave the two-kettlebell front squat as both bells together (each is above the same
+// source's goblet squat with one bell); the app logs it per bell, like Claude's table.
+if (V2) for (const k of ['gemini', 'chatgpt', 'deepseek']) CONV['Front Squats With Two Kettlebells|' + k] = 0.5;
 function rawSource(e, src, sex) { const v = rawSource0(e, src, sex), c = CONV[e.exercise + '|' + src]; return c === undefined || !v ? v : c === 0 ? null : v.map(x => x * c); }
 function rawSource0(e, src, sex) { const bw = REF[sex], reps = e.unit == 'reps';
   if (src == 'claude') return e.claude ? table(e.claude[sex == 'male' ? 'm' : 'f'], bw) : null;
@@ -54,6 +72,23 @@ function rawSource0(e, src, sex) { const bw = REF[sex], reps = e.unit == 'reps';
     return s.v.map(v => s.reps ? v * lin(DSR, kg) * f : v * bw * lin(DSW, kg) * f); }
 }
 const research = Object.fromEntries(RES.map(r => [r.exercise, r]));
+if (V2) {
+  // Women's leg press: Piper et al.'s women's 10-rep-max ratio (4.5 x bench) disagrees with their own group means, so V2
+  // uses the men's leg press / squat ratio applied to the women's squat (Isenmann et al. 2026).
+  const lp = research['Leg Press'], sq = research['Barbell Squat'];
+  lp.female_median_lb_at_140 = lp.male_median_lb_at_180 / sq.male_median_lb_at_180 * sq.female_median_lb_at_140;
+  lp.source += '; V2: women = men\'s leg press/squat ratio x the women\'s squat (assumed)';
+  // Women's lat pulldown: Piper's women's ratio (1.34 x bench) has the same problem; V2 takes the men's ratio and the
+  // women/men difference measured on the seated row in the same people (Seo et al. 2012: 1.07 vs 0.97 x bench).
+  const pd = research['Wide-Grip Lat Pulldown'], row = research['Seated Cable Rows'], bp0 = research['Barbell Bench Press - Medium Grip'];
+  pd.female_median_lb_at_140 = pd.male_median_lb_at_180 / bp0.male_median_lb_at_180 * (row.female_median_lb_at_140 / bp0.female_median_lb_at_140) /
+    (row.male_median_lb_at_180 / bp0.male_median_lb_at_180) * bp0.female_median_lb_at_140;
+  pd.source += '; V2: women = men\'s ratio x the women/men seated-row difference (Seo et al. 2012)';
+  // Variants of research lifts, assumed equal to them (no study compares them).
+  research['Barbell Full Squat'] = { ...sq, exercise: 'Barbell Full Squat', gold: { male: false, female: false }, source: 'assumed equal to the back squat (same lift, below parallel)' };
+  const bp = research['Barbell Bench Press - Medium Grip'];
+  research['Bench Press - Powerlifting'] = { ...bp, exercise: 'Bench Press - Powerlifting', gold: { male: false, female: false }, source: 'assumed equal to the bench press (the same lift with competition technique)' };
+}
 const resMed = (n, sex) => research[n] ? research[n][sex == 'male' ? 'male_median_lb_at_180' : 'female_median_lb_at_140'] : null;
 
 // ---- Corrections: unit mix-ups and extreme outliers, each re-checked against the other AI sources and research only ----
@@ -122,7 +157,10 @@ function biases(exclude) { const out = {};
     out[sex][k] = { all: b0, get: (p, f) => mode == 'none' ? 0 : mode == 'overall' ? b0 : sh(byPF[p + f], sh(byP[p], b0)) }; } }
   return out; }
 const BIAS = biases(null);
+// V2: the owner's own tested ratios (inputs/owner_tests.json), one vote each, men only (the owner is a man).
+const OWNER = V2 ? Object.fromEntries(IN('owner_tests.json').ratios.map(o => [o.exercise, o])) : {};
 function pooled(e, sex, bias) { const r = ratios(e, sex), cal = SRC.filter(k => r[k]).map(k => r[k] / Math.exp(bias[sex][k].get(e.pat, e.fam)));
+  const ow = OWNER[e.exercise]; if (ow && sex == 'male' && ow.anchor == e.anchor) cal.push(ow.ratio);
   if (!cal.length) return null; const m = median(cal);
   // "Agree" = at least two sources within a 25% band around the median (within 12% either side).
   return { ratio: m, n: cal.length, agree: cal.filter(v => Math.abs(Math.log(v / m)) <= Math.log(1.12)).length }; }
@@ -185,6 +223,19 @@ for (const e of repRows) { const a = repAnchor(e.exercise), o = { e, sex: {} };
       note: `Median of ${sourcesUsed(ks.length)} (this move isn't limited by strength alone).`, approx: 'A rough estimate from AI-generated databases.' }; }
   out.push(o); }
 const qRatio = {}; for (const o of repInfo) if (o.q.female) (qRatio[o.a] = qRatio[o.a] || []).push(o.q.female / o.q.male);
+// V2: women's share of body weight lifted, set so women's median pull-ups and push-ups are the measured share of men's
+// (REP_W below, with its sources); every other move with the same anchor takes the same women/men factor.
+// Pull-ups 0.41: firefighter trainees, men 12.5 vs women 5.1 (Lockie, Orr & Dawes 2022, IJERPH 19:13918, CC BY); larger
+// samples have many women at zero, which this model leaves out (it counts people who can do one). Push-ups 0.55: FBI
+// trainees, unpaced max reps, men 37.7-40.6 vs women 19.8-23.6 (Knapik et al. 2011, J Occup Med Toxicol 6:26, CC BY).
+const REP_W = { P: { ex: 'Pullups', w: 0.41 }, B: { ex: 'Pushups', w: 0.55 } };
+if (V2) { const fac = {};
+  for (const [a, t] of Object.entries(REP_W)) { const o = repInfo.find(x => x.e.exercise == t.ex), C = sex => resMed(ANCHOR[a], sex);
+    const med = (q, sex) => repLevels(q, C(sex), SIG[sex], REF[sex])[2], goal = t.w * med(o.q.male, 'male');
+    let lo = 0.05, hi = 2; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (med(m, 'female') > goal) lo = m; else hi = m; }
+    fac[a] = (lo + hi) / 2 / o.q.male; report.push(`V2 men's ${t.ex}: load ${o.q.male.toFixed(2)} x BW, median ${med(o.q.male, 'male').toFixed(1)}; at the same load women ${med(o.q.male, 'female').toFixed(1)}`); report.push(`V2 women's ${t.ex}: load ${((lo + hi) / 2).toFixed(2)} x BW, ${(fac[a]).toFixed(2)} x men's (median reps ${t.w} x men's)`); }
+  fac.O = Math.sqrt(fac.P * fac.B);
+  for (const o of repInfo) { o.q.female = o.q.male * fac[o.a]; o.scaled = false; } }
 for (const o of repInfo) { if (!o.q.female) { o.q.female = o.q.male * (median(qRatio[o.a] || []) || median(Object.values(qRatio).flat())); o.scaled = true; }
   for (const sex of SEXES) o.sex[sex] = { conf: 'blue', rows: GRID[sex].map(bw => [bw, ...repLevels(o.q[sex], resMed(ANCHOR[o.a], sex) * curve(sex, o.lift, bw), SIG[sex], bw)]),
     note: `Modelled from ${ANCHOR[o.a]} strength (research standard) and the reps-to-load relation (Nuzzo et al. 2024), counting people who can do at least one rep.`,
@@ -193,15 +244,27 @@ for (const o of repInfo) { if (!o.q.female) { o.q.female = o.q.male * (median(qR
 // ---- Write the asset ----
 const exById = Object.fromEntries(EXS.map(x => [x.n, x]));
 // One implement held in both hands: the load is the whole dumbbell or kettlebell, not one of a pair.
-const SINGLE = /goblet|pullover|swing|plie|one dumbbell|both hands|single dumbbell|windmill|turkish|halo|around the world|tate press|^standing dumbbell triceps extension|^seated triceps press|^kettlebell overhead triceps extension/i;
+// V2: the Tate press uses two dumbbells (its directions), so it's per dumbbell like other dumbbell lifts.
+const SINGLE = new RegExp('goblet|pullover|swing|plie|one dumbbell|both hands|single dumbbell|windmill|turkish|halo|around the world|' + (V2 ? '' : 'tate press|') +
+  '^standing dumbbell triceps extension|^seated triceps press|^kettlebell overhead triceps extension', 'i');
 const r1 = v => Math.round(v * 10) / 10, std = [];
 // Not ranked: the sources split into groups far apart, with nothing to tell which is right.
 const NOT_RANKED = ['Muscle Up', 'Kipping Muscle Up', 'Calf Press'];
+// V2: Dumbbell Shoulder Press and Seated Dumbbell Press are the same seated movement (their directions), so both take
+// the geometric mean of their two middle levels.
+if (V2) { const a = out.find(o => o.e.exercise == 'Dumbbell Shoulder Press'), b = out.find(o => o.e.exercise == 'Seated Dumbbell Press');
+  for (const sex of SEXES) { const x = a && a.sex[sex], y = b && b.sex[sex]; if (!x || !y) continue; const g = Math.sqrt(x.m50 * y.m50);
+    for (const t of [x, y]) { const k = g / t.m50; t.m50 = g; t.rows = t.rows.map(r => [r[0], ...r.slice(1).map(v => v * k)]); }
+    a.sex[sex].note += ' V2: averaged with Seated Dumbbell Press (the same movement).'; } }
+// V2: on machine, cable and isolation lifts, sets over 12 reps count as 12 for the estimated max: rep-based estimates
+// are only validated up to about 10 reps (Reynolds et al. 2006, J Strength Cond Res 20:584-592), and reps at a given
+// share of the max vary most on machines and small muscles (Nuzzo et al. 2024, CC BY).
+const repCap = e => V2 && e.unit != 'reps' && (['machine', 'cable'].includes(e.fam) || ['curl', 'raise', 'extension', 'calf'].includes(e.pat)) ? 12 : null;
 for (const o of out) { if (NOT_RANKED.includes(o.e.exercise)) continue; const x = exById[o.e.exercise]; if (!x) continue; /* removed from the exercise list */ const m = o.sex.male, f = o.sex.female; if (!m && !f) continue;
   // Stars can differ by sex (e.g. research on men only): a / ai are men's, af / aif women's when they differ.
   const sm = m || f, sf = f || m, star = s => ({ a: s.approx || null, ai: s.conf == 'purple' }), M = star(sm), F = star(sf);
   std.push({ i: x.i, lift: o.e.exercise, ln: o.e.exercise, m: m ? m.rows.map(r => r.map(r1)) : null, f: f ? f.rows.map(r => r.map(r1)) : null,
-    r: o.e.unit == 'reps', d: /^(Dumbbell|Kettlebell)$/.test(x.e) && !SINGLE.test(o.e.exercise), k: 1, ai: M.ai, a: M.a,
+    r: o.e.unit == 'reps', d: /^(Dumbbell|Kettlebell)$/.test(x.e) && !SINGLE.test(o.e.exercise), k: 1, ...(repCap(o.e) ? { rc: repCap(o.e) } : {}), ai: M.ai, a: M.a,
     ...(F.a != M.a ? { af: F.a } : {}), ...(F.ai != M.ai ? { aif: F.ai } : {}),
     note: sm.note, ...(sf.note != sm.note ? { nf: sf.note } : {}), conf: { male: m ? m.conf : null, female: f ? f.conf : null } }); }
 const grip = EXS.find(x => /Grip_Dynamometer/.test(x.i));
@@ -209,7 +272,7 @@ if (grip) std.push({ i: grip.i, lift: 'Grip Dynamometer', ln: 'Hand Grip Dynamom
   r: false, d: false, k: 1, ai: false, a: null, u: true, note: null, conf: { male: 'gold', female: 'gold' } });
 std.sort((a, b) => a.lift.localeCompare(b.lift));
 for (const s of std) for (const t of [s.m, s.f]) if (t) for (const row of t) for (let i = 2; i <= 5; i++) if (row[i] < row[i - 1]) throw new Error('levels not rising: ' + s.lift);
-fs.writeFileSync(path.join(ASSETS, FAVOR ? `standards_${FAVOR}.json` : 'standards.json'), JSON.stringify(std.map(({ conf, ...s }) => s), null, 0));
+fs.writeFileSync(path.join(ASSETS, FAVOR ? `standards_${FAVOR}.json` : V2 ? 'standards_v2.json' : 'standards.json'), JSON.stringify(std.map(({ conf, ...s }) => s), null, 0));
 if (FAVOR) process.exit(0);   // the variant doesn't rewrite the report
 
 // ---- Report ----
@@ -225,5 +288,5 @@ report.push('  * no AI women\'s data: women scaled from men by the median women/
 const tally = {}; for (const s of std) for (const sex of SEXES) if (s.conf[sex]) tally[s.conf[sex]] = (tally[s.conf[sex]] || 0) + 1;
 report.push('', `Coverage: ${std.length} exercises; exercise x sex by star: ` + Object.entries(tally).map(([k, v]) => `${k} ${v}`).join(', '));
 report.push('', 'Corrections to the AI databases:', ...fixLog.map(l => '  ' + l));
-fs.writeFileSync(path.join(HERE, 'build_report.txt'), report.join('\n') + '\n');
+fs.writeFileSync(path.join(HERE, V2 ? 'build_report_v2.txt' : 'build_report.txt'), report.join('\n') + '\n');
 console.log(report.slice(0, 40).join('\n'));

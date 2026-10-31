@@ -41,3 +41,25 @@ curve in `inputs/openpowerlifting_curves.json`.
 | `ai_corrections.json` | Suspected unit mix-ups and outliers in those databases | Each one is re-checked by the build against the other sources and the research only; the build report lists which were kept |
 
 Every number in the standards comes from the inputs above.
+
+## V2 (trial, developer setting "V2 rankings")
+
+`V2=1 node tools/standards/build_standards.js` writes `standards_v2.json` and `build_report_v2.txt`; V1 is unchanged.
+
+| Fix | What V2 does | Source |
+|---|---|---|
+| Light lifters too easy | Below the reference weight, levels never fall faster than body weight (log-log slope ≤ 1). Also stops light men's rep standards dropping below heavier men's | Jaric S. (2002). Muscle strength testing: use of normalisation for body size. *Sports Med* 32:615-631 (strength ∝ mass^~0.67) |
+| Women's pull-ups / push-ups too close to men's | Women's medians set to 0.41 × men's (pull-ups) and 0.55 × men's (push-ups); other moves with the same anchor take the same factor | Lockie R.G., Orr R.M., Dawes J.J. (2022). *IJERPH* 19:13918 (CC BY); Knapik J.J. et al. (2011). *J Occup Med Toxicol* 6:26 (CC BY) |
+| Women's leg press too high | Men's leg press / squat ratio × women's squat | Piper et al. 2021/2022 (men), Isenmann et al. 2026 (CC BY) |
+| Women's lat pulldown too high | Men's ratio × the women/men seated-row difference measured in the same people | Seo D.I. et al. (2012). *J Sports Sci Med* (open access) |
+| Two-kettlebell front squat | Gemini, ChatGPT and DeepSeek gave both bells together; halved to per bell | Their own goblet squat numbers (one bell) are lower |
+| Tate press | Per dumbbell (it uses two) | The exercise's directions |
+| Variants | Full squat = back squat; powerlifting bench = bench (assumed); dumbbell shoulder press and seated dumbbell press (same seated movement) share the geometric mean | Assumptions, labelled in each note |
+| High-rep sets on machines and isolation lifts | Sets over 12 reps count as 12 for the ranked estimated max (`rc` in the file) | Reynolds J.M., Gordon T.J., Robergs R.A. (2006). *J Strength Cond Res* 20:584-592; Nuzzo J.L. et al. (2024). *Sports Med* (CC BY) |
+| Owner's tests | `inputs/owner_tests.json`: the owner's tested ratios (no body weight or loads) count as one vote next to the AI databases, men only, never on research lifts | The owner's Research mode tests, Oct 2026 |
+
+Checked and left unchanged:
+- **Spread between levels.** Isenmann et al. 2026 (Supplement S16-S17), from beginners to elite, measured an SD of ln 1RM of
+  0.19-0.23 (men) and 0.26-0.28 (women) at a given body weight, so the current 0.26 / 0.29 is already at least as wide.
+- **Hang clean above power clean.** This matches Szyszka & Czaplicki 2021 (hang clean 0.96, power clean 0.89 × clean,
+  caught in a full squat), cited from its abstract only.

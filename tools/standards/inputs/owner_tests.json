@@ -1,0 +1,8 @@
+{
+  "about": "The app owner's own tested 1RMs (Research mode, Oct 2026), kept only as ratios to their own anchor lifts (no body weight or absolute loads). One lifter, so each counts as a single vote next to the AI databases (V2 build only); never used for research lifts. The squat anchor is the tested deadlift x 0.8105, the research squat/deadlift ratio (Isenmann et al. 2026).",
+  "ratios": [
+    { "exercise": "Leg Extensions", "anchor": "S", "ratio": 1.040, "test": "estimated from a 10-rep set" },
+    { "exercise": "Lying Leg Curls", "anchor": "S", "ratio": 0.637, "test": "true single" },
+    { "exercise": "Two-Arm Dumbbell Preacher Curl", "anchor": "B", "ratio": 0.2385, "test": "estimated from a 6-rep set, per dumbbell" }
+  ]
+}

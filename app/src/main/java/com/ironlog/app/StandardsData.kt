@@ -30,6 +30,8 @@ object StandardsData {
         val approxF: String? = approx,
         val aiF: Boolean = ai,
         val noteF: String? = note,
+        /** V2: sets over this many reps count as this many for the estimated max (machine, cable and isolation lifts). */
+        val repCap: Int = 20,
     ) {
         fun approxFor(male: Boolean) = if (male) approx else approxF
         fun aiFor(male: Boolean) = if (male) ai else aiF
@@ -40,14 +42,24 @@ object StandardsData {
     /** Developer: the same standards with Gemini's numbers heavily favored (standards_gemini.json). */
     @Volatile private var gemini: List<Std> = emptyList()
 
-    /** The standards in use: normally standards.json; the Gemini-favored set while that developer setting is on. */
-    val all: List<Std> get() = if (Store.profile.value.devGemini && gemini.isNotEmpty()) gemini else normal
+    /** Developer: the V2 trial build (standards_v2.json). */
+    @Volatile private var v2: List<Std> = emptyList()
+
+    /** The standards in use: normally standards.json (V1); the V2 or Gemini-favored set while that developer setting is on. */
+    val all: List<Std> get() = Store.profile.value.let { p ->
+        when {
+            p.devV2 && v2.isNotEmpty() -> v2
+            p.devGemini && gemini.isNotEmpty() -> gemini
+            else -> normal
+        }
+    }
 
     /** Reads the tables once; call before anything uses [Standards]. */
     fun init(c: Context) {
         if (normal.isNotEmpty()) return
         normal = load(c, "standards.json")
         gemini = load(c, "standards_gemini.json")
+        v2 = load(c, "standards_v2.json")
     }
 
     private fun load(c: Context, file: String): List<Std> =
@@ -65,7 +77,7 @@ object StandardsData {
                 val approx = str("a"); val ai = o.optBoolean("ai", false); val note = str("note")
                 Std(o.getString("i"), o.getString("lift"), rows("m"), rows("f"), o.getBoolean("r"), o.getBoolean("d"),
                     note, o.optDouble("k", 1.0), approx, ai, o.optBoolean("u", false), o.optBoolean("ul", false), str("ln") ?: o.getString("lift"),
-                    if (o.has("af")) str("af") else approx, o.optBoolean("aif", ai), if (o.has("nf")) str("nf") else note)
+                    if (o.has("af")) str("af") else approx, o.optBoolean("aif", ai), if (o.has("nf")) str("nf") else note, o.optInt("rc", 20))
             }
         }.getOrDefault(emptyList())
 }
