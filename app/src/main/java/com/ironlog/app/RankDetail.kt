@@ -212,14 +212,15 @@ fun rankPanels(id: String, title: Boolean = false, prefix: String = "", wrap: Mo
                         Line("People", (if (p.male) "Men" else "Women") + " aged 20–39, everyone (not just lifters)")
                         Line("Body weight", "not used")
                         Line("Age", "not used")
-                        Line("Data", "International grip-strength norms, 2.4 million adults (Tomkinson et al. 2025)")
+                        if (!p.devPersonal) Line("Data", "International grip-strength norms, 2.4 million adults (Tomkinson et al. 2025)")
                     } else {
                     Line("People", (if (p.male) "Men" else "Women") + " who lift")
                     Line("Body weight", p.bodyweight?.let { Units.weightU(it) } ?: "not set")
-                    Line("Body fat", BodyFat.label(p)?.let { b -> p.bodyweight?.let { w -> val c = BodyFat.compareWeight(p, w, info.reps)
+                    Line("Body fat", BodyFat.label(p)?.let { b -> p.bodyweight?.let { w -> val c = BodyFat.compareWeight(p, w, info.reps || info.timed)
                         if (c == w) b else "$b (compared as ${Units.weightU(c)})" } ?: b } ?: "not set (no adjustment)")
                     Line("Age", p.age?.let { a -> val f = Standards.ageFactor(a, p.male); "$a" + if (f >= 0.995) " (no adjustment)" else " (levels × ${"%.2f".format(f)})" } ?: "not set")
                     Line("Data", when {
+                        p.devPersonal -> "Personal-use data" + if (info.aiFor(p.male)) ", rough estimate" else if (info.approxFor(p.male) != null) ", estimate" else ""
                         info.aiFor(p.male) -> "Rough estimate from AI-generated databases"
                         info.approxFor(p.male) != null -> "Estimate (see Details)"
                         else -> "Published research"

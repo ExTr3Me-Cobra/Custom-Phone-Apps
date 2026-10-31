@@ -43,13 +43,16 @@ object Standards {
         val s = table[id] ?: return null
         if (s.flat) {
             val rows = (if (p.male) s.male else s.female) ?: return null
+            // PERSONAL-USE (removable): no sources are shown anywhere while personal-use rankings are on.
+            if (p.devPersonal) return Fit(rows, emptyList(), "Compared with ${if (p.male) "men" else "women"} aged 20–39. Body weight and age aren't used. " +
+                "Your number is your best squeeze with either hand.")
             return Fit(rows, emptyList(), "Compared with ${if (p.male) "men" else "women"} aged 20–39 – everyone, not just people who lift. " +
                 "Body weight and age aren't used. Source: international grip-strength norms from 2.4 million adults in 69 countries " +
                 "(Tomkinson et al. 2025), hand dynamometer. Your number is your best squeeze with either hand, as in the norms (each person's strongest reading)." + (s.note?.let { " $it" } ?: ""))
         }
         val bw0 = p.bodyweight ?: return null
         // Body fat: compared as if you weighed a little more or less (see BodyFat).
-        val bw = BodyFat.compareWeight(p, bw0, s.reps)
+        val bw = BodyFat.compareWeight(p, bw0, s.reps || s.timed)
         val rows = (if (p.male) s.male else s.female) ?: return null
         val problems = mutableListOf<String>()
         val lo = rows.first().first; val hi = rows.last().first
@@ -83,7 +86,7 @@ object Standards {
         }
         val weightText = if (bw == bw0) "your body weight of ${Units.weightU(bw)}"
             else "a body weight of ${Units.weightU(bw)} (your ${Units.weightU(bw0)}, adjusted for body fat ${BodyFat.label(p)})"
-        val compared = "Compared with $sex at $weightText ($near), $age." + (s.noteFor(p.male)?.let { " $it" } ?: "")
+        val compared = "Compared with $sex at $weightText ($near), $age." + (s.noteFor(p.male)?.takeIf { !p.devPersonal }?.let { " $it" } ?: "")
         return Fit(rows, problems, compared)
     }
 

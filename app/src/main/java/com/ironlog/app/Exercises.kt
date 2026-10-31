@@ -542,6 +542,7 @@ fun SessionCard(e: Exercise, s: Stats.Session) {
 @Composable
 fun MusclesCard(e: Exercise) {
     var sources by remember { mutableStateOf(false) }
+    val personal = Store.profile.collectAsState().value.devPersonal // PERSONAL-USE (removable): sources hidden
     Column(Modifier.padding(16.dp, 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(14.dp)) {
         Text("Muscles worked", fontWeight = FontWeight.Bold)
         // Each muscle's share of the total work, adding up to exactly 100% (largest-remainder rounding).
@@ -564,7 +565,7 @@ fun MusclesCard(e: Exercise) {
             if (e.edited || e.custom) "Your numbers, as each muscle's share of the total work (adds up to 100%)." else "Each muscle's share of the total work (adds up to 100%), estimated from EMG and training studies of this kind of movement.",
             color = Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp),
         )
-        if (e.refs.isNotEmpty() && !e.edited && !e.custom) {
+        if (e.refs.isNotEmpty() && !e.edited && !e.custom && !personal) {
             Text(if (sources) "Hide sources" else "Sources (${e.refs.size})", color = Blue, fontSize = 13.sp,
                 modifier = Modifier.padding(top = 6.dp).clickable { sources = !sources })
             if (sources) e.refs.forEach { r ->

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.sp
 /** Home's "?": how ranks work, from what you're compared with to how each number is worked out. */
 @Composable
 fun RankHelpScreen() {
+    val personal = Store.profile.collectAsState().value.devPersonal // PERSONAL-USE (removable): sources hidden
     Column(Modifier.fillMaxSize()) {
         TopBar("How ranks work")
         Column(
@@ -44,7 +46,7 @@ fun RankHelpScreen() {
             }
 
             HelpCard("2. Who you're compared with") {
-                Point("People who lift", "Standards for people who train, built from published research and open lifting data (see Sources below), so the bar is higher than for the general public.")
+                Point("People who lift", if (personal) "Standards for people who train, so the bar is higher than for the general public." else "Standards for people who train, built from published research and open lifting data (see Sources below), so the bar is higher than for the general public.")
                 Point("Your sex and body weight", "You're compared with people of your sex at your body weight (blended between the nearest rows, every 10 lb).")
                 Point("Your age", "Strength peaks from the early 20s to mid 30s. Younger or older, the levels are scaled by how strength changes with age among competition lifters.")
                 Point("Grip Dynamometer", "The exception: compared with everyone aged 20–39 of your sex (not just lifters); body weight and age aren't used.")
@@ -101,7 +103,7 @@ fun RankHelpScreen() {
                 Para("• Tap any rank to see the chart, the levels and exactly who you're compared with.")
             }
 
-            HelpCard("9. Sources") {
+            if (!personal) HelpCard("9. Sources") {
                 Point("Levels", "Isenmann et al. 2026, Scientific Reports (CC BY 4.0), 393 people from beginners to elite: squat and deadlift, the spread between levels, " +
                     "and (averaged with Tiggemann et al. 2011 and Rodríguez-Ridao et al. 2020) the gym-goer bench press. Ratios between lifts: Seo et al. 2012, " +
                     "Nieto-Acevedo et al. 2023, Larsen et al. 2021, Massini et al. 2022, Ribeiro et al. 2024, Swinton et al. 2011, Camara et al. 2016, " +

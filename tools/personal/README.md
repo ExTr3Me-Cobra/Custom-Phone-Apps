@@ -19,7 +19,7 @@ the body-weight scaling and stars).
 - Code marked `PERSONAL-USE (removable)`: `StandardsData.kt` (the `personal` list and its line in `all`),
   `Model.kt` (`devPersonal`, json key `dper`) and `Profile.kt` (the toggle)
 
-Run `git grep -n "PERSONAL-USE"` to find every spot. A full purge from history also needs the same `git filter-branch`
+Run `git grep -n "PERSONAL-USE\|devPersonal"` to find every spot (it also hides every source in the app while it's on). A full purge from history also needs the same `git filter-branch`
 pass used for the earlier clean-up.
 
 ## Format
