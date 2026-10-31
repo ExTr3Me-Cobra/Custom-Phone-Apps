@@ -68,7 +68,8 @@ fun rankPanels(id: String, title: Boolean = false, prefix: String = "", wrap: Mo
     val reps = info?.reps == true
     val flat = info?.flat == true
     val oneLeg = info?.oneLeg == true
-    fun fmt(v: Double) = if (reps) "${v.toInt()} reps" else Units.weightU(Math.round(v).toDouble())
+    val timed = Standards.isTimed(id)
+    fun fmt(v: Double) = Standards.format(id, v)
 
     if (info == null || fit == null || lv == null)
         return listOf(Panel(prefix + "header", "Your rank") { Text("No rank data for this exercise with your current profile.", color = Sub, modifier = wrap) })
@@ -83,7 +84,7 @@ fun rankPanels(id: String, title: Boolean = false, prefix: String = "", wrap: Mo
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(r.tier.label, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(r.tier.color))
                         Text(topLabel(r.percentile))
-                        Text((if (reps) "Your best: " else if (flat) "Your best squeeze: " else if (oneLeg) "Your two-leg equivalent: " else "Your est. 1-rep max: ") + fmt(r.value), color = Sub, fontSize = 14.sp)
+                        Text((if (reps || timed) "Your best: " else if (flat) "Your best squeeze: " else if (oneLeg) "Your two-leg equivalent: " else "Your est. 1-rep max: ") + fmt(r.value), color = Sub, fontSize = 14.sp)
                     }
                 } else Text("Log this exercise to see where you sit.", color = Sub)
             }
@@ -95,7 +96,7 @@ fun rankPanels(id: String, title: Boolean = false, prefix: String = "", wrap: Mo
                 val curve = remember(lv.toList(), xMax) { (0..80).map { i -> val x = xMax * i / 80; x to (Standards.percentile(id, x, p) ?: 0.0) } }
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(12.dp)) {
                     Text("Where you sit", fontWeight = FontWeight.Bold)
-                    Text(if (reps) "Across: reps." else if (flat) "Across: your best squeeze (either hand)." else if (oneLeg) "Across: two-leg equivalent load (body weight + 2 × your one-leg est. max)." else "Across: est. 1-rep max.",
+                    Text(if (timed) "Across: longest hold." else if (reps) "Across: reps." else if (flat) "Across: your best squeeze (either hand)." else if (oneLeg) "Across: two-leg equivalent load (body weight + 2 × your one-leg est. max)." else "Across: est. 1-rep max.",
                         color = Sub, fontSize = 12.sp)
                     Text(if (flat) "Up: est. % of ${if (p.male) "men" else "women"} aged 20–39 that you are stronger than with this particular exercise."
                         else "Up: est. % of people with your bodyweight, sex, and age who lift weights that you are stronger than with this particular exercise.",

@@ -32,6 +32,8 @@ object StandardsData {
         val noteF: String? = note,
         /** V2: sets over this many reps count as this many for the estimated max (machine, cable and isolation lifts). */
         val repCap: Int = 20,
+        /** Ranked on the longest hold in seconds (planks, hangs, wall sits). */
+        val timed: Boolean = false,
     ) {
         fun approxFor(male: Boolean) = if (male) approx else approxF
         fun aiFor(male: Boolean) = if (male) ai else aiF
@@ -82,7 +84,7 @@ object StandardsData {
                 val approx = str("a"); val ai = o.optBoolean("ai", false); val note = str("note")
                 Std(o.getString("i"), o.getString("lift"), rows("m"), rows("f"), o.getBoolean("r"), o.getBoolean("d"),
                     note, o.optDouble("k", 1.0), approx, ai, o.optBoolean("u", false), o.optBoolean("ul", false), str("ln") ?: o.getString("lift"),
-                    if (o.has("af")) str("af") else approx, o.optBoolean("aif", ai), if (o.has("nf")) str("nf") else note, o.optInt("rc", 20))
+                    if (o.has("af")) str("af") else approx, o.optBoolean("aif", ai), if (o.has("nf")) str("nf") else note, o.optInt("rc", 20), o.optBoolean("t", false))
             }
         }.getOrDefault(emptyList())
 }

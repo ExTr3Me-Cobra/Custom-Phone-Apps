@@ -91,7 +91,7 @@ object OneRm {
     fun canTest(id: String, p: Profile): Boolean {
         if (!Standards.covers(id, p)) return false
         val t = Store.exercise(id)?.type ?: return false
-        return t == ExType.WEIGHT || t == ExType.BODYWEIGHT
+        return t == ExType.WEIGHT || t == ExType.BODYWEIGHT || t == ExType.TIMED
     }
 
     // Exercises you added to the list before doing them.
@@ -151,7 +151,7 @@ object OneRm {
         exerciseId = id
         startedAt = System.currentTimeMillis()
         rows.clear()
-        rows += start ?: DoneSet(reps = if (Standards.isReps(id)) null else 1)
+        rows += start ?: DoneSet(reps = if (Standards.isReps(id) || Standards.isTimed(id)) null else 1)
     }
 
     fun clear() { exerciseId = null; rows.clear() }
@@ -355,7 +355,8 @@ fun OneRmTestScreen(id: String) {
     val workouts by Store.workouts.collectAsState()
     val e = Store.exercise(id) ?: run { closeScreen(); return }
     val context = LocalContext.current
-    val reps = Standards.isReps(id)
+    val timed = Standards.isTimed(id)
+    val reps = Standards.isReps(id) || timed // no weight column: reps, or seconds for a hold
     val squeeze = Standards.isFlat(id)
     val best = remember(id) { OneRm.best(id, workouts, p) }
     remember(id) { OneRm.begin(id, OneRm.bestSet(id, workouts, p)); 0 }
@@ -365,7 +366,7 @@ fun OneRmTestScreen(id: String) {
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableStateOf(0) }
     val gold = Color(0xFFC9A94E)
-    fun fmt(v: Double) = if (reps) "${v.roundToInt()} reps" else Units.weightU(v)
+    fun fmt(v: Double) = if (reps) Standards.format(id, v) else Units.weightU(v)
 
     // Leaving with a ticked set asks first (the test isn't saved until you finish it).
     // Rank-downs wait until Finish Test.
@@ -417,6 +418,10 @@ fun OneRmTestScreen(id: String) {
                 if (squeeze) {
                     Bullet("One practice squeeze with each hand at about half effort.")
                     Bullet("Then 3 all-out squeezes with each hand, resting about a minute before using the same hand again.")
+                } else if (timed) {
+                    Bullet(best?.let { "One easy hold of about ${(it * 0.35).roundToInt().coerceAtLeast(5)} seconds, then rest 2–3 minutes." }
+                        ?: "One easy hold of 10–20 seconds, then rest 2–3 minutes.")
+                    Bullet("Then one all-out hold: good form only, stop the clock when your form breaks.")
                 } else if (reps) {
                     Bullet(best?.let { "One easy set of about ${(it * 0.35).roundToInt().coerceAtLeast(1)} reps, then rest 2–3 minutes." }
                         ?: "One easy set of a few reps, well short of failure, then rest 2–3 minutes.")
@@ -449,7 +454,7 @@ fun OneRmTestScreen(id: String) {
             Row(Modifier.quakeRattle(rattle, 6)) {
                 Text("SET", Modifier.weight(0.6f), color = Sub, fontSize = 12.sp)
                 if (!reps) Text(if (squeeze) "SQUEEZE (${Units.w})" else Units.w.uppercase(), Modifier.weight(1.4f), color = Sub, fontSize = 12.sp)
-                Text(if (squeeze) "HAND" else "REPS", Modifier.weight(1.2f), color = Sub, fontSize = 12.sp)
+                Text(if (squeeze) "HAND" else if (timed) "SECONDS" else "REPS", Modifier.weight(1.2f), color = Sub, fontSize = 12.sp)
                 Text("", Modifier.weight(1.2f))
             }
             // Developer trial: standard vs personal 1 Rep Max estimate, above the next set to do.
@@ -478,6 +483,9 @@ fun OneRmTestScreen(id: String) {
                         OneRm.rows[i] = OneRm.rows[i].copy(weight = v.toDoubleOrNull()?.let(Units::fromShown))
                     }
                     if (squeeze) Text(when (Standards.hands(OneRm.rows)[i]) { true -> "Right"; false -> "Left"; null -> "Warm-up" }, Modifier.weight(1.2f), color = Sub)
+                    else if (timed) NumField(s.seconds?.toString() ?: "", "0", "$k:s", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
+                        OneRm.rows[i] = OneRm.rows[i].copy(seconds = v.toIntOrNull())
+                    }
                     else NumField(s.reps?.toString() ?: "", "0", "$k:r", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
                         OneRm.rows[i] = OneRm.rows[i].copy(reps = v.toIntOrNull())
                     }
@@ -555,7 +563,7 @@ private fun finishTest(c: Context, id: String): String? {
     val e = Store.exercise(id) ?: return "Exercise not found."
     if (done.isEmpty()) return "Tick at least one completed set first."
     val value = Standards.testValue(id, done)
-    if (value <= 0) return if (Standards.isFlat(id)) "Enter your squeeze reading." else if (Standards.isReps(id)) "Enter the reps you did." else "Enter the weight and reps you lifted."
+    if (value <= 0) return if (Standards.isFlat(id)) "Enter your squeeze reading." else if (Standards.isTimed(id)) "Enter how many seconds you held." else if (Standards.isReps(id)) "Enter the reps you did." else "Enter the weight and reps you lifted."
     val p = Store.profile.value
     val w = Workout(
         id = Store.newId(), routineId = null, name = "1RM test: ${e.name}", start = OneRm.startedAt, end = System.currentTimeMillis(),

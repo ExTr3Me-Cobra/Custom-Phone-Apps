@@ -106,7 +106,7 @@ object Personal1Rm {
     }
 
     fun estimate(id: String, workouts: List<Workout>, p: Profile, now: Long = System.currentTimeMillis()): Estimate? {
-        if (Standards.isReps(id) || Standards.isFlat(id) || Standards.isOneLeg(id)) return null
+        if (Standards.isReps(id) || Standards.isTimed(id) || Standards.isFlat(id) || Standards.isOneLeg(id)) return null
         val done = workouts.filter { it.end != null }
         fun setsOf(w: Workout) = w.items.withIndex().filter { it.value.exerciseId == id }
             .flatMap { (i, it) -> it.sets.withIndex().filter { (_, s) -> s.done && !s.warmup && (s.weight ?: 0.0) > 0 && (s.reps ?: 0) > 0 }.map { (j, s) -> S(w, i, j, s) } }

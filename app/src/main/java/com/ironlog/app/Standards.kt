@@ -22,6 +22,13 @@ object Standards {
 
     fun covers(id: String) = table.containsKey(id)
     fun isReps(id: String) = table[id]?.reps == true
+    fun isTimed(id: String) = table[id]?.timed == true
+    /** A ranked number as you'd read it: "1:45" for a hold, "12 reps", or a weight. */
+    fun format(id: String, v: Double): String = when {
+        isTimed(id) -> Units.clock(Math.round(v) * 1000L)
+        isReps(id) -> "${v.toInt()} reps"
+        else -> Units.weightU(Math.round(v).toDouble())
+    }
     /** Ranked against everyone of your sex (no body weight or age), by your single best number. */
     fun isFlat(id: String) = table[id]?.flat == true
     fun info(id: String) = table[id]
@@ -189,7 +196,7 @@ object Standards {
     fun levels(id: String, p: Profile): DoubleArray? {
         val rows = fit(id, p)?.rows ?: return null
         if (isFlat(id)) return rows.first().second.copyOf()
-        val bw = BodyFat.compareWeight(p, p.bodyweight ?: return null, isReps(id))
+        val bw = BodyFat.compareWeight(p, p.bodyweight ?: return null, isReps(id) || isTimed(id))
         val f = ageFactor(p.age, p.male) * (table[id]?.factor ?: 1.0)
         return levelsAt(rows, bw).map { it * f }.toDoubleArray()
     }
@@ -221,6 +228,7 @@ object Standards {
         val done = sets.filter { it.done && !it.warmup }
         if (isFlat(id)) return gripValue(sets)
         if (isOneLeg(id)) return done.maxOfOrNull { oneLegValue(it) } ?: 0.0
+        if (isTimed(id)) return (done.maxOfOrNull { it.seconds ?: 0 } ?: 0).toDouble()
         if (isReps(id)) return (done.maxOfOrNull { it.reps ?: 0 } ?: 0).toDouble()
         val k = stackFactor(id)
         val single = done.filter { it.reps == 1 }.maxOfOrNull { rankWeight(it.weight) * k } ?: 0.0
@@ -278,6 +286,7 @@ object Standards {
         val done = sets.filter { it.done && !it.warmup } // warm-ups never count
         if (isFlat(id)) return gripValue(sets)
         if (isOneLeg(id)) return done.maxOfOrNull { oneLegValue(it) } ?: 0.0
+        if (isTimed(id)) return (done.maxOfOrNull { it.seconds ?: 0 } ?: 0).toDouble()
         if (isReps(id)) return (done.maxOfOrNull { it.reps ?: 0 } ?: 0).toDouble()
         val k = stackFactor(id)
         return done.maxOfOrNull { Stats.e1rm(rankWeight(it.weight) * k, capReps(id, it.reps)) } ?: 0.0

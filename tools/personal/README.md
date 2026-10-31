@@ -9,8 +9,8 @@ they don't cover aren't ranked.
 
 ## The data
 `inputs/standards_filled.csv`: all 739 exercises, filled in by another AI for the owner, mostly from Strength Level's
-tables (its terms forbid copying its standards; the owner's choice, for personal use in a private repo). 545 exercises
-are ranked; timed holds and blank rows aren't. `build_personal.py` turns it into the app's file (see its header for
+tables (its terms forbid copying its standards; the owner's choice, for personal use in a private repo). 552 exercises
+are ranked (timed holds on seconds); blank rows aren't. `build_personal.py` turns it into the app's file (see its header for
 the body-weight scaling and stars).
 
 ## Files (everything to delete to remove it)

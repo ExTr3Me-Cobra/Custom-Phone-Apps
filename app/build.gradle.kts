@@ -16,7 +16,7 @@ android {
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         // major.minor.build: 0.9 until the owner says it's ready for 1.0; minor goes up for notable features.
-        versionName = "0.11.$versionCode"
+        versionName = "0.12.$versionCode"
     }
 
     signingConfigs {

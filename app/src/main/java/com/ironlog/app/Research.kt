@@ -86,7 +86,7 @@ object Research {
         val res = results(workouts, p)
         for (r in res) {
             val e = r.exercise
-            val unit = when { Standards.isReps(e.id) -> "reps"; Standards.isFlat(e.id) -> "grip_lb"; Standards.info(e.id)?.perDumbbell == true -> "lb_each"; else -> "lb" }
+            val unit = when { Standards.isTimed(e.id) -> "seconds"; Standards.isReps(e.id) -> "reps"; Standards.isFlat(e.id) -> "grip_lb"; Standards.info(e.id)?.perDumbbell == true -> "lb_each"; else -> "lb" }
             val latest = r.tests.firstOrNull()
             sb.append(listOf(q(e.id), q(e.name), q(e.equipment), unit, n(latest?.second), latest?.let { date.format(java.util.Date(it.first.start)) } ?: "",
                 n(r.tests.maxOfOrNull { it.second }), r.tests.size.toString(), n(r.best),
@@ -132,7 +132,7 @@ fun ResearchScreen() {
             "Saved ${results.values.count { it.tests.isNotEmpty() }} tested exercises."
         }.getOrElse { "Couldn't save: ${it.message}" }
     }
-    fun fmt(id: String, v: Double) = if (Standards.isReps(id)) "${v.roundToInt()} reps" else Units.weightU(v)
+    fun fmt(id: String, v: Double) = if (Standards.isReps(id) || Standards.isTimed(id)) Standards.format(id, v) else Units.weightU(v)
     val exercises by Store.exercises.collectAsState()
     val sections = remember(exercises) { Research.exercises() }
     val done = results.values.count { it.tests.isNotEmpty() }

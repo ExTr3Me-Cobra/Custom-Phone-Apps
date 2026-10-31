@@ -4,7 +4,7 @@ The CSV was filled in by another AI for the owner, mostly from Strength Level's 
 Nothing here uses V1, V2 or Gemini data. Body weight: the CSV gives a 180 lb man and a 140 lb woman; other weights
 scale as body weight^0.67 for weights (Jaric 2002, Sports Med 32:615-631) and ^-1/3 for body-weight reps.
 Stars from the row's own confidence: 7-10 no star note, 4-6 "estimate", 1-3 rough (purple, "All on + AI" mode only).
-Timed holds are left out (the app doesn't rank seconds). Run: python3 tools/personal/build_personal.py
+Timed holds rank on seconds (flag t) and scale like reps. Run: python3 tools/personal/build_personal.py
 """
 import csv, json, os, re
 
@@ -18,10 +18,10 @@ ids = {e['i'] for e in json.load(open(os.path.join(HERE, '../../app/src/main/ass
 out, skipped = [], []
 for r in csv.DictReader(open(os.path.join(HERE, 'inputs/standards_filled.csv'))):
     unit = r['unit']
-    if unit not in ('1RM_lb', 'max_reps') or r['id'] not in ids:
+    if unit not in ('1RM_lb', 'max_reps', 'max_seconds') or r['id'] not in ids:
         if r['men_180lb_intermediate'] or r['women_140lb_intermediate']: skipped.append(f"{r['exercise']} ({unit})")
         continue
-    reps, grip = unit == 'max_reps', 'Grip_Dynamometer' in r['id']
+    reps, timed, grip = unit == 'max_reps', unit == 'max_seconds', 'Grip_Dynamometer' in r['id']
     tables = {}
     for sex, col in (('m', 'men_180lb_'), ('f', 'women_140lb_')):
         v = [r[col + l] for l in LEVELS]
@@ -29,7 +29,7 @@ for r in csv.DictReader(open(os.path.join(HERE, 'inputs/standards_filled.csv')))
         v = [float(x) for x in v]
         assert all(b > a for a, b in zip(v, v[1:])), r['exercise']
         if grip: tables[sex] = [[1, *v], [1000, *v]]; continue
-        p = -1 / 3 if reps else 0.67
+        p = -1 / 3 if reps or timed else 0.67
         tables[sex] = [[bw, *[round(x * (bw / REF[sex]) ** p, 1) for x in v]] for bw in GRID[sex]]
     if not tables: continue
     conf = int(r['confidence_1_to_10'] or 1)
@@ -37,7 +37,7 @@ for r in csv.DictReader(open(os.path.join(HERE, 'inputs/standards_filled.csv')))
     eq, logged = r['equipment'], r['weight_logged_as']
     out.append({'i': r['id'], 'lift': r['exercise'], 'ln': r['exercise'], 'm': tables.get('m'), 'f': tables.get('f'),
                 'r': reps, 'd': eq in ('Dumbbell', 'Kettlebell') and logged.startswith('weight of ONE'), 'k': 1,
-                'ai': conf <= 3, 'a': approx, 'note': f"Personal use: {r['source']} (confidence {conf}/10).", **({'u': True} if grip else {})})
+                'ai': conf <= 3, 'a': approx, 'note': f"Personal use: {r['source']} (confidence {conf}/10).", **({'u': True} if grip else {}), **({'t': True} if timed else {})})
 out.sort(key=lambda s: s['lift'])
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 json.dump(out, open(OUT, 'w'), separators=(',', ':'))
