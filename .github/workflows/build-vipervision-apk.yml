@@ -58,13 +58,13 @@ jobs:
           cache-read-only: false
 
       # Every build must be signed with the same key, or Android refuses to install it as an
-      # update ("App not installed"). The key is kept in the default branch's build cache by the
-      # "Signing keys" workflow there (every branch can read it, and it's refreshed every 3 days).
+      # update ("App not installed"). The original key is in this branch's build cache (v1); a
+      # build here keeps it alive (GitHub drops a cache unused for 7 days).
       - name: Reuse the same signing key
-        uses: actions/cache/restore@v4
+        uses: actions/cache@v4
         with:
           path: signing/vipervision.keystore
-          key: vipervision-signing-key-v2
+          key: vipervision-signing-key-v1
 
       # The build cache forgets anything unused for 7 days, so the key is also kept as an
       # encrypted copy in the "vipervision-signing-key" release, locked with the passphrase saved
@@ -76,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PASSPHRASE: ${{ secrets.VIPERVISION_KEY_PASSPHRASE }}
+          EXPECTED: "2C:DA:3E:98:C1:BE:F1:86:C7:FE:CD:96:8E:4F:4C:AA:DD:3F:2B:7C:FD:63:D4:2D:AA:31:1F:FF:7B:0B:59:9A"
         run: |
           mkdir -p signing
           KEY=signing/vipervision.keystore
@@ -96,6 +97,12 @@ jobs:
             exit 1
           fi
           keytool -list -v -keystore "$KEY" -storepass android | grep SHA256
+          # Only the key the installed app was signed with (builds 1-157): anything else makes
+          # "App not installed" on every phone that has it.
+          if ! keytool -list -v -keystore "$KEY" -storepass android | grep -q "$EXPECTED"; then
+            echo "::error::This isn't Viper Vision's original signing key ($EXPECTED). Not building with it."
+            exit 1
+          fi
           if [ -n "$PASSPHRASE" ] && ! has_backup; then
             gh release view "$BACKUP_TAG" --repo "$REPO" >/dev/null 2>&1 || gh release create "$BACKUP_TAG" --repo "$REPO" \
               --title "Viper Vision signing key (encrypted)" --latest=false --target "${{ github.sha }}" \
@@ -167,7 +174,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: signing/vipervision.keystore
-          key: vipervision-signing-key-v2
+          key: vipervision-signing-key-v1
           fail-on-cache-miss: true
 
       - name: Make the all-in-one APK
