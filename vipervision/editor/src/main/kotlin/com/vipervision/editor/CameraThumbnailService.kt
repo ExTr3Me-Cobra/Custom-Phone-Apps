@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import kotlin.math.abs
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.content.Intent
@@ -95,8 +96,12 @@ class CameraThumbnailService : AccessibilityService() {
                 if (pkg == packageName && event.className?.toString().orEmpty().startsWith("android.")) return
                 // Not on the camera's own settings screens, only the viewfinder.
                 val screenName = event.className?.toString().orEmpty()
-                cameraOnScreen = pkg == CAMERA_PACKAGE && "setting" !in screenName.lowercase()
-                if (pkg == CAMERA_PACKAGE) onCameraSettings = "setting" in screenName.lowercase()
+                cameraOnScreen = isCamera(pkg) && "setting" !in screenName.lowercase()
+                if (isCamera(pkg)) {
+                    if (pkg != cameraPackage) ViperLog.i("CAMERA", "Camera app: $pkg")
+                    cameraPackage = pkg
+                    onCameraSettings = "setting" in screenName.lowercase()
+                }
                 loadingRetries = 0
                 // Straight away at the thumbnail's last known spot (it doesn't move between
                 // visits), so a quick tap after opening the camera already lands on it.
@@ -106,7 +111,7 @@ class CameraThumbnailService : AccessibilityService() {
             // The viewfinder changes constantly; look at most every 60 ms instead of waiting for
             // it to settle (which kept putting the button off while the camera started).
             // The shutter: a new photo is on its way (200 MP ones take seconds to be saved).
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> if (pkg == CAMERA_PACKAGE) {
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> if (isCamera(pkg)) {
                 val id = event.source?.viewIdResourceName.orEmpty().lowercase()
                 val label = (event.contentDescription ?: event.text.joinToString(" ")).toString().lowercase()
                 val isShutter = SHUTTER_WORDS.any { it in id || it in label }
@@ -115,10 +120,10 @@ class CameraThumbnailService : AccessibilityService() {
                         if (isShutter) " (shutter)" else "")
                 if (isShutter) lastShutterAt = System.currentTimeMillis()
             }
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> if (pkg == CAMERA_PACKAGE && !refreshPending) {
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> if (isCamera(pkg) && !refreshPending) {
                 // Back at the camera after the button was tapped: put it back at once.
                 if (button == null && !onCameraSettings && !isLocked() &&
-                    rootInActiveWindow?.packageName == CAMERA_PACKAGE
+                    rootInActiveWindow?.packageName?.toString()?.let(::isCamera) == true
                 ) {
                     cameraOnScreen = true
                     lastBounds()?.let(::show)
@@ -129,6 +134,26 @@ class CameraThumbnailService : AccessibilityService() {
     }
 
     private var refreshPending = false
+
+    /** The camera app in use (Samsung's, or another phone's). */
+    private var cameraPackage = CAMERA_PACKAGE
+
+    /**
+     * Camera apps: the phone's own (whatever answers "open the camera"), and well-known ones,
+     * so the shortcut works on other phones too, not only with Samsung's camera.
+     */
+    private val cameraPackages: Set<String> by lazy {
+        val found = listOf(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA, MediaStore.ACTION_IMAGE_CAPTURE, MediaStore.INTENT_ACTION_VIDEO_CAMERA)
+            .flatMap { action ->
+                runCatching { packageManager.queryIntentActivities(Intent(action), 0) }.getOrDefault(emptyList())
+                    .map { it.activityInfo.packageName }
+            }
+        (KNOWN_CAMERAS + found).filter { it != packageName }.toSet().also {
+            ViperLog.i("CAMERA", "Camera apps: ${it.joinToString()}")
+        }
+    }
+
+    private fun isCamera(pkg: String) = pkg in cameraPackages
     private var lastCameraAt = 0L
 
     /** Samsung's preview's buttons and texts with where they are, for the log. */
@@ -161,7 +186,10 @@ class CameraThumbnailService : AccessibilityService() {
 
     /** Where the button was last put, kept so it can be shown before the camera's layout is readable. */
     private fun lastBounds(): Rect? = getSharedPreferences("Prefs", MODE_PRIVATE)
-        .getString(LAST_BOUNDS, null)?.let(Rect::unflattenFromString)
+        .getString(boundsKey(), null)?.let(Rect::unflattenFromString)
+
+    /** Each camera app's thumbnail is somewhere else; Samsung's keeps its original key. */
+    private fun boundsKey() = if (cameraPackage == CAMERA_PACKAGE) LAST_BOUNDS else "${LAST_BOUNDS}_$cameraPackage"
 
     private var loadingRetries = 0
 
@@ -177,7 +205,8 @@ class CameraThumbnailService : AccessibilityService() {
         // with Back from Viper Vision's viewer, which doesn't always announce the camera again),
         // and not Viper Vision's viewer over it.
         val front = rootInActiveWindow?.packageName?.toString()
-        if (front != null) cameraOnScreen = front == CAMERA_PACKAGE && !onCameraSettings
+        if (front != null) cameraOnScreen = isCamera(front) && !onCameraSettings
+        if (front != null && isCamera(front)) cameraPackage = front
         if (!cameraOnScreen || isLocked()) {
             hide()
             return
@@ -194,18 +223,21 @@ class CameraThumbnailService : AccessibilityService() {
         loadingRetries = 0
         if (bounds == shownAt) return
         show(bounds)
-        getSharedPreferences("Prefs", MODE_PRIVATE).edit().putString(LAST_BOUNDS, bounds.flattenToString()).apply()
+        getSharedPreferences("Prefs", MODE_PRIVATE).edit().putString(boundsKey(), bounds.flattenToString()).apply()
     }
 
     /**
-     * Where the thumbnail is: the camera's own thumbnail button if it describes itself, otherwise
-     * the spot left of the shutter where Samsung always puts it (same row, same size).
+     * Where the thumbnail is: the camera's own thumbnail button if it describes itself. Otherwise,
+     * for Samsung's camera, the spot left of the shutter where Samsung always puts it; for other
+     * camera apps, the round button on the shutter's row that isn't the switch-camera one, or
+     * else the spot right of the shutter where most other cameras put it.
      */
     private fun findThumbnail(): Rect? {
-        val root = windows.firstOrNull { it.root?.packageName == CAMERA_PACKAGE }?.root
-            ?: rootInActiveWindow?.takeIf { it.packageName == CAMERA_PACKAGE }
+        val root = windows.firstOrNull { it.root?.packageName?.toString()?.let(::isCamera) == true }?.root
+            ?: rootInActiveWindow?.takeIf { it.packageName?.toString()?.let(::isCamera) == true }
             ?: return null
-        // Samsung Camera keeps its layout portrait however the phone is held (only the icons
+        val samsung = root.packageName == CAMERA_PACKAGE
+        // Camera apps keep their layout portrait however the phone is held (only the icons
         // turn), so measure against the camera's own window, not the phone's current orientation
         // (which swaps width and height when the phone is turned).
         val area = Rect().also(root::getBoundsInScreen).takeIf { it.width() > 0 && it.height() > 0 } ?: run {
@@ -214,29 +246,54 @@ class CameraThumbnailService : AccessibilityService() {
         }
         var thumbnail: Rect? = null
         var shutter: Rect? = null
+        val buttons = mutableListOf<Pair<Rect, String>>()
         fun visit(node: AccessibilityNodeInfo, depth: Int) {
             if (depth > 40 || !node.isVisibleToUser) return
-            val id = node.viewIdResourceName.orEmpty().lowercase()
-            val label = node.contentDescription?.toString().orEmpty().lowercase()
+            val id = node.viewIdResourceName.orEmpty().lowercase().substringAfter(":id/")
+            val label = (node.contentDescription ?: node.text)?.toString().orEmpty().lowercase()
             val bounds = Rect().also(node::getBoundsInScreen)
-            val inLowerLeft = bounds.centerY() > area.centerY() && bounds.centerX() < area.centerX()
-            if (thumbnail == null && inLowerLeft && bounds.width() in 1 until area.width() / 3 &&
-                ("thumbnail" in id || "thumbnail" in label || label == "gallery" || "preview" in label)
+            val lower = bounds.centerY() > area.centerY()
+            val small = bounds.width() in 1 until area.width() / 3 && bounds.height() in 1 until area.width() / 3
+            val side = if (samsung) bounds.centerX() < area.centerX() else true
+            if (thumbnail == null && lower && small && side &&
+                (THUMBNAIL_WORDS.any { it in id } || THUMBNAIL_WORDS.any { it in label } || label == "gallery") &&
+                SWITCH_WORDS.none { it in id || it in label }
             ) {
                 thumbnail = bounds
             }
-            if (shutter == null && ("shutter" in id || "take picture" in label || "shutter" in label || "capture" in label)) {
+            if (shutter == null && lower && (SHUTTER_WORDS.any { it in id } || "take picture" in label || "shutter" in label || "capture" in label)) {
                 shutter = bounds
             }
+            if (lower && small && (node.isClickable || node.isFocusable)) buttons += bounds to "$id $label"
             for (i in 0 until node.childCount) node.getChild(i)?.let { visit(it, depth + 1) }
         }
         visit(root, 0)
         thumbnail?.let { return it }
-        // Samsung Camera (One UI, portrait): the round thumbnail is ~13% of the screen width
-        // across, centred 16% in from the left, on the shutter's row (83% down the screen).
-        val size = (area.width() * 0.15f).toInt()
-        val centerX = area.left + (area.width() * 0.16f).toInt()
-        val centerY = shutter?.centerY() ?: (area.top + area.height() * 0.83f).toInt()
+        if (samsung) {
+            // Samsung Camera (One UI, portrait): the round thumbnail is ~13% of the screen width
+            // across, centred 16% in from the left, on the shutter's row (83% down the screen).
+            val size = (area.width() * 0.15f).toInt()
+            val centerX = area.left + (area.width() * 0.16f).toInt()
+            val centerY = shutter?.centerY() ?: (area.top + area.height() * 0.83f).toInt()
+            return Rect(centerX - size / 2, centerY - size / 2, centerX + size / 2, centerY + size / 2)
+        }
+        // Another camera app that doesn't name its thumbnail: the button beside the shutter (same
+        // row) that isn't switch-camera, right side first (where most put it).
+        shutter?.let { sh ->
+            val row = buttons.filter { (b, what) ->
+                abs(b.centerY() - sh.centerY()) < sh.height() / 2 && abs(b.centerX() - sh.centerX()) > sh.width() / 2 &&
+                    SWITCH_WORDS.none { it in what } && SHUTTER_WORDS.none { it in what }
+            }
+            (row.filter { it.first.centerX() > sh.centerX() }.maxByOrNull { it.first.width() }
+                ?: row.maxByOrNull { it.first.width() })?.let {
+                ViperLog.i("CAMERA", "Thumbnail taken to be the button beside the shutter: ${it.second.trim().ifEmpty { "unnamed" }}")
+                return it.first
+            }
+        }
+        // Right of the shutter, three quarters across, on its row (87% down without one).
+        val size = (area.width() * 0.14f).toInt()
+        val centerX = area.left + (area.width() * 0.75f).toInt()
+        val centerY = shutter?.centerY() ?: (area.top + area.height() * 0.87f).toInt()
         return Rect(centerX - size / 2, centerY - size / 2, centerX + size / 2, centerY + size / 2)
     }
 
@@ -359,7 +416,10 @@ class CameraThumbnailService : AccessibilityService() {
                 }
                 return
             }
-            if (!bridge) {
+            if (!bridge && cameraPackage != CAMERA_PACKAGE) {
+                // Another camera app: no Samsung preview to open in between; just wait for the
+                // photo to be saved (the spinner shows meanwhile).
+            } else if (!bridge) {
                 // Not saved within half a second (quick ones are, and open straight in Viper
                 // Vision): Samsung's own preview has it already; open that, with Viper Vision's
                 // bars over Samsung's, until the photo is saved.
@@ -891,6 +951,17 @@ class CameraThumbnailService : AccessibilityService() {
         const val SHORTCUT_PREF = "vv_camera_shortcut"
         const val SPINNER = "vv_camera_spinner"
         val SHUTTER_WORDS = listOf("shutter", "take picture", "take photo", "capture", "record", "take_picture")
+        val THUMBNAIL_WORDS = listOf("thumbnail", "thumb", "preview", "review", "gallery", "last photo", "recent photo", "view photo", "photo viewer", "peek")
+        val SWITCH_WORDS = listOf("switch", "flip", "toggle_camera", "front", "rear", "selfie", "lens")
+        /** Camera apps of other phone makers, besides whatever the phone reports as its camera. */
+        val KNOWN_CAMERAS = listOf(
+            "com.sec.android.app.camera", "com.motorola.camera3", "com.motorola.camera2", "com.motorola.camera",
+            "com.google.android.GoogleCamera", "com.android.camera", "com.android.camera2", "org.codeaurora.snapcam",
+            "com.oneplus.camera", "com.oplus.camera", "com.coloros.camera", "com.huawei.camera", "com.hihonor.camera",
+            "com.sonyericsson.android.camera", "com.sonymobile.camera", "com.lge.camera", "com.asus.camera",
+            "com.tcl.camera", "com.nothing.camera", "com.mediatek.camera", "com.transsion.camera", "com.vivo.camera",
+            "com.xiaomi.camera", "com.hmdglobal.camera2"
+        )
         const val LAST_BOUNDS = "vv_camera_thumbnail_bounds"
         const val SAMSUNG_CAPTURE_PACKAGE = ScreenshotToolbar.SAMSUNG_CAPTURE_PACKAGE
         const val SAMSUNG_TOOLBAR_OFF = "vv_samsung_toolbar_off"

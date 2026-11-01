@@ -176,8 +176,9 @@ class SettingsActivity : SimpleActivity() {
         }
         // Viper Vision's screenshot toolbar (the editor's ScreenshotToolbar, run by the same
         // accessibility service as the camera shortcut). Key shared through the "Prefs" file.
-        // On by default on Samsung phones (whose own toolbar it replaces).
-        binding.settingsVvScreenshotToolbar.isChecked = prefs.getBoolean("vv_screenshot_toolbar", isSamsung)
+        // On by default: on Samsung phones it replaces Samsung's toolbar; on others it covers the
+        // phone's own toolbar with an invisible button that opens it.
+        binding.settingsVvScreenshotToolbar.isChecked = prefs.getBoolean("vv_screenshot_toolbar", true)
         binding.settingsVvScreenshotToolbarHolder.setOnClickListener {
             binding.settingsVvScreenshotToolbar.toggle()
             val on = binding.settingsVvScreenshotToolbar.isChecked

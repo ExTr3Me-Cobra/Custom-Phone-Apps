@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import android.graphics.Rect
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.KeyguardManager
@@ -81,12 +82,16 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
     fun stop() {
         runCatching { resolver.unregisterContentObserver(observer) }
         handler.removeCallbacksAndMessages(null)
+        removeCover()
         hide()
     }
 
+    // On by default on every phone: on Samsung it replaces Samsung's toolbar (turned off in the
+    // setup); elsewhere it only covers the phone's own toolbar with an invisible button.
     private fun enabled() =
-        service.getSharedPreferences("Prefs", Context.MODE_PRIVATE)
-            .getBoolean(PREF_ENABLED, android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true))
+        service.getSharedPreferences("Prefs", Context.MODE_PRIVATE).getBoolean(PREF_ENABLED, true)
+
+    private val samsungPhone = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
 
     /** The newest screenshot, if it was just taken and not shown yet. */
     private fun checkForScreenshot() {
@@ -97,7 +102,139 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
         if (shot.id == lastShownId) return
         lastShownId = shot.id
         ViperLog.i("SCREENSHOT", "New screenshot: ${shot.path ?: shot.uri}")
-        show(shot)
+        if (samsungPhone) show(shot) else coverPhoneToolbar(shot)
+    }
+
+    // ---- Other phones: their own screenshot toolbar can't be turned off ----
+
+    private var cover: View? = null
+    private var coverAt: Rect? = null
+    private var coverShot: Shot? = null
+
+    /**
+     * Puts an invisible button over the phone's own screenshot preview and its buttons (edit,
+     * share, crop, delete…), for as long as they're on screen; a tap anywhere on it opens the
+     * screenshot in Viper Vision's screenshot editor instead.
+     */
+    private fun coverPhoneToolbar(shot: Shot) {
+        removeCover()
+        coverShot = shot
+        val started = System.currentTimeMillis()
+        var missed = 0
+        var everFound = false
+        val poll = object : Runnable {
+            override fun run() {
+                if (coverShot !== shot) return
+                val age = System.currentTimeMillis() - started
+                val found = runCatching { phoneToolbarBounds() }.getOrNull()
+                when {
+                    found != null -> {
+                        if (!everFound) ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar at $found: covering it")
+                        everFound = true
+                        missed = 0
+                        placeCover(found)
+                    }
+                    everFound -> if (++missed >= 3) {
+                        // It went (timed out, swiped away or used): so does the button.
+                        removeCover(); return
+                    }
+                    age > 1_500 && cover == null -> {
+                        // Its layout can't be read: cover the corner where phones show it.
+                        ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar not readable: covering the bottom-left corner")
+                        placeCover(fallbackBounds())
+                    }
+                }
+                // Phones show it for about 5-8 s.
+                if (age > 12_000) { removeCover(); return }
+                handler.postDelayed(this, 200)
+            }
+        }
+        handler.post(poll)
+    }
+
+    /** Where the phone's screenshot preview and toolbar are (all of it together), or null. */
+    private fun phoneToolbarBounds(): Rect? {
+        val screenH = service.resources.displayMetrics.heightPixels
+        var union: Rect? = null
+        var named = 0
+        for (window in service.windows) {
+            val root = window.root ?: continue
+            val pkg = root.packageName?.toString().orEmpty()
+            if (pkg == service.packageName) continue
+            val parts = mutableListOf<Rect>()
+            var windowNamed = 0
+            fun visit(node: android.view.accessibility.AccessibilityNodeInfo, depth: Int) {
+                if (depth > 30 || !node.isVisibleToUser) return
+                val id = node.viewIdResourceName.orEmpty().lowercase().substringAfter(":id/")
+                val text = (node.contentDescription ?: node.text)?.toString()?.trim()?.lowercase().orEmpty()
+                val b = Rect().also(node::getBoundsInScreen)
+                val isShotPart = "screenshot" in id || "screenshot" in text || "screen_shot" in id
+                val isAction = PHONE_TOOLBAR_LABELS.any { text == it || id == it || id.endsWith("_$it") || id.startsWith("${it}_") }
+                if ((isShotPart || isAction) && b.width() > 0 && b.height() > 0 && b.height() < screenH / 2) {
+                    parts += b
+                    if (isShotPart) windowNamed += 2 else windowNamed++
+                }
+                for (i in 0 until node.childCount) node.getChild(i)?.let { visit(it, depth + 1) }
+            }
+            visit(root, 0)
+            // A screenshot window: says "screenshot" somewhere, or has at least two of its buttons.
+            if (windowNamed >= 2 && (pkg.contains("systemui") || pkg.contains("screenshot") || pkg.contains("capture") || windowNamed >= 3)) {
+                for (b in parts) union = union?.apply { union(b) } ?: Rect(b)
+                named += windowNamed
+            }
+        }
+        return union?.takeIf { named >= 2 }?.apply { inset(-dp(10), -dp(10)) }
+    }
+
+    /** The bottom-left corner, where Android and most phones put the screenshot preview. */
+    private fun fallbackBounds(): Rect {
+        val m = service.resources.displayMetrics
+        return Rect(0, (m.heightPixels * 0.55f).toInt(), (m.widthPixels * 0.55f).toInt(), m.heightPixels - systemBar("navigation_bar_height"))
+    }
+
+    private fun placeCover(at: Rect) {
+        if (at == coverAt && cover != null) return
+        val wm = service.getSystemService(WindowManager::class.java) ?: return
+        val params = WindowManager.LayoutParams(
+            at.width(), at.height(),
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = at.left
+            y = at.top
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        val existing = cover
+        if (existing != null) {
+            runCatching { wm.updateViewLayout(existing, params) }
+        } else {
+            val view = View(service).apply {
+                contentDescription = "Edit screenshot in Viper Vision"
+                setOnClickListener {
+                    val shot = coverShot
+                    removeCover()
+                    if (shot != null) {
+                        ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar tapped: opening Viper Vision's editor")
+                        show(shot)
+                    }
+                }
+            }
+            runCatching { wm.addView(view, params); cover = view }
+                .onFailure { ViperLog.error("SCREENSHOT", "couldn't cover the phone's toolbar", it) }
+        }
+        coverAt = Rect(at)
+    }
+
+    private fun removeCover() {
+        cover?.let { view -> runCatching { service.getSystemService(WindowManager::class.java)?.removeView(view) } }
+        cover = null
+        coverAt = null
+        coverShot = null
     }
 
     private var lastCheckedId = -1L
@@ -590,6 +727,11 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
             visit(root, 0)
             return found.size >= 2
         }
+        /** Buttons of phones' own screenshot toolbars (Android's and others'). */
+        private val PHONE_TOOLBAR_LABELS = listOf(
+            "edit", "share", "crop", "delete", "trash", "markup", "scroll", "capture more", "long screenshot",
+            "extended screenshot", "dismiss", "lens", "search"
+        )
         private const val MAX_AGE_SECONDS = 15
         private const val SHARE_FOLDER = "vv_shared_screenshots"
         private const val KEEP_SHARED_COPY_MS = 24L * 60 * 60 * 1000

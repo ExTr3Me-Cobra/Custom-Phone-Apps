@@ -48,5 +48,5 @@
     <string name="vv_samsung_ai_not_samsung">Only on Samsung phones: these tools open Samsung\'s own photo editor, which this phone doesn\'t have.</string>
     <string name="vv_camera_shortcut_toggle">Camera thumbnail opens Viper Vision</string>
     <string name="vv_screenshot_toolbar">Screenshot toolbar after each screenshot</string>
-    <string name="vv_screenshot_toolbar_how">It also needs Viper Vision\'s accessibility service on (the next screen), and Samsung\'s own screenshot toolbar off</string>
+    <string name="vv_screenshot_toolbar_how">It also needs Viper Vision\'s accessibility service on (the next screen). On Samsung, Samsung\'s own screenshot toolbar must be off; on other phones, tap the phone\'s own toolbar to open Viper Vision\'s</string>
 </resources>

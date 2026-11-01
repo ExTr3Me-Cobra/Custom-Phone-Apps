@@ -14,6 +14,16 @@
             <action android:name="android.intent.action.EDIT" />
             <data android:scheme="content" android:mimeType="image/*" />
         </intent>
+        <!-- The camera shortcut: which apps are cameras, on any phone. -->
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAMERA" />
+        </intent>
     </queries>
 
     <!-- Only for the all-in-one APK: after unpacking its AI models it replaces itself with the
