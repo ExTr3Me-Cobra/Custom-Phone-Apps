@@ -133,6 +133,7 @@ private fun Screen() {
             colors = ButtonDefaults.buttonColors(containerColor = if (on) Color(0xFF3A3F45) else Accent, contentColor = if (on) Color.White else Color.Black),
             modifier = Modifier.fillMaxWidth().height(60.dp)
         ) { Text(if (on) "Turn dots off" else "Turn dots on", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) }
+        if (on) DotsStatus()
         Spacer(Modifier.height(6.dp))
         Text("Tip: add the \"Motion dots\" tile in Quick Settings, or the 1×1 widget on your home screen, to switch them from anywhere.", color = Grey, fontSize = 13.sp)
 
@@ -205,6 +206,31 @@ private fun Screen() {
         LiveMotion()
         Spacer(Modifier.height(30.dp))
     }
+}
+
+/** Whether the dots on screen are getting motion readings. */
+@Composable
+private fun DotsStatus() {
+    var text by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        var last = -1L
+        while (true) {
+            val m = Motion.active
+            if (m == null) { text = "Dots aren't showing (check Setup)"; ok = false }
+            else {
+                val perSec = if (last < 0) 0 else ((m.readings - last) * 2)
+                last = m.readings
+                val fresh = android.os.SystemClock.elapsedRealtime() - m.lastReadingAt < 1500
+                ok = fresh
+                text = if (fresh) "Dots are getting motion readings ($perSec/s)" else "Dots are NOT getting motion readings" +
+                    if (m.restarts > 0) " (restarted the sensors ${m.restarts}×)" else ""
+            }
+            delay(500)
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    Text((if (ok) "✓ " else "✗ ") + text, color = if (ok) Color(0xFF69F0AE) else Color(0xFFFF6E6E), fontSize = 13.sp)
 }
 
 @Composable

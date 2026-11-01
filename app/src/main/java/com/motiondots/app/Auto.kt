@@ -68,8 +68,19 @@ class AutoReceiver : BroadcastReceiver() {
         if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
             Auto.log(context, "In a vehicle: dots on")
             if (!prefs.on) {
-                DotsService.set(context, true)
-                prefs.autoStarted = true
+                // With the app briefly in front (allowed with "display over other apps"), so the
+                // dots get motion readings; otherwise straight from here.
+                val started = android.provider.Settings.canDrawOverlays(context) && runCatching {
+                    context.startActivity(
+                        Intent(context, ToggleActivity::class.java)
+                            .putExtra(ToggleActivity.EXTRA_ON, true).putExtra(ToggleActivity.EXTRA_AUTO, true)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    )
+                }.isSuccess
+                if (!started) {
+                    DotsService.set(context, true)
+                    prefs.autoStarted = true
+                }
             }
         } else {
             Auto.log(context, "Ride ended: ${if (prefs.autoStarted && prefs.on) "dots off" else "left as is"}")

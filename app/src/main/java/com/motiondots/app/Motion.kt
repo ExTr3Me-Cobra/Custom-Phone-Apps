@@ -43,7 +43,38 @@ class Motion(context: Context) : SensorEventListener {
 
     val available get() = linear != null || accel != null
 
+    /** Readings received, and when the last came (for the watchdog and the app's status line). */
+    @Volatile var readings = 0L; private set
+    @Volatile var lastReadingAt = 0L; private set
+    @Volatile var restarts = 0; private set
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var watching = false
+
+    /**
+     * Android can hold back sensor readings from an app that was started in the background
+     * (e.g. from the widget or a detected ride). If readings stop, register again.
+     */
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (!watching) return
+            if (android.os.SystemClock.elapsedRealtime() - lastReadingAt > 2_000) {
+                restarts++
+                sm.unregisterListener(this@Motion)
+                register()
+            }
+            handler.postDelayed(this, 2_000)
+        }
+    }
+
     fun start() {
+        lastReadingAt = android.os.SystemClock.elapsedRealtime()
+        register()
+        watching = true
+        handler.removeCallbacks(watchdog)
+        handler.postDelayed(watchdog, 2_000)
+    }
+
+    private fun register() {
         lastNanos = 0L
         if (linear != null && gravitySensor != null) {
             sm.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_GAME)
@@ -53,11 +84,17 @@ class Motion(context: Context) : SensorEventListener {
         }
     }
 
-    fun stop() = sm.unregisterListener(this)
+    fun stop() {
+        watching = false
+        handler.removeCallbacks(watchdog)
+        sm.unregisterListener(this)
+    }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onSensorChanged(e: SensorEvent) {
+        readings++
+        lastReadingAt = android.os.SystemClock.elapsedRealtime()
         when (e.sensor.type) {
             Sensor.TYPE_GRAVITY -> { e.values.copyInto(gravity, endIndex = 3); return }
             Sensor.TYPE_LINEAR_ACCELERATION -> update(e.values[0], e.values[1], e.values[2], e.timestamp)
@@ -67,6 +104,11 @@ class Motion(context: Context) : SensorEventListener {
                 update(e.values[0] - gravity[0], e.values[1] - gravity[1], e.values[2] - gravity[2], e.timestamp)
             }
         }
+    }
+
+    companion object {
+        /** The Motion feeding the dots on screen right now, if any. */
+        @Volatile var active: Motion? = null
     }
 
     private fun update(ax: Float, ay: Float, az: Float, nanos: Long) {

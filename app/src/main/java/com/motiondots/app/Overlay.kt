@@ -40,12 +40,14 @@ class Overlay(private val context: Context, private val accessibility: Boolean) 
         runCatching { wm.addView(v, lp) }.onSuccess {
             view = v
             motion.start()
+            Motion.active = motion
         }
     }
 
     fun hide() {
         val v = view ?: return
         motion.stop()
+        if (Motion.active === motion) Motion.active = null
         runCatching { wm.removeView(v) }
         view = null
     }

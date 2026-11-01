@@ -30,6 +30,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ToggleActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Invisible" />
+
         <service
             android:name=".DotsService"
             android:exported="false"
