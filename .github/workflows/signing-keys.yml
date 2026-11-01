@@ -1,0 +1,40 @@
+name: Signing keys
+# Keeps the signing keys of Loadout and Viper Vision in this default branch's build cache, which every branch can read,
+# so app branches can be renamed without losing their key. GitHub deletes a cache nobody uses for 7 days, so this runs
+# every 3 days and just reads each key. A key is only made if it's missing (the first run).
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/signing-keys.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  keys:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - app: loadout
+            alias: ironlog
+            cn: Loadout
+          - app: vipervision
+            alias: vipervision
+            cn: Viper Vision
+    steps:
+      - uses: actions/cache@v4
+        with:
+          path: signing/${{ matrix.app }}.keystore
+          key: ${{ matrix.app }}-signing-key-v2
+      - run: |
+          mkdir -p signing
+          if [ ! -f signing/${{ matrix.app }}.keystore ]; then
+            echo "::warning::Making a new ${{ matrix.cn }} signing key (first run only)."
+            keytool -genkeypair -keystore signing/${{ matrix.app }}.keystore -alias ${{ matrix.alias }} \
+              -keyalg RSA -keysize 2048 -validity 36500 -storepass android -keypass android -dname "CN=${{ matrix.cn }}"
+          fi
+          keytool -list -v -keystore signing/${{ matrix.app }}.keystore -storepass android | grep SHA256
