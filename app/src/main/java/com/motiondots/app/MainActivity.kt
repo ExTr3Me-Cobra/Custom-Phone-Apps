@@ -189,6 +189,8 @@ private fun Screen() {
 
         Section("Motion")
         SliderRow("Sensitivity", prefs.sensitivity, 0.3f..3f, { "×${"%.1f".format(it)}" }) { prefs.sensitivity = it }
+        SliderRow("Travel before new dots appear", prefs.travel, 15f..150f, { "${it.toInt()} dp" }) { prefs.travel = it }
+        Text("A set of dots fades out after moving this far and a fresh set fades in at the edge, so they never slide into the middle.", color = Grey, fontSize = 12.sp)
         SliderRow("Smoothing", prefs.smoothing, 0f..1f, { if (it < 0.2f) "snappy" else if (it > 0.7f) "very smooth" else "medium" }) { prefs.smoothing = it }
         var hide by remember { mutableStateOf(prefs.hideWhenStill) }
         Toggle("Hide when not moving", "Fades the dots out after 20 s without vehicle motion and back in when it starts.", hide) {

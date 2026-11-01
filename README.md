@@ -14,6 +14,9 @@ For passengers facing forward. Never use it while driving.
 - **Left turn:** they slide **right**.
 - **Right turn:** they slide **left**.
 - **Steady speed or stopped:** they settle back to where they started.
+- **Big motion:** once a set of dots has moved a set distance (*Travel before new dots appear*),
+  it fades out and a fresh set fades in at the edge. The dots never slide into the middle of the
+  screen or off it.
 
 The app reads the phone's fused motion sensors (linear acceleration with gravity removed, plus
 gravity). It works out the flat (horizontal) plane and which way you're facing, so the

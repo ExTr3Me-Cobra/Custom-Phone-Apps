@@ -32,6 +32,11 @@ class Prefs(context: Context) {
         get() = sp.getFloat("inset", 14f)
         set(v) = sp.edit().putFloat("inset", v).apply()
 
+    /** How far (dp) a set of dots travels before it fades out and a fresh set fades in. */
+    var travel: Float
+        get() = sp.getFloat("travel", 45f)
+        set(v) = sp.edit().putFloat("travel", v).apply()
+
     /** 0..1. A normal overlay is capped at 0.8 by Android, or touches under it get blocked. */
     var opacity: Float
         get() = sp.getFloat("opacity", 0.8f)

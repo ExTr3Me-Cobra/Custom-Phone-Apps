@@ -7,13 +7,15 @@ import android.graphics.Paint
 import android.os.SystemClock
 import android.view.Choreographer
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 
 /**
  * The dots. They act like part of the scenery outside: speeding up slides them down (towards
  * the rider), braking slides them up, a left turn slides them right and a right turn left.
- * They follow on a soft spring and settle back to rest when the motion stops.
+ * They follow on a soft spring and settle back to rest when the motion stops; a set that has
+ * moved far enough fades out as a new one fades in at the edge.
  */
 @SuppressLint("ViewConstructor")
 class DotsView(context: Context, private val motion: Motion) : View(context), Choreographer.FrameCallback {
@@ -28,6 +30,16 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
     private var stillSince = 0L
     private var lastFrame = 0L
     private var running = false
+
+    /**
+     * Sets of dots. Each set appears at the normal edge position and follows the motion from
+     * there; once it has travelled [travelPx] it fades out (still moving) while a fresh set
+     * fades in at the edge, so big motion looks like dots streaming past instead of one set
+     * sliding into the middle of the screen.
+     */
+    private class DotSet(val ax: Double, val ay: Double) { var alpha = 0.0; var leaving = false }
+    private val sets = ArrayList<DotSet>().apply { add(DotSet(0.0, 0.0).also { it.alpha = 1.0 }) }
+    private var travelPx = 0.0
 
     // Settings, re-read when they change.
     private var sizePx = 0f; private var spacingPx = 0f; private var insetPx = 0f
@@ -49,7 +61,8 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
         insetPx = prefs.inset * density
         // About 28 dp per m/s² at sensitivity 1: an ordinary pull-away (2 m/s²) moves them ~56 dp.
         gain = 28.0 * density * prefs.sensitivity
-        maxShift = 140.0 * density
+        maxShift = 400.0 * density
+        travelPx = prefs.travel * density.toDouble()
         allEdges = prefs.layout == 1
         hideStill = prefs.hideWhenStill
         sign = if (prefs.reversed) -1.0 else 1.0
@@ -95,18 +108,32 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
             if (now - stillSince < 20_000) 1.0 else 0.0
         }
         shown += (target - shown) * (1 - exp(-dt / 0.4))
+        // Swap in a fresh set once the current one has gone far enough.
+        val current = sets.last()
+        if (abs(x - current.ax) > travelPx || abs(y - current.ay) > travelPx) {
+            current.leaving = true
+            sets.add(DotSet(x, y))
+            while (sets.size > 4) sets.removeAt(0)
+        }
+        val fade = 1 - exp(-dt / 0.12)
+        for (set in sets) set.alpha += ((if (set.leaving) 0.0 else 1.0) - set.alpha) * fade
+        sets.removeAll { it.leaving && it.alpha < 0.02 }
         invalidate()
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     override fun onDraw(canvas: Canvas) {
         if (shown < 0.01) return
-        val a = (alphaFrac * shown * 255).toInt().coerceIn(0, 255)
+        for (set in sets) drawSet(canvas, (x - set.ax).toFloat(), (y - set.ay).toFloat(), set.alpha)
+    }
+
+    private fun drawSet(canvas: Canvas, dx: Float, dy: Float, setAlpha: Double) {
+        val a = (alphaFrac * shown * setAlpha * 255).toInt().coerceIn(0, 255)
+        if (a == 0) return
         fill.alpha = a
         outline.alpha = a
         val r = sizePx / 2
         val w = width.toFloat(); val h = height.toFloat()
-        val dx = x.toFloat(); val dy = y.toFloat()
         // Left and right columns move with both directions; rows of dots repeat endlessly.
         val oy = mod(dy, spacingPx)
         var yy = oy - spacingPx
