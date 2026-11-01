@@ -58,12 +58,13 @@ jobs:
           cache-read-only: false
 
       # Every build must be signed with the same key, or Android refuses to install it as an
-      # update ("App not installed"). The key is made once and kept in the build cache.
+      # update ("App not installed"). The key is kept in the default branch's build cache by the
+      # "Signing keys" workflow there (every branch can read it, and it's refreshed every 3 days).
       - name: Reuse the same signing key
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: signing/vipervision.keystore
-          key: vipervision-signing-key-v1
+          key: vipervision-signing-key-v2
 
       # The build cache forgets anything unused for 7 days, so the key is also kept as an
       # encrypted copy in the "vipervision-signing-key" release, locked with the passphrase saved
@@ -91,9 +92,8 @@ jobs:
             echo "Restored the signing key from its encrypted backup."
           fi
           if [ ! -f "$KEY" ]; then
-            keytool -genkeypair -v -keystore "$KEY" -alias vipervision \
-              -keyalg RSA -keysize 2048 -validity 36500 \
-              -storepass android -keypass android -dname "CN=Viper Vision"
+            echo "::error::No signing key: run the 'Signing keys' workflow on the default branch. A build never makes a key."
+            exit 1
           fi
           keytool -list -v -keystore "$KEY" -storepass android | grep SHA256
           if [ -n "$PASSPHRASE" ] && ! has_backup; then
@@ -167,7 +167,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: signing/vipervision.keystore
-          key: vipervision-signing-key-v1
+          key: vipervision-signing-key-v2
           fail-on-cache-miss: true
 
       - name: Make the all-in-one APK
