@@ -102,7 +102,18 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
         if (shot.id == lastShownId) return
         lastShownId = shot.id
         ViperLog.i("SCREENSHOT", "New screenshot: ${shot.path ?: shot.uri}")
-        if (samsungPhone) show(shot) else coverPhoneToolbar(shot)
+        if (samsungPhone) show(shot)
+        else if (openPending || card != null) {
+            // Tapped already (it opens once saved), or Viper Vision's editor is up: nothing more.
+            if (openPending) lastShownId = -1L
+        } else if (coverActive) {
+            // Already covered (it was seen the moment it appeared): this is its picture.
+            coverShot = shot
+            logWindows()
+        } else {
+            logWindows()
+            coverPhoneToolbar(shot, null)
+        }
     }
 
     // ---- Other phones: their own screenshot toolbar can't be turned off ----
@@ -110,23 +121,56 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
     private var cover: View? = null
     private var coverAt: Rect? = null
     private var coverShot: Shot? = null
+    private var coverActive = false
+    private var coverSession = 0
+    private var lastWindowsCheck = 0L
+
+    /**
+     * From the accessibility service, whenever windows change: the phone's screenshot preview
+     * shows the moment the screenshot is taken, about a second before the picture is saved, so
+     * it's covered straight away rather than once the file is there (a tap meanwhile reached the
+     * phone's own editor).
+     */
+    fun onWindowsChanged() {
+        if (samsungPhone || coverActive || !enabled()) return
+        val now = System.currentTimeMillis()
+        if (now - lastWindowsCheck < 120) return
+        lastWindowsCheck = now
+        if (service.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true) return
+        val found = runCatching { phoneToolbarBounds(strict = true) }.getOrNull() ?: return
+        ViperLog.i("SCREENSHOT", "Phone's screenshot preview appeared at $found")
+        coverPhoneToolbar(null, found)
+    }
+
+    /** Which windows are on screen (package, type, layer), for Diagnostics. */
+    private fun logWindows() = runCatching {
+        ViperLog.i("SCREENSHOT", "Windows: " + service.windows.joinToString("; ") { w ->
+            "${w.root?.packageName ?: "?"} type=${w.type} layer=${w.layer} ${Rect().also(w::getBoundsInScreen).toShortString()}"
+        })
+    }
 
     /**
      * Puts an invisible button over the phone's own screenshot preview and its buttons (edit,
      * share, crop, delete…), for as long as they're on screen; a tap anywhere on it opens the
-     * screenshot in Viper Vision's screenshot editor instead.
+     * screenshot in Viper Vision's screenshot editor instead. [shot] may come later (it's
+     * covered before the picture is saved).
      */
-    private fun coverPhoneToolbar(shot: Shot) {
+    private fun coverPhoneToolbar(shot: Shot?, foundAt: Rect?) {
         removeCover()
+        val session = ++coverSession
+        coverActive = true
         coverShot = shot
         val started = System.currentTimeMillis()
+        val frontAtStart = runCatching { service.rootInActiveWindow?.packageName?.toString() }.getOrNull()
         var missed = 0
-        var everFound = false
+        var everFound = foundAt != null
+        foundAt?.let(::placeCover)
         val poll = object : Runnable {
             override fun run() {
-                if (coverShot !== shot) return
+                if (session != coverSession) return
                 val age = System.currentTimeMillis() - started
-                val found = runCatching { phoneToolbarBounds() }.getOrNull()
+                val found = runCatching { phoneToolbarBounds(strict = false) }.getOrNull()
+                val front = runCatching { service.rootInActiveWindow?.packageName?.toString() }.getOrNull()
                 when {
                     found != null -> {
                         if (!everFound) ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar at $found: covering it")
@@ -134,26 +178,33 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
                         missed = 0
                         placeCover(found)
                     }
-                    everFound -> if (++missed >= 3) {
+                    everFound -> if (++missed >= 2) {
                         // It went (timed out, swiped away or used): so does the button.
+                        ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar gone: button removed")
                         removeCover(); return
                     }
-                    age > 1_500 && cover == null -> {
-                        // Its layout can't be read: cover the corner where phones show it.
+                    age in 1_500..6_000 && cover == null -> {
+                        // Its layout can't be read: cover the corner where phones show it, briefly.
                         ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar not readable: covering the bottom-left corner")
                         placeCover(fallbackBounds())
                     }
+                    !everFound && age > 6_000 -> { removeCover(); return }
+                }
+                // Something else came to the front (e.g. the phone's own editor): off at once.
+                if (front != null && front != frontAtStart && front != service.packageName && "systemui" !in front && found == null) {
+                    ViperLog.i("SCREENSHOT", "$front came to the front: button removed")
+                    removeCover(); return
                 }
                 // Phones show it for about 5-8 s.
                 if (age > 12_000) { removeCover(); return }
-                handler.postDelayed(this, 200)
+                handler.postDelayed(this, 150)
             }
         }
-        handler.post(poll)
+        handler.postDelayed(poll, 150)
     }
 
     /** Where the phone's screenshot preview and toolbar are (all of it together), or null. */
-    private fun phoneToolbarBounds(): Rect? {
+    private fun phoneToolbarBounds(strict: Boolean): Rect? {
         val screenH = service.resources.displayMetrics.heightPixels
         var union: Rect? = null
         var named = 0
@@ -178,7 +229,9 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
             }
             visit(root, 0)
             // A screenshot window: says "screenshot" somewhere, or has at least two of its buttons.
-            if (windowNamed >= 2 && (pkg.contains("systemui") || pkg.contains("screenshot") || pkg.contains("capture") || windowNamed >= 3)) {
+            // Strict (no new screenshot yet): only the system's own screenshot window.
+            val systemWindow = pkg.contains("systemui") || pkg.contains("screenshot") || pkg.contains("capture")
+            if (windowNamed >= 2 && (systemWindow || (!strict && windowNamed >= 3))) {
                 for (b in parts) union = union?.apply { union(b) } ?: Rect(b)
                 named += windowNamed
             }
@@ -218,10 +271,8 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
                 setOnClickListener {
                     val shot = coverShot
                     removeCover()
-                    if (shot != null) {
-                        ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar tapped: opening Viper Vision's editor")
-                        show(shot)
-                    }
+                    ViperLog.i("SCREENSHOT", "Phone's screenshot toolbar tapped: opening Viper Vision's editor")
+                    if (shot != null) show(shot) else openWhenSaved(System.currentTimeMillis())
                 }
             }
             runCatching { wm.addView(view, params); cover = view }
@@ -235,6 +286,28 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
         cover = null
         coverAt = null
         coverShot = null
+        coverActive = false
+        coverSession++
+    }
+
+    /** Tapped before the picture was saved: open it in Viper Vision's editor once it is. */
+    private var openPending = false
+
+    private fun openWhenSaved(since: Long) {
+        openPending = true
+        val shot = runCatching { newestScreenshot() }.getOrNull()
+        if (shot != null && shot.id != lastShownId) {
+            openPending = false
+            lastShownId = shot.id
+            show(shot)
+            return
+        }
+        if (System.currentTimeMillis() - since > 8_000) {
+            openPending = false
+            ViperLog.i("SCREENSHOT", "The screenshot wasn't saved within 8 s")
+            return
+        }
+        handler.postDelayed({ openWhenSaved(since) }, 200)
     }
 
     private var lastCheckedId = -1L

@@ -65,6 +65,12 @@ class CameraThumbnailService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         // Windows opening or closing (e.g. Back from Viper Vision's viewer to the camera): look
         // again at what's in front.
+        // Other phones' screenshot preview: covered the moment it shows.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED ||
+            (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.packageName?.toString()?.contains("systemui") == true)
+        ) {
+            screenshots.onWindowsChanged()
+        }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             if (!refreshPending) schedule(60)
             return
