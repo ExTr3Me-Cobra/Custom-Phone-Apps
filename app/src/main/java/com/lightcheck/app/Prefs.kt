@@ -74,14 +74,16 @@ class Prefs(context: Context) {
         get() = sp.getString("last_result", "No check yet").orEmpty()
         set(value) = sp.edit().putString("last_result", value).apply()
 
-    /** The newest 80 lines of what the app did, for Diagnostics. */
+    /** The newest 500 lines of what the app did, for Diagnostics. */
     val log: List<String> get() = sp.getString("log", "").orEmpty().lines().filter { it.isNotBlank() }
 
-    fun log(line: String) {
+    fun log(line: String) = synchronized(Prefs) {
         val stamp = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date())
-        val lines = (log + "$stamp  $line").takeLast(80)
+        val lines = (log + "$stamp  $line").takeLast(500)
         sp.edit().putString("log", lines.joinToString("\n")).apply()
     }
 
     fun clearLog() = sp.edit().remove("log").apply()
+
+    companion object
 }

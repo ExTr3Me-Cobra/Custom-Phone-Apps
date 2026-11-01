@@ -19,12 +19,14 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.VibratorManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Runs a check (scheduled, snoozed or "Check now") and, if the lights are off, rings the alarm:
@@ -38,6 +40,8 @@ class CheckService : Service() {
     private var savedVolume = -1
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var checking = false
+    private var ringingNotification: Notification? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -49,45 +53,71 @@ class CheckService : Service() {
             return START_NOT_STICKY
         }
         ensureChannels(this)
-        startForeground(ID_WORKING, working("Checking the living-room lights…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        val prefs = Prefs(this)
+        // Android needs startForeground after every start; while ringing, keep the alarm's notification.
+        startForeground(ID_WORKING, ringingNotification ?: working("Checking the living-room lights…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         if (action == ACTION_TEST) {
+            prefs.log("Test alarm")
             ring("Test alarm", "This is how the alarm sounds.")
             return START_NOT_STICKY
         }
+        if (checking || ringingNotification != null) {
+            // One check at a time: a second one would be cancelled when the first finished.
+            val why = if (checking) "a check is already running" else "the alarm is ringing"
+            prefs.log("${if (action == ACTION_MANUAL) "Check now" else "Scheduled check"} ignored: $why")
+            if (action == ACTION_MANUAL) {
+                android.widget.Toast.makeText(this, if (checking) "Already checking…" else "The alarm is ringing", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            return START_NOT_STICKY
+        }
+        checking = true
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LightCheck:check").apply { acquire(5 * 60_000L) }
         @Suppress("DEPRECATION")
         wifiLock = getSystemService(WifiManager::class.java)
             .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "LightCheck:check").apply { acquire() }
-        val prefs = Prefs(this)
         scope.launch {
-            prefs.log(if (action == ACTION_MANUAL) "Check now" else "Scheduled check")
-            val outcome = runCatching { Checker.check(this@CheckService) { prefs.log(it) } }
-                .getOrElse { Outcome.CouldNotCheck("something went wrong (${it.message})") }
+            val started = android.os.SystemClock.elapsedRealtime()
+            prefs.log("── ${when (action) { ACTION_MANUAL -> "Check now"; ACTION_SCHEDULED -> "Scheduled check"; else -> action }} ──")
+            prefs.log(Diagnostics.summary(this@CheckService))
+            val outcome = try {
+                withContext(Dispatchers.Default) { Checker.check(this@CheckService) { prefs.log(it) } }
+            } catch (e: CancellationException) {
+                prefs.log("Check stopped (the app was closed by Android) after ${seconds(started)}")
+                checking = false
+                throw e
+            } catch (e: Throwable) {
+                prefs.log("Error: ${e.stackTraceToString().lines().take(14).joinToString("\n    ")}")
+                Outcome.CouldNotCheck("something went wrong (${e.javaClass.simpleName}: ${e.message})")
+            }
+            checking = false
             releaseLocks()
+            prefs.log("Check took ${seconds(started)}")
             when (outcome) {
                 is Outcome.LightsOn -> {
                     prefs.lastResult = "Lights on: all answered (${now()})"
-                    prefs.log("All lights answered")
+                    prefs.log("Result: lights on")
                     if (action == ACTION_MANUAL) notifyInfo("Lights are on", "All living-room lights answered.")
                     stopSelf()
                 }
                 is Outcome.CouldNotCheck -> {
                     prefs.lastResult = "Couldn't check: ${outcome.why} (${now()})"
-                    prefs.log("Couldn't check: ${outcome.why}")
+                    prefs.log("Result: couldn't check: ${outcome.why}")
                     notifyInfo("Couldn't check the living-room lights", "Not verified: ${outcome.why}.")
                     stopSelf()
                 }
                 is Outcome.LightsOff -> {
                     val which = outcome.off.joinToString { it.label }
                     prefs.lastResult = "Lights off: $which (${now()})"
-                    prefs.log("Lights off: $which; ringing")
+                    prefs.log("Result: lights off ($which); ringing")
                     ring("Living-room lights are off", "Not answering: $which. The switch may be off.")
                 }
             }
         }
         return START_NOT_STICKY
     }
+
+    private fun seconds(since: Long) = "${(android.os.SystemClock.elapsedRealtime() - since) / 100 / 10.0} s"
 
     private fun now() = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date())
 
@@ -109,6 +139,7 @@ class CheckService : Service() {
             .addAction(Notification.Action.Builder(null, "Dismiss", action(AlarmActionReceiver.DISMISS)).build())
             .addAction(Notification.Action.Builder(null, "Snooze ${prefs.snoozeMinutes} min", action(AlarmActionReceiver.SNOOZE)).build())
             .build()
+        ringingNotification = notification
         startForeground(ID_WORKING, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         runCatching { startActivity(Intent(this, AlarmActivity::class.java).putExtra("title", title).putExtra("text", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         playSound(prefs)
@@ -119,6 +150,7 @@ class CheckService : Service() {
         // Rings until dismissed (at most 10 minutes), or once for about a minute.
         scope.launch {
             delay(if (prefs.ringUntilDismissed) 10 * 60_000L else 60_000L)
+            prefs.log("Alarm timed out (nobody dismissed it)")
             stopRinging()
         }
     }
@@ -126,13 +158,17 @@ class CheckService : Service() {
     private fun playSound(prefs: Prefs) {
         val audio = getSystemService(AudioManager::class.java)
         val asAlarm = prefs.ringInSilent
-        if (!asAlarm && audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+        if (!asAlarm && audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
+            prefs.log("No sound: the phone is on silent/vibrate and \"Ring in silent mode\" is off")
+            return
+        }
         val stream = if (asAlarm) AudioManager.STREAM_ALARM else AudioManager.STREAM_NOTIFICATION
         savedVolume = audio.getStreamVolume(stream)
         runCatching { audio.setStreamVolume(stream, (audio.getStreamMaxVolume(stream) * prefs.volume / 100).coerceAtLeast(1), 0) }
         val uri = prefs.soundUri.takeIf { it.isNotEmpty() }?.let(Uri::parse)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        prefs.log("Ringing: ${if (asAlarm) "alarm" else "notification"} volume ${prefs.volume}% (was $savedVolume of ${audio.getStreamMaxVolume(stream)}), sound ${if (prefs.soundUri.isEmpty()) "default" else uri}, vibrate ${prefs.vibrate}, ${if (prefs.ringUntilDismissed) "until dismissed (max 10 min)" else "about 1 min"}")
         player = runCatching {
             MediaPlayer().apply {
                 setAudioAttributes(
@@ -146,10 +182,12 @@ class CheckService : Service() {
                 prepare()
                 start()
             }
-        }.onFailure { prefs.log("Couldn't play the alarm sound: ${it.message}") }.getOrNull()
+        }.onFailure { prefs.log("Couldn't play the alarm sound: ${it.javaClass.simpleName}: ${it.message}") }.getOrNull()
     }
 
     private fun stopRinging() {
+        if (ringingNotification != null) Prefs(this).log("Alarm stopped")
+        ringingNotification = null
         player?.runCatching { stop(); release() }
         player = null
         getSystemService(VibratorManager::class.java)?.defaultVibrator?.cancel()
@@ -160,7 +198,7 @@ class CheckService : Service() {
             savedVolume = -1
         }
         sendBroadcast(Intent(AlarmActivity.ACTION_CLOSE).setPackage(packageName))
-        stopSelf()
+        if (!checking) stopSelf()
     }
 
     private fun action(which: String) = PendingIntent.getBroadcast(

@@ -160,7 +160,18 @@ object Net {
     }
 
     /** Whether a saved light answers (any way, at its address). */
-    suspend fun answers(context: Context, bulb: Bulb): Boolean = probe(wifiNetwork(context), bulb.ip, thorough = false) != null
+    suspend fun answers(context: Context, bulb: Bulb): Boolean = answersDetail(context, bulb).first
+
+    /** Whether a saved light answers, with how (or what was tried) and how long it took, for the log. */
+    suspend fun answersDetail(context: Context, bulb: Bulb): Pair<Boolean, String> {
+        val started = android.os.SystemClock.elapsedRealtime()
+        val network = wifiNetwork(context)
+        val found = probe(network, bulb.ip, thorough = false)
+        val ms = android.os.SystemClock.elapsedRealtime() - started
+        return if (found != null) true to "answered (${found.how}) in $ms ms"
+        else false to "no answer after ${ms / 100 / 10.0} s (tried ping, ports ${PORTS.keys.joinToString("/")}, WiZ" +
+                if (network == null) "; no Wi-Fi network to use)" else ")"
+    }
 
     private fun ping(ip: String): Boolean = runCatching {
         val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", ip).redirectErrorStream(true).start()

@@ -29,20 +29,31 @@ object Checker {
         val bulbs = prefs.bulbs
         if (bulbs.isEmpty()) return Outcome.CouldNotCheck("no lights saved yet (Find lights)")
         val state = Net.wifiState(context) ?: return Outcome.CouldNotCheck("the phone isn't on Wi-Fi")
+        log("Wi-Fi: name ${state.ssid?.let { "\"$it\"" } ?: "unknown (no location access)"}, phone ${state.ip}/${state.prefix}, router ${state.gateway}")
         // On the home Wi-Fi? By its name when Android tells it, else by the router's fingerprint.
         if (prefs.homeSsid.isNotEmpty() && state.ssid != null) {
             if (state.ssid != prefs.homeSsid) return Outcome.CouldNotCheck("on \"${state.ssid}\", not the home Wi-Fi")
+            log("Home Wi-Fi by name (\"${prefs.homeSsid}\")")
         } else if (prefs.homeRouter.isNotEmpty()) {
             val router = Net.routerFingerprint(context)
+            log("Router fingerprint now \"$router\", saved \"${prefs.homeRouter}\"")
             if (router != prefs.homeRouter) return Outcome.CouldNotCheck("not on the home Wi-Fi (router: ${router.ifEmpty { "none" }})")
+            log("Home Wi-Fi by its router")
+        } else {
+            log("No home Wi-Fi saved: assuming this is it")
         }
+        log("Checking ${bulbs.size} light(s); ring when ${if (prefs.alarmWhenAll) "all are" else "any is"} off")
         var off = bulbs
         repeat(3) { attempt ->
             if (attempt > 0) {
-                log("Not answering: ${off.joinToString { it.label }}; trying again in 20 s")
+                log("Try ${attempt + 1} of 3 in 20 s for ${off.joinToString { it.label }}")
                 delay(20_000)
             }
-            off = off.filterNot { Net.answers(context, it) }
+            off = off.filter { bulb ->
+                val (answered, detail) = Net.answersDetail(context, bulb)
+                log("  ${bulb.label} (${bulb.ip}): $detail")
+                !answered
+            }
             if (!shouldRing(prefs, bulbs, off)) return Outcome.LightsOn
         }
         // Maybe the router gave a light a new address: look for it by name.
@@ -50,12 +61,15 @@ object Checker {
         if (named.isNotEmpty()) {
             log("Looking for ${named.joinToString { it.label }} at other addresses")
             val found = Net.scan(context)
+            log("Scan found ${found.size} devices")
             val moved = named.mapNotNull { bulb -> found.firstOrNull { it.name == bulb.name }?.let { bulb to it.ip } }
             if (moved.isNotEmpty()) {
                 prefs.bulbs = prefs.bulbs.map { b -> moved.firstOrNull { it.first == b }?.let { b.copy(ip = it.second) } ?: b }
                 log("Moved: ${moved.joinToString { "${it.first.label} → ${it.second}" }}")
                 off = off.filterNot { b -> moved.any { it.first == b } }
             }
+        } else if (off.isNotEmpty()) {
+            log("The lights not answering have no name on the Wi-Fi, so they can't be looked for elsewhere")
         }
         return if (shouldRing(prefs, bulbs, off)) Outcome.LightsOff(off) else Outcome.LightsOn
     }
