@@ -1,23 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_off"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="4dp">
+    android:background="@android:color/transparent"
+    android:padding="2dp">
     <ImageView
         android:id="@+id/widget_icon"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:contentDescription="Motion dots"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:adjustViewBounds="true"
+        android:contentDescription="Motion dots on or off"
+        android:scaleType="fitCenter"
         android:src="@drawable/ic_stat" />
-    <TextView
-        android:id="@+id/widget_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Off"
-        android:textColor="#FF9AA0A6"
-        android:textSize="11sp" />
-</LinearLayout>
+</FrameLayout>

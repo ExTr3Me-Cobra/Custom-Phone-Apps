@@ -43,10 +43,9 @@ class DotsWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val views = RemoteViews(context.packageName, R.layout.widget).apply {
-                setInt(R.id.widget_root, "setBackgroundResource", if (on) R.drawable.widget_on else R.drawable.widget_off)
-                setInt(R.id.widget_icon, "setColorFilter", if (on) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
-                setTextViewText(R.id.widget_label, if (on) "On" else "Off")
-                setTextColor(R.id.widget_label, if (on) 0xFF000000.toInt() else 0xFF9AA0A6.toInt())
+                // No background: the icon fills the cell, bright blue when on, faded grey when off.
+                setInt(R.id.widget_icon, "setColorFilter", if (on) 0xFF5EC8FF.toInt() else 0xFF9AA0A6.toInt())
+                setInt(R.id.widget_icon, "setImageAlpha", if (on) 255 else 150)
                 setOnClickPendingIntent(R.id.widget_root, toggle)
             }
             manager.updateAppWidget(ids, views)

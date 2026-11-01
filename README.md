@@ -44,7 +44,8 @@ little battery and works with the app closed. Dots you turn on yourself stay on 
 ## Widget
 
 Long-press the home screen, then **Widgets → Motion Dots**, and add the 1×1 button. Tap it to
-turn the dots on or off. It lights up blue while they're on.
+turn the dots on or off. The icon has no background; it's bright blue while the dots are on and
+faded grey when they're off.
 
 ## Settings
 
