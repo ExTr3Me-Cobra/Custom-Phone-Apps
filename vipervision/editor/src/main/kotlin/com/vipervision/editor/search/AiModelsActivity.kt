@@ -234,6 +234,12 @@ class AiModelsActivity : ComponentActivity() {
                     if (s.waitingForWifi) {
                         Spacer(Modifier.height(4.dp))
                         Text("Waiting for Wi-Fi: it starts by itself once you're connected.", color = Color.Gray, fontSize = 13.sp)
+                        TextButton(onClick = { ModelPack.start(this@AiModelsActivity, allowMobileData = true) }) {
+                            Text("Use mobile data now", color = accent)
+                        }
+                        if (ModelPack.dataSaverBlocks(this@AiModelsActivity)) {
+                            Text("Data Saver is on: allow Viper Vision unrestricted data (App info → Mobile data) for it to download on mobile data.", color = Color.Gray, fontSize = 12.sp)
+                        }
                     }
                     Spacer(Modifier.height(10.dp))
                     // Only what's missing is downloaded (models from earlier builds are kept).

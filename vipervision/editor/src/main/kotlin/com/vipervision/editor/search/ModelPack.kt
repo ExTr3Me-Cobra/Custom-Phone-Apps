@@ -181,7 +181,23 @@ object ModelPack {
         ViperLog.i("MODELS", "AI models on the phone: ${here / 1_000_000} of ${totalSize / 1_000_000} MB" + if (complete) " (all)" else "")
     }
 
-    fun isRunning(context: Context) = prefs(context).getBoolean(KEY_RUNNING, false)
+    fun isRunning(context: Context) = prefs(context).getBoolean(KEY_RUNNING, false) && workRunning(context)
+
+    /**
+     * What WorkManager itself says (the saved flag stays set if the app was killed mid-download,
+     * which used to keep an old "wait for Wi-Fi" download in place of a new "use mobile data").
+     * Blocks briefly.
+     */
+    private fun workRunning(context: Context): Boolean = runCatching {
+        WorkManager.getInstance(context).getWorkInfosForUniqueWork(WORK).get()
+            .any { it.state == androidx.work.WorkInfo.State.RUNNING }
+    }.getOrDefault(false)
+
+    /** Android's Data Saver is on and Viper Vision isn't allowed mobile data in the background. */
+    fun dataSaverBlocks(context: Context): Boolean = runCatching {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        cm.isActiveNetworkMetered && cm.restrictBackgroundStatus == android.net.ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+    }.getOrDefault(false)
 
     /** A download has been asked for (it may be running, or waiting for Wi-Fi). */
     fun isRequested(context: Context) = prefs(context).getBoolean(KEY_REQUESTED, false)
@@ -198,12 +214,18 @@ object ModelPack {
     /** Starts (or continues) fetching everything missing, in the background. */
     fun start(context: Context, allowMobileData: Boolean) {
         prefs(context).edit().putBoolean(KEY_PROMPTED, true).putBoolean(KEY_REQUESTED, true).remove(KEY_ERROR).apply()
+        val running = workRunning(context)
+        if (!running) prefs(context).edit().putBoolean(KEY_RUNNING, false).apply()
+        ViperLog.i("MODELS", "Download asked for: ${if (isAllInOne(context)) "unpack" else if (allowMobileData) "any connection" else "Wi-Fi only"}" +
+                (if (running) " (one is already running)" else "") + (if (dataSaverBlocks(context)) "; Data Saver is restricting background data" else ""))
         WorkManager.getInstance(context).enqueueUniqueWork(
             WORK,
             // The newest choice wins over a download still waiting (e.g. for Wi-Fi); one already
             // running is left alone.
-            if (isAllInOne(context) || !isRunning(context)) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            if (isAllInOne(context) || !running) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<Worker>()
+                // Starts straight away, not when Android next gets round to background work.
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(
@@ -220,6 +242,9 @@ object ModelPack {
     }
 
     class Worker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
+        // Needed for a download that starts straight away (expedited) on Android 11 and older.
+        override suspend fun getForegroundInfo() = AiSearch.foreground(applicationContext, "Downloading AI models", 0)
+
         override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
             val context = applicationContext
             val deps = deps(context)
