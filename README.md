@@ -25,12 +25,23 @@ Slow drift, sensor bias and hills are filtered out. The dots follow on a soft sp
 
 1. Install **MotionDots.apk** from the newest "Motion Dots" release.
 2. Open the app and tap **Fix** next to *Display over other apps*.
-3. Tap **Turn dots on**. Add the **Motion dots** tile in Quick Settings to switch them from
-   anywhere. The notification has **Turn off**.
+3. Tap **Turn dots on**. Add the **Motion dots** tile in Quick Settings, or the 1×1 widget, to
+   switch them from anywhere. The notification has **Turn off**.
 4. Optional: **Also over the status bar, notifications and Settings**. A normal overlay can't
    cover those screens (Android blocks it, which is also why Google's version doesn't show
    there yet), and Android caps its opacity at 80%. Turning this on lets the dots draw through
    an accessibility service, which reads nothing on the screen.
+
+## Automatic on and off
+
+Turn on **Turn on in a vehicle, off when the ride ends** and allow *Physical activity*.
+Google Play services' activity recognition tells the app when a ride starts and ends. It uses
+little battery and works with the app closed. Dots you turn on yourself stay on when a ride ends.
+
+## Widget
+
+Long-press the home screen, then **Widgets → Motion Dots**, and add the 1×1 button. Tap it to
+turn the dots on or off. It lights up blue while they're on.
 
 ## Settings
 

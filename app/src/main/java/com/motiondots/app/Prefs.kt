@@ -67,6 +67,21 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("reversed", false)
         set(v) = sp.edit().putBoolean("reversed", v).apply()
 
+    /** Turn the dots on in a vehicle and off when the ride ends. */
+    var auto: Boolean
+        get() = sp.getBoolean("auto", false)
+        set(v) = sp.edit().putBoolean("auto", v).apply()
+
+    /** The dots were turned on by a ride (so the ride ending turns them off). */
+    var autoStarted: Boolean
+        get() = sp.getBoolean("auto_started", false)
+        set(v) = sp.edit().putBoolean("auto_started", v).apply()
+
+    /** The last few ride events, for the app's screen. */
+    var autoLog: String
+        get() = sp.getString("auto_log", "").orEmpty()
+        set(v) = sp.edit().putString("auto_log", v).apply()
+
     companion object {
         /** Fill and outline; the outline keeps the dots visible on light and dark screens. */
         val COLORS = listOf(

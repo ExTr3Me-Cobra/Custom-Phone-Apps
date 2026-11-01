@@ -91,6 +91,7 @@ private fun Screen() {
         .getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
         .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
     var on by remember { mutableStateOf(prefs.on) }
+    LaunchedEffect(resumed) { on = prefs.on; Auto.sync(context) }
     var useA11y by remember { mutableStateOf(prefs.useAccessibility) }
     val ready = canOverlay || (useA11y && a11yOn)
 
@@ -133,7 +134,30 @@ private fun Screen() {
             modifier = Modifier.fillMaxWidth().height(60.dp)
         ) { Text(if (on) "Turn dots off" else "Turn dots on", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(6.dp))
-        Text("Tip: add the \"Motion dots\" tile in Quick Settings to switch them from anywhere.", color = Grey, fontSize = 13.sp)
+        Text("Tip: add the \"Motion dots\" tile in Quick Settings, or the 1×1 widget on your home screen, to switch them from anywhere.", color = Grey, fontSize = 13.sp)
+
+        Section("Automatic")
+        var auto by remember { mutableStateOf(prefs.auto) }
+        val motionAllowed = Auto.permitted(context)
+        Toggle(
+            "Turn on in a vehicle, off when the ride ends",
+            "Uses Google Play services' activity recognition (low battery, works with the app closed). It usually " +
+                "notices a ride within a minute or two of moving, and the end a few minutes after you stop. Dots you " +
+                "turn on yourself stay on.",
+            auto && motionAllowed
+        ) {
+            if (it && !motionAllowed) {
+                (context as ComponentActivity).requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 2)
+            }
+            auto = it; prefs.auto = it; Auto.sync(context)
+        }
+        if (auto) {
+            Check("Physical activity permission", motionAllowed, "Lets the phone tell the app when you're riding.") {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+            }
+            val log = prefs.autoLog
+            Text(if (log.isEmpty()) "No rides noticed yet." else "Recent:\n$log", color = Grey, fontSize = 12.sp)
+        }
 
         Section("Setup")
         Check("Display over other apps", canOverlay, "Needed for the dots.") {

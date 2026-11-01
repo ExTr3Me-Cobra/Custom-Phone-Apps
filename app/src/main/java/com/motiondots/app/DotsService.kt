@@ -37,6 +37,12 @@ class DotsService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureChannel(this)
         startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        if (intent?.action == ACTION_TOGGLE) {
+            // From the widget.
+            prefs.on = !prefs.on
+            prefs.autoStarted = false
+            refreshSwitches(this)
+        }
         if (!prefs.on) {
             stopSelf()
             return START_NOT_STICKY
@@ -78,6 +84,13 @@ class DotsService : Service() {
 
     companion object {
         private const val CHANNEL = "dots"
+        const val ACTION_TOGGLE = "com.motiondots.app.TOGGLE"
+
+        /** The tile and the widget show the current state. */
+        fun refreshSwitches(context: Context) {
+            TileService.requestListeningState(context, android.content.ComponentName(context, DotsTile::class.java))
+            DotsWidget.refresh(context)
+        }
 
         fun ensureChannel(context: Context) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -88,9 +101,11 @@ class DotsService : Service() {
         /** Switches the dots on or off from anywhere (app, tile, notification). */
         fun set(context: Context, on: Boolean) {
             Prefs(context).on = on
+            Prefs(context).autoStarted = false
             val intent = Intent(context, DotsService::class.java)
-            if (on) context.startForegroundService(intent) else context.stopService(intent)
-            TileService.requestListeningState(context, android.content.ComponentName(context, DotsTile::class.java))
+            if (on) runCatching { context.startForegroundService(intent) }.onFailure { Auto.log(context, "Couldn't start the dots: ${it.message}") }
+            else context.stopService(intent)
+            refreshSwitches(context)
         }
     }
 }
