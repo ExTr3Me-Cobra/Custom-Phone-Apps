@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Motion Dots</string>
+    <string name="tile">Motion dots</string>
+    <string name="a11y_description">Lets Motion Dots draw its dots over everything, including the status bar, notifications, Quick Settings, Settings and the lock screen, which a normal overlay can\'t cover. It reads nothing on the screen and doesn\'t control the phone.</string>
+</resources>
