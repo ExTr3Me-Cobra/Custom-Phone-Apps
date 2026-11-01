@@ -36,11 +36,12 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
 
     private val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> readSettings() }
 
-    init { readSettings() }
-
-    /** [maxAlpha] caps the opacity (0.8 for a normal overlay). */
+    /** Caps the opacity (0.8 for a normal overlay). */
     var maxAlpha = 1f
         set(v) { field = v; readSettings() }
+
+    // After every field above: Kotlin runs initialisers in order, so maxAlpha must exist first.
+    init { readSettings() }
 
     private fun readSettings() {
         sizePx = prefs.size * density
@@ -52,7 +53,7 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
         allEdges = prefs.layout == 1
         hideStill = prefs.hideWhenStill
         sign = if (prefs.reversed) -1.0 else 1.0
-        alphaFrac = prefs.opacity.coerceIn(0.1f, maxAlpha)
+        alphaFrac = minOf(prefs.opacity, maxAlpha).coerceAtLeast(0.1f)
         motion.smoothSeconds = 0.05 + prefs.smoothing * 0.5
         val (_, f, o) = Prefs.COLORS[prefs.color.coerceIn(0, Prefs.COLORS.lastIndex)]
         fill.color = f

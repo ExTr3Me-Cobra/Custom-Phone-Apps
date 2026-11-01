@@ -104,6 +104,21 @@ private fun Screen() {
                 "see the motion your inner ear feels. For passengers facing forward, never the driver.",
             color = Grey, fontSize = 14.sp
         )
+        var crash by remember { mutableStateOf(prefs.sp.getString("crash", null)) }
+        crash?.let { report ->
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.fillMaxWidth().background(Color(0xFF3A1414), RoundedCornerShape(12.dp)).padding(12.dp)) {
+                Text("Motion Dots crashed last time", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(report.lines().take(8).joinToString("\n"), color = Grey, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        context.getSystemService(android.content.ClipboardManager::class.java)
+                            .setPrimaryClip(android.content.ClipData.newPlainText("Motion Dots crash", report))
+                    }) { Text("Copy", color = Color.White) }
+                    OutlinedButton(onClick = { prefs.sp.edit().remove("crash").apply(); crash = null }) { Text("Clear", color = Color.White) }
+                }
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = {
