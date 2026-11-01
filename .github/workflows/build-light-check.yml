@@ -1,0 +1,62 @@
+name: Build Light Check APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One build at a time, so every build signs with the same saved key.
+concurrency:
+  group: light-check-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Every build must be signed with the same key, or Android refuses to install it as an
+      # update ("App not installed"). The key is made once and kept in the build cache.
+      - name: Reuse the same signing key
+        uses: actions/cache@v4
+        with:
+          path: signing/lightcheck.keystore
+          key: lightcheck-signing-key-v1
+
+      - name: Make the signing key (first build only)
+        run: |
+          mkdir -p signing
+          if [ ! -f signing/lightcheck.keystore ]; then
+            keytool -genkeypair -v -keystore signing/lightcheck.keystore -alias lightcheck \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass android -keypass android -dname "CN=Light Check"
+          fi
+          keytool -list -v -keystore signing/lightcheck.keystore -storepass android | grep SHA256
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace -PsignKeystore=$PWD/signing/lightcheck.keystore
+          cp app/build/outputs/apk/release/app-release.apk LightCheck.apk
+
+      - name: Publish download on the Releases page
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: light-check-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Light Check (build ${{ github.run_number }})
+          body: |
+            On your phone, tap **LightCheck.apk** below to download it, then open it to install.
+            See the README on the claude/light-check-app branch for setup steps.
+          files: LightCheck.apk
+          make_latest: false

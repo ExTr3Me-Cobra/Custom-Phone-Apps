@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A light bulb on a dark circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FF16161A" android:pathData="M54,4a50,50 0,1 1,0 100a50,50 0,1 1,0 -100z" />
+    <path android:fillColor="#FFFFC247"
+        android:pathData="M54,24c-11,0 -20,9 -20,20c0,7 3.6,12.4 8,16c2,1.6 3,3.8 3,6.2v3.8h18v-3.8c0,-2.4 1,-4.6 3,-6.2c4.4,-3.6 8,-9 8,-16c0,-11 -9,-20 -20,-20z" />
+    <path android:fillColor="#FFB8B8C0" android:pathData="M45,73h18v4h-18z M47,80h14v4h-14z" />
+</vector>
