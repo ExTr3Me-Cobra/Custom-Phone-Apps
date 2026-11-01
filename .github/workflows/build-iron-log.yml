@@ -3,11 +3,6 @@ name: Build Loadout APK
 on:
   push:
   workflow_dispatch:
-    inputs:
-      keepalive:
-        description: 'Only touch the saved signing key so GitHub keeps it (no build)'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -68,52 +63,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Every build must be signed with the same key, or Android refuses to install it as an
-      # update ("App not installed"). The key is made once and kept in the build cache. GitHub deletes a
-      # cache nobody uses for 7 days (that happened before build 231), so a run with "keepalive" just
-      # touches it, and a build that has to make a new key says so loudly in the release name.
-      - name: Reuse the same signing key
-        uses: actions/cache@v4
+      # update ("App not installed"). The key is kept in the default branch's build cache by the
+      # "Signing keys" workflow there (every branch can read it, and it's refreshed every 3 days).
+      # A build never makes a key.
+      - name: Signing key
+        uses: actions/cache/restore@v4
         with:
-          path: signing/ironlog.keystore
-          key: ironlog-signing-key-v1
+          path: signing/loadout.keystore
+          key: loadout-signing-key-v2
+          fail-on-cache-miss: true
 
-      - name: Make the signing key (first build only)
-        id: key
-        if: ${{ !inputs.keepalive }}
-        run: |
-          mkdir -p signing
-          if [ ! -f signing/ironlog.keystore ]; then
-            echo "new=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::No saved signing key: making a NEW one. Phones must uninstall Loadout before installing this build."
-            keytool -genkeypair -v -keystore signing/ironlog.keystore -alias ironlog \
-              -keyalg RSA -keysize 2048 -validity 36500 \
-              -storepass android -keypass android -dname "CN=Iron Log"
-          fi
-          keytool -list -v -keystore signing/ironlog.keystore -storepass android | grep SHA256
+      - run: keytool -list -v -keystore signing/loadout.keystore -storepass android | grep SHA256
 
       - name: Build
-        if: ${{ !inputs.keepalive }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace -PsignKeystore=$PWD/signing/ironlog.keystore
+          ./gradlew assembleRelease --stacktrace -PsignKeystore=$PWD/signing/loadout.keystore
           cp app/build/outputs/apk/release/app-release.apk Loadout.apk
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !inputs.keepalive }}
         with:
           name: Loadout-apk
           path: Loadout.apk
 
       - name: Publish download on the Releases page
-        if: ${{ !inputs.keepalive }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: loadout-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: Loadout (build ${{ github.run_number }})${{ steps.key.outputs.new == 'true' && ' - NEW SIGNING KEY, uninstall first' || '' }}
+          name: Loadout (build ${{ github.run_number }})
           body: |
-            ${{ steps.key.outputs.new == 'true' && '**New signing key: back up (Settings > Save backup), uninstall Loadout, install this, then Restore.**' || '' }}
             On your phone, tap **Loadout.apk** below to download it, then open it to install.
-            See the README on the claude/workout-log-app branch for setup steps.
+            See the README on the claude/loadout-app branch for setup steps.
           files: Loadout.apk
           make_latest: false

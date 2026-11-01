@@ -1,17 +1,16 @@
 # Working notes for Claude
 
 Loadout (package `com.ironlog.app`): Kotlin + Jetpack Compose. No local SDK; CI builds every push to
-`claude/workout-log-app` and publishes release `loadout-N` with `Loadout.apk`.
+`claude/loadout-app` and publishes release `loadout-N` with `Loadout.apk`.
 
 ## Standing rules
 - After every push, give the direct APK link
-  `https://github.com/ExTr3Me-Cobra/Phone-App-Test/releases/download/loadout-N/Loadout.apk` and check it returns 302.
+  `https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/loadout-N/Loadout.apk` and check it returns 302.
 - When a job finishes (a build published, research done, anything the owner is waiting on), send a push notification
   with the outcome and the APK link if there is one.
-- Signing: the key lives in the build cache (`ironlog-signing-key-v1`); GitHub deletes it after 7 days without a run.
-  If a week passes without a build, run the workflow with `keepalive` (workflow_dispatch) first. A build that had to
-  make a new key says "NEW SIGNING KEY" in its release name: tell the owner to back up, uninstall, install, restore.
-  Never put the keystore in the repo or anywhere public.
+- Signing: builds read the key from the default branch's build cache (`loadout-signing-key-v2`, made and kept alive
+  every 3 days by `.github/workflows/signing-keys.yml` on the default branch). Builds never make a key. Never put the
+  keystore in the repo or anywhere public.
 - No AI model IDs anywhere in the repo. No pull requests unless asked.
 - Never compare our data with Strength Level, for any reason, not even as a reference point or sanity check.
   Exception, the owner's choice: the separate personal-use section (`tools/personal/`, marked `PERSONAL-USE`) may use
