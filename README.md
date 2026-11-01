@@ -5,6 +5,10 @@ lights are still on the home Wi-Fi. If they were turned off at the wall switch (
 they drop off the Wi-Fi), it rings an alarm. If the phone isn't on the home Wi-Fi at that time,
 it sends a "couldn't check" notification instead.
 
+The check starts a minute before the set time. A light that doesn't answer gets two more tries
+15 s apart (and is looked for at other addresses meanwhile), so the alarm rings right at the set
+time, only after all three tries miss. When the lights answer, there's no notification at all.
+
 No brand-specific setup and no Google Home: the app looks for the lights on the Wi-Fi itself.
 
 ## Setup

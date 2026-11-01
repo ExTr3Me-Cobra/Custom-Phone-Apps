@@ -76,10 +76,12 @@ class CheckService : Service() {
         @Suppress("DEPRECATION")
         wifiLock = getSystemService(WifiManager::class.java)
             .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "LightCheck:check").apply { acquire() }
+        val ringAt = intent?.getLongExtra(EXTRA_RING_AT, 0L) ?: 0L
         scope.launch {
             val started = android.os.SystemClock.elapsedRealtime()
             prefs.log("── ${when (action) { ACTION_MANUAL -> "Check now"; ACTION_SCHEDULED -> "Scheduled check"; else -> action }} ──")
             prefs.log(Diagnostics.summary(this@CheckService))
+            if (ringAt > 0) prefs.log("Alarm time ${clock(ringAt)}; checking early")
             val outcome = try {
                 withContext(Dispatchers.Default) { Checker.check(this@CheckService) { prefs.log(it) } }
             } catch (e: CancellationException) {
@@ -97,24 +99,45 @@ class CheckService : Service() {
                 is Outcome.LightsOn -> {
                     prefs.lastResult = "Lights on: all answered (${now()})"
                     prefs.log("Result: lights on")
+                    // Scheduled and snoozed checks stay silent when the lights are on.
                     if (action == ACTION_MANUAL) notifyInfo("Lights are on", "All living-room lights answered.")
                     stopSelf()
                 }
                 is Outcome.CouldNotCheck -> {
                     prefs.lastResult = "Couldn't check: ${outcome.why} (${now()})"
                     prefs.log("Result: couldn't check: ${outcome.why}")
+                    // Told at the set time, like the alarm would be.
+                    waitForRingTime(ringAt)
                     notifyInfo("Couldn't check the living-room lights", "Not verified: ${outcome.why}.")
                     stopSelf()
                 }
                 is Outcome.LightsOff -> {
                     val which = outcome.off.joinToString { it.label }
                     prefs.lastResult = "Lights off: $which (${now()})"
-                    prefs.log("Result: lights off ($which); ringing")
+                    if (untilRingTime(ringAt)) prefs.log("Result: lights off ($which); ringing at ${clock(ringAt)}")
+                    else prefs.log("Result: lights off ($which); ringing")
+                    waitForRingTime(ringAt)
                     ring("Living-room lights are off", "Not answering: $which. The switch may be off.")
                 }
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun clock(at: Long) = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(at))
+
+    private fun untilRingTime(ringAt: Long) = ringAt - System.currentTimeMillis() in 1..3 * 60_000L
+
+    /** A scheduled check finishes early: hold the result until the set time (busy meanwhile). */
+    private suspend fun waitForRingTime(ringAt: Long) {
+        if (!untilRingTime(ringAt)) return
+        val wait = ringAt - System.currentTimeMillis()
+        checking = true
+        wakeLock = getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LightCheck:wait").apply { acquire(wait + 30_000) }
+        delay(wait)
+        releaseLocks()
+        checking = false
     }
 
     private fun seconds(since: Long) = "${(android.os.SystemClock.elapsedRealtime() - since) / 100 / 10.0} s"
@@ -208,6 +231,7 @@ class CheckService : Service() {
 
     private fun working(text: String) = Notification.Builder(this, CHANNEL_WORKING)
         .setSmallIcon(R.drawable.ic_stat)
+        .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_DEFERRED)
         .setContentTitle(text)
         .build()
 
@@ -240,12 +264,13 @@ class CheckService : Service() {
         const val ACTION_STOP = "com.lightcheck.app.STOP"
         const val CHANNEL_ALARM = "alarm"
         const val CHANNEL_INFO = "info"
-        const val CHANNEL_WORKING = "working"
+        const val CHANNEL_WORKING = "working_quiet"
+        const val EXTRA_RING_AT = "ring_at"
         private const val ID_WORKING = 1
         private const val ID_INFO = 2
 
-        fun start(context: Context, action: String) {
-            context.startForegroundService(Intent(context, CheckService::class.java).setAction(action))
+        fun start(context: Context, action: String, ringAt: Long = 0L) {
+            context.startForegroundService(Intent(context, CheckService::class.java).setAction(action).putExtra(EXTRA_RING_AT, ringAt))
         }
 
         fun ensureChannels(context: Context) {
@@ -256,7 +281,12 @@ class CheckService : Service() {
                 setBypassDnd(true)
             })
             nm.createNotificationChannel(NotificationChannel(CHANNEL_INFO, "Couldn't check / results", NotificationManager.IMPORTANCE_DEFAULT))
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_WORKING, "Checking now", NotificationManager.IMPORTANCE_LOW))
+            // Android requires a notification while the check runs; this one makes no sound, has no
+            // status-bar icon and sits collapsed at the bottom of the shade. Gone when the check is.
+            nm.deleteNotificationChannel("working")
+            nm.createNotificationChannel(NotificationChannel(CHANNEL_WORKING, "Checking (silent)", NotificationManager.IMPORTANCE_MIN).apply {
+                setShowBadge(false)
+            })
         }
     }
 }
