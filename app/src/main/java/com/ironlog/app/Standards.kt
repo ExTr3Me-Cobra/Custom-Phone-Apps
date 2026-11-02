@@ -444,7 +444,7 @@ object Ranks {
         if (p.gripRank && Standards.isFlat(e.id)) listOf(GRIP) else e.primary.filter { it !in NOT_ON_HOME }
 
     /** Muscle groups left off the Home ranks and body map (their exercises still have their own rank). */
-    val NOT_ON_HOME = setOf("abductors", "adductors")
+    val NOT_ON_HOME = setOf("abductors", "adductors", "neck", "rotator cuff", "hip flexors", "serratus", "shins")
 
     /** Each muscle group -> every ranked exercise where it's the main muscle, best first. */
     fun groupCandidates(ranks: Map<String, Ranked>): Map<String, List<Ranked>> {

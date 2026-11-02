@@ -46,7 +46,7 @@ fun HomeScreen() {
     val workouts by Store.workouts.collectAsState()
     Column(Modifier.fillMaxSize()) {
         TopBar("Home", back = false, lead = "?", onLead = { Nav.go(Route.RankHelp) }, action = "Share") { Nav.go(Route.Share) }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), homeList, contentPadding = PaddingValues(bottom = 24.dp)) {
             item { HomeRankCard() }
             item {
                 val profile by Store.profile.collectAsState()
@@ -109,6 +109,8 @@ fun HomeScreen() {
 
 /** Home's Workouts drop-down: starts closed every time the app opens, and stays as you left it while it's open. */
 private val homeWorkoutsOpen = mutableStateOf(false)
+/** Home's scroll position, kept while you open an exercise or workout and come back. */
+private val homeList = androidx.compose.foundation.lazy.LazyListState()
 
 @Composable
 fun WorkoutCard(w: Workout) {

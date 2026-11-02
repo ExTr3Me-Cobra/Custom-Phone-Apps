@@ -105,7 +105,7 @@ fun Onboarding() {
             }
             val missing = when (pages[page]) {
                 "you" -> biometricsMissing(p)
-                "data" -> if (p.cloud.isEmpty()) "Choose one, or tap Skip for now." else null
+                "data" -> if (p.cloud.isEmpty()) "Choose one to continue." else null
                 else -> null
             }
             val ok = missing == null
@@ -201,10 +201,8 @@ private fun YourDataPage(p: Profile, skip: () -> Unit) {
     Title("Your data")
     Body("Loadout keeps everything on this phone unless you choose Google backup. You can change this any time in Settings.")
     DataChoice(p, showStatus = false)
-    Text(
-        "Skip for now (keep it on this phone)", color = Blue, fontSize = 15.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = skip).padding(12.dp),
-    )
+    Text("This can be changed later in Settings.", color = Sub, fontSize = 15.sp, textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(12.dp))
 }
 
 @Composable

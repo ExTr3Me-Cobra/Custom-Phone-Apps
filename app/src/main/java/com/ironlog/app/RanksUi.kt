@@ -112,7 +112,7 @@ fun HomeRankCard() {
     if (Standards.mode(profile) == Standards.Mode.OFF) return
     val ranks = remember(workouts, profile, exercises) { Ranks.all(workouts, profile) }
     val overall = Ranks.overallOf(ranks, profile)
-    var open by remember { mutableStateOf(false) }
+    var open by homeRanksOpen
     var picking by remember { mutableStateOf<String?>(null) }
     picking?.let { g -> GroupPickDialog(g, Ranks.groupCandidates(ranks)[g].orEmpty(), profile) { picking = null } }
     Column(Modifier.padding(16.dp, 16.dp, 16.dp, 0.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
@@ -303,10 +303,12 @@ private fun LevelMarks(top: Boolean) {
     }
 }
 
-/** Home, under Grip: straight into a 1 Rep Max mode dynamometer test. */
+/** Home, under Grip: straight into a 1 Rep Max mode dynamometer test, until you've logged one. */
 @Composable
 private fun GripTestButton() {
     val id = StandardsData.all.firstOrNull { it.flat }?.id ?: return
+    val workouts by Store.workouts.collectAsState()
+    if (workouts.any { w -> w.items.any { it.exerciseId == id && it.sets.any { s -> s.done && !s.warmup } } }) return
     Text("🏆 Test your grip (1 Rep Max mode) ›", color = StarGold, fontSize = 14.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(start = 22.dp, top = 4.dp).clip(RoundedCornerShape(8.dp))
             .clickable { OneRm.add(id); Nav.go(Route.OneRmTest(id)) }.padding(vertical = 4.dp))
@@ -545,3 +547,6 @@ fun NameText(
         )
     }
 }
+
+/** Kept outside the screen so the muscle-group list is still open when you come back from an exercise. */
+private val homeRanksOpen = mutableStateOf(false)
