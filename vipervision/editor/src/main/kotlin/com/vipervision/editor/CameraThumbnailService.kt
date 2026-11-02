@@ -28,6 +28,20 @@ import androidx.compose.ui.graphics.toArgb
  * reads the thumbnail and shutter buttons' positions, and does nothing on the lock screen
  * (Samsung keeps handling the thumbnail there, so nothing opens without unlocking).
  */
+/** Whether the accessibility service is running, for the diagnostic report. */
+object ServiceStatus {
+    fun describe(context: android.content.Context): String {
+        val enabled = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            .orEmpty().contains("${context.packageName}/${CameraThumbnailService::class.java.name}")
+        val fmt = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+        val running = CameraThumbnailService.connectedAt
+        val last = CameraThumbnailService.lastEventAt
+        return "Accessibility service: " + (if (enabled) "on in Settings" else "OFF in Settings") + ", " +
+            (if (running > 0) "running since ${fmt.format(java.util.Date(running))}" else "NOT running") +
+            (if (last > 0) ", last event ${fmt.format(java.util.Date(last))}" else ", no events yet")
+    }
+}
+
 class CameraThumbnailService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -59,10 +73,22 @@ class CameraThumbnailService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        connectedAt = System.currentTimeMillis()
+        // For the gallery's setup: the service is really running (not just switched on).
+        getSharedPreferences("Prefs", MODE_PRIVATE).edit().putInt(RUNNING_PID, android.os.Process.myPid()).apply()
+        ViperLog.i("ACCESSIBILITY", "Viper Vision's accessibility service is running")
         screenshots.start()
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        ViperLog.i("ACCESSIBILITY", "Viper Vision's accessibility service stopped (turned off, or Android stopped it)")
+        connectedAt = 0L
+        getSharedPreferences("Prefs", MODE_PRIVATE).edit().putInt(RUNNING_PID, 0).apply()
+        return super.onUnbind(intent)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        lastEventAt = System.currentTimeMillis()
         // Windows opening or closing (e.g. Back from Viper Vision's viewer to the camera): look
         // again at what's in front.
         // Other phones' screenshot preview: covered the moment it shows.
@@ -948,7 +974,11 @@ class CameraThumbnailService : AccessibilityService() {
         }.onFailure { ViperLog.error("SAMSUNG", "couldn't bring the editor back", it) }
     }
 
-    private companion object {
+    companion object {
+        @Volatile var connectedAt = 0L
+        @Volatile var lastEventAt = 0L
+        /** Read by the gallery's setup (MainActivity.showViperSetup). */
+        const val RUNNING_PID = "vv_a11y_running_pid"
         const val MAX_TAP_ATTEMPTS = 40
         val GALAXY_AI_LABELS = listOf("Galaxy AI", "Photo Assist", "Generative edit", "AI edit")
         val EDIT_LABELS = listOf("Edit")

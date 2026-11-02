@@ -548,23 +548,35 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         // After the photo permission, so the two don't overlap.
         if (!hasPermission(getPermissionToRequest())) return false
         val isSamsung = android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-        // Every phone (Android 11+) needs All files access; Samsung phones also the two steps before.
+        // Every phone needs the accessibility service (camera shortcut, screenshot toolbar) and,
+        // on Android 11+, All files access; Samsung phones also the screenshot toolbar step.
         val needsAllFiles = isRPlus() && !android.os.Environment.isExternalStorageManager()
-        val steps = (if (isSamsung) 2 else 0) + if (isRPlus()) 1 else 0
+        val steps = 1 + (if (isSamsung) 1 else 0) + if (isRPlus()) 1 else 0
         val prefs = getSharedPreferences("Prefs", MODE_PRIVATE)
         val service = "$packageName/com.vipervision.editor.CameraThumbnailService"
         val serviceOn = android.provider.Settings.Secure.getString(
             contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ).orEmpty().split(':').any { it.equals(service, ignoreCase = true) }
+        // Switched on but not running (e.g. Android stopped it, or it was on for an earlier
+        // install): the service writes its process id when it starts. It starts with the app, so
+        // give it a few seconds after the app starts before asking.
+        val serviceRunning = prefs.getInt("vv_a11y_running_pid", 0) == android.os.Process.myPid()
+        val sinceStart = android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
+        if (serviceOn && !serviceRunning && sinceStart < 4000) {
+            Handler(Looper.getMainLooper()).postDelayed({ if (!isFinishing && !isDestroyed) showViperSetup() }, 4000 - sinceStart)
+        }
         val builder = getAlertDialogBuilder().setCancelable(false)
         // Test screenshots from step 2 go once nothing would make Android ask about deleting them.
         if (!needsAllFiles) deleteTestScreenshots(prefs)
         when {
-            !isSamsung && !needsAllFiles -> return false
-
-            isSamsung && !serviceOn -> builder
+            !serviceOn -> builder
                 .setTitle(getString(R.string.vv_setup_title, 1, steps))
                 .setMessage(R.string.vv_setup_access_message)
+                .setView(accessibilitySetupButtons(prefs))
+
+            !serviceRunning && sinceStart >= 4000 -> builder
+                .setTitle(getString(R.string.vv_setup_title, 1, steps))
+                .setMessage(R.string.vv_setup_access_not_running)
                 .setView(accessibilitySetupButtons(prefs))
 
             isSamsung && prefs.getBoolean("vv_screenshot_toolbar", true) && !prefs.getBoolean("vv_samsung_toolbar_off", false) -> {

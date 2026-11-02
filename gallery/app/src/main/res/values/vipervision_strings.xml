@@ -5,7 +5,8 @@
     <string name="vv_fuse_frames">Fuse frames (HDR, focus, low light)</string>
     <string name="vv_setup_title">Set up Viper Vision (%1$d of %2$d)</string>
     <string name="vv_setup_title_single">Set up Viper Vision</string>
-    <string name="vv_setup_access_message">Accessibility is required for Viper Vision to work right.\n\n1. Tap Open Accessibility → Installed apps → Viper Vision camera &amp; screenshots. Tap it even if it\'s greyed out (otherwise the ⋮ in the next step won\'t be there). If it isn\'t greyed out, just turn it on and you\'re done.\n\n2. Come back and tap App info → ⋮ (top right) → Allow restricted settings.\n\n3. Come back, tap Open Accessibility again and turn Viper Vision camera &amp; screenshots on.</string>
+    <string name="vv_setup_access_not_running">Viper Vision\'s accessibility is switched on, but Android isn\'t running it, so the camera shortcut and screenshot toolbar can\'t work.\n\nTap Open Accessibility → Installed apps → Viper Vision camera &amp; screenshots, turn it off, then on again.</string>
+    <string name="vv_setup_access_message">Accessibility is required for Viper Vision to work right.\n\n1. Tap Open Accessibility → Installed apps (or Downloaded apps) → Viper Vision camera &amp; screenshots. Tap it even if it\'s greyed out (otherwise the ⋮ in the next step won\'t be there). If it isn\'t greyed out, just turn it on and you\'re done.\n\n2. Come back and tap App info → ⋮ (top right) → Allow restricted settings.\n\n3. Come back, tap Open Accessibility again and turn Viper Vision camera &amp; screenshots on.</string>
     <string name="vv_setup_access_open">Open Accessibility</string>
     <string name="vv_setup_app_info">App info</string>
     <string name="vv_setup_do_1st">Do 1st</string>

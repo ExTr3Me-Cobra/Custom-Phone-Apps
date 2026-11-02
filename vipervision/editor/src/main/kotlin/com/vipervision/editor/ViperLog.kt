@@ -122,6 +122,7 @@ object ViperLog {
         if (context != null) {
             appendLine(versionOf(context))
             appendLine(deviceSummary(context))
+            appendLine(runCatching { ServiceStatus.describe(context) }.getOrDefault("Accessibility service: unknown"))
         }
         appendLine(memory())
         appendLine()
