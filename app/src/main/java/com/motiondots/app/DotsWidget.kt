@@ -22,7 +22,7 @@ class ToggleActivity : android.app.Activity() {
         if (fromIcon && on && !android.provider.Settings.canDrawOverlays(this) && !(prefs.useAccessibility && DotsAccessibilityService.running)) {
             startActivity(Intent(this, MainActivity::class.java))
         } else {
-            DotsService.set(this, on, manual = !intent.getBooleanExtra(EXTRA_AUTO, false))
+            DotsService.set(this, on)
             if (fromIcon) android.widget.Toast.makeText(applicationContext, if (on) "Motion dots on" else "Motion dots off", android.widget.Toast.LENGTH_SHORT).show()
         }
         finish()
@@ -31,7 +31,6 @@ class ToggleActivity : android.app.Activity() {
 
     companion object {
         const val EXTRA_ON = "on"
-        const val EXTRA_AUTO = "auto"
     }
 }
 

@@ -73,19 +73,8 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putBoolean("reversed", v).apply()
 
     /** Turn the dots on in a vehicle and off when the ride ends. */
-    var auto: Boolean
-        get() = sp.getBoolean("auto", false)
-        set(v) = sp.edit().putBoolean("auto", v).apply()
 
-    /** When the dots were last turned off by hand: automatic on/off waits 5 minutes after it. */
-    var manualOffAt: Long
-        get() = sp.getLong("manual_off_at", 0L)
-        set(v) = sp.edit().putLong("manual_off_at", v).apply()
 
-    /** The last few ride events, for the app's screen. */
-    var autoLog: String
-        get() = sp.getString("auto_log", "").orEmpty()
-        set(v) = sp.edit().putString("auto_log", v).apply()
 
     companion object {
         /** Fill and outline; the outline keeps the dots visible on light and dark screens. */

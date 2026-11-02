@@ -35,14 +35,10 @@ Slow drift, sensor bias and hills are filtered out. The dots follow on a soft sp
    there yet), and Android caps its opacity at 80%. Turning this on lets the dots draw through
    an accessibility service, which reads nothing on the screen.
 
-## Automatic on and off
+## On and off
 
-Turn on **Turn on in a vehicle, off when the ride ends** and allow *Physical activity*.
-Google Play services' activity recognition tells the app when a ride starts and ends. It uses
-little battery and works with the app closed. The dots turn off when the ride ends, when you
-start walking, or when the phone has lain completely still for 4 minutes (a car waiting at
-lights still shakes a little), however they were turned on. Turning them off yourself pauses
-automatic on and off for 5 minutes.
+Tap the Motion Dots app icon to turn the dots on or off (long-press it for Settings), or use the
+Quick Settings tile. There is no automatic on or off.
 
 ## Widget
 

@@ -40,7 +40,6 @@ class DotsService : Service() {
         if (intent?.action == ACTION_TOGGLE) {
             // From the widget.
             prefs.on = !prefs.on
-            if (!prefs.on) prefs.manualOffAt = System.currentTimeMillis()
             refreshSwitches(this)
         }
         if (!prefs.on) {
@@ -48,32 +47,10 @@ class DotsService : Service() {
             return START_NOT_STICKY
         }
         update()
-        handler.removeCallbacks(stillCheck)
-        handler.postDelayed(stillCheck, STILL_CHECK_MS)
         return START_STICKY
     }
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-
-    /**
-     * Automatic mode: the phone hasn't moved at all for 4 minutes (put down on a nightstand,
-     * a table…): the ride is over, whatever Play services says. A car waiting at lights still
-     * shakes a little, which counts as moving.
-     */
-    private val stillCheck = object : Runnable {
-        override fun run() {
-            val motion = Motion.active
-            if (prefs.on && prefs.auto && !Auto.paused(prefs) && motion != null) {
-                val still = android.os.SystemClock.elapsedRealtime() - motion.lastMovingAt
-                if (still > STILL_OFF_MS) {
-                    Auto.log(this@DotsService, "Phone still for ${still / 60_000} min: dots off")
-                    set(this@DotsService, false, manual = false)
-                    return
-                }
-            }
-            handler.postDelayed(this, STILL_CHECK_MS)
-        }
-    }
 
     private fun update() {
         val a11yDraws = prefs.useAccessibility && DotsAccessibilityService.running
@@ -100,7 +77,6 @@ class DotsService : Service() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(stillCheck)
         prefs.sp.unregisterOnSharedPreferenceChangeListener(listener)
         overlay?.hide()
         overlay = null
@@ -110,8 +86,6 @@ class DotsService : Service() {
     companion object {
         private const val CHANNEL = "dots"
         const val ACTION_TOGGLE = "com.motiondots.app.TOGGLE"
-        private const val STILL_CHECK_MS = 15_000L
-        private const val STILL_OFF_MS = 4 * 60_000L
 
         /** The tile and the widget show the current state. */
         fun refreshSwitches(context: Context) {
@@ -125,16 +99,11 @@ class DotsService : Service() {
             )
         }
 
-        /**
-         * Switches the dots on or off from anywhere (app, tile, widget, notification: [manual];
-         * a ride starting or ending: not). Turning them off by hand keeps automatic on/off away
-         * for 5 minutes.
-         */
-        fun set(context: Context, on: Boolean, manual: Boolean = true) {
+        /** Switches the dots on or off from anywhere (app icon, app, tile, widget, notification). */
+        fun set(context: Context, on: Boolean) {
             Prefs(context).on = on
-            if (manual && !on) Prefs(context).manualOffAt = System.currentTimeMillis()
             val intent = Intent(context, DotsService::class.java)
-            if (on) runCatching { context.startForegroundService(intent) }.onFailure { Auto.log(context, "Couldn't start the dots: ${it.message}") }
+            if (on) runCatching { context.startForegroundService(intent) }.onFailure { android.util.Log.w("MotionDots", "Couldn't start the dots", it) }
             else context.stopService(intent)
             refreshSwitches(context)
         }
