@@ -55,6 +55,9 @@ object Research {
             "Cable Rope Overhead Triceps Extension", "EZ-Bar Skullcrusher", "Close-Grip Barbell Bench Press",
             "Standing Dumbbell Triceps Extension"),
         "Bodyweight & grip" to listOf("Pullups", "Chin-Up", "Dips - Triceps Version", "Pushups", "Grip Dynamometer Test"),
+        // Test each Forearm Finisher move and its dumbbell wrist curl on the same day: the ratio ranks the Finisher.
+        "Forearms" to listOf("Seated Dumbbell Palms-Up Wrist Curl", "Forearm Finisher Curl",
+            "Seated Dumbbell Palms-Down Wrist Curl", "Forearm Finisher Extension"),
     )
 
     /** The exercises in the list that exist in your library. */
