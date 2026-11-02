@@ -201,8 +201,6 @@ private fun YourDataPage(p: Profile, skip: () -> Unit) {
     Title("Your data")
     Body("Loadout keeps everything on this phone unless you choose Google backup. You can change this any time in Settings.")
     DataChoice(p, showStatus = false)
-    Text("This can be changed later in Settings.", color = Sub, fontSize = 15.sp, textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(12.dp))
 }
 
 @Composable
@@ -258,7 +256,7 @@ private fun ReadyPage() {
     Spacer(30)
     Text("💪", fontSize = 64.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Text("You're all set", fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Text("Start a workout from the Workout tab.\nComing from Hevy? Import it in Settings.", color = Sub, fontSize = 15.sp,
+    Text("Start a workout from the Workout tab.", color = Sub, fontSize = 15.sp,
         lineHeight = 22.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 }
 

@@ -96,7 +96,6 @@ private fun BodyFatRow(male: Boolean, n: Int, selected: Boolean, onClick: () -> 
         }
         Column(Modifier.padding(start = 12.dp)) {
             Text("Body fat ${BodyFat.ranges(male)[n - 1]}", fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 16.sp)
-            if (n == 3) Text("Typical for people who lift", color = Sub, fontSize = 12.sp)
         }
     }
 }
@@ -106,7 +105,7 @@ private fun BodyFatRow(male: Boolean, n: Int, selected: Boolean, onClick: () -> 
 fun BodyFatPicker(p: Profile, onPick: (Int?) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Body fat", fontWeight = FontWeight.Bold)
-        Text("Pick the picture closest to your belly from the side or front. Ranks allow for it: strength comes from lean mass.",
+        Text("Choose by picture, or by body fat percentage if you know it. Ranks allow for it, since strength comes from lean muscle.",
             color = Sub, fontSize = 13.sp)
         for (n in 1..5) BodyFatRow(p.male, n, p.bodyFat == n) { onPick(if (p.bodyFat == n) null else n) }
     }
