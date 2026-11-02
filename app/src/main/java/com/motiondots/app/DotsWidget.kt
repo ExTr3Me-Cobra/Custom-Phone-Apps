@@ -9,13 +9,22 @@ import android.content.Intent
 import android.widget.RemoteViews
 
 /** 1×1 home-screen widget: tap to turn the dots on or off. */
-/** The widget's tap: switch the dots and close at once (nothing is shown). */
+/**
+ * The app icon's and the widget's tap: switch the dots and close at once. From the app icon a short message says
+ * which way it went; if a permission is still missing, the settings screen opens instead.
+ */
 class ToggleActivity : android.app.Activity() {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = Prefs(this)
+        val fromIcon = intent.action == Intent.ACTION_MAIN
         val on = if (intent.hasExtra(EXTRA_ON)) intent.getBooleanExtra(EXTRA_ON, true) else !prefs.on
-        DotsService.set(this, on, manual = !intent.getBooleanExtra(EXTRA_AUTO, false))
+        if (fromIcon && on && !android.provider.Settings.canDrawOverlays(this) && !(prefs.useAccessibility && DotsAccessibilityService.running)) {
+            startActivity(Intent(this, MainActivity::class.java))
+        } else {
+            DotsService.set(this, on, manual = !intent.getBooleanExtra(EXTRA_AUTO, false))
+            if (fromIcon) android.widget.Toast.makeText(applicationContext, if (on) "Motion dots on" else "Motion dots off", android.widget.Toast.LENGTH_SHORT).show()
+        }
         finish()
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
     }
