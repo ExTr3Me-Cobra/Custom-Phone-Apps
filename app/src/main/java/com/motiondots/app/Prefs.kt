@@ -77,10 +77,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto", false)
         set(v) = sp.edit().putBoolean("auto", v).apply()
 
-    /** The dots were turned on by a ride (so the ride ending turns them off). */
-    var autoStarted: Boolean
-        get() = sp.getBoolean("auto_started", false)
-        set(v) = sp.edit().putBoolean("auto_started", v).apply()
+    /** When the dots were last turned off by hand: automatic on/off waits 5 minutes after it. */
+    var manualOffAt: Long
+        get() = sp.getLong("manual_off_at", 0L)
+        set(v) = sp.edit().putLong("manual_off_at", v).apply()
 
     /** The last few ride events, for the app's screen. */
     var autoLog: String

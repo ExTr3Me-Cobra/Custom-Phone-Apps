@@ -19,8 +19,9 @@ import java.util.Locale
 /**
  * Automatic mode: Google Play services' activity recognition tells the app when the phone
  * starts and stops riding in a vehicle (it combines the motion sensors over time, uses very
- * little battery, and keeps working with the app closed). Getting in turns the dots on;
- * the ride ending turns them off again, unless you turned them on yourself.
+ * little battery, and keeps working with the app closed). Getting in turns the dots on; the
+ * ride ending, walking, or the phone lying still for 4 minutes turns them off, however they
+ * were turned on. Turning them off by hand keeps all of this away for 5 minutes.
  */
 object Auto {
     private const val REQUEST = 7
@@ -40,9 +41,14 @@ object Auto {
         val prefs = Prefs(context)
         val client = ActivityRecognition.getClient(context)
         if (prefs.auto && permitted(context)) {
-            val transitions = listOf(ActivityTransition.ACTIVITY_TRANSITION_ENTER, ActivityTransition.ACTIVITY_TRANSITION_EXIT).map {
-                ActivityTransition.Builder().setActivityType(DetectedActivity.IN_VEHICLE).setActivityTransition(it).build()
-            }
+            fun t(type: Int, transition: Int) =
+                ActivityTransition.Builder().setActivityType(type).setActivityTransition(transition).build()
+            val transitions = listOf(
+                t(DetectedActivity.IN_VEHICLE, ActivityTransition.ACTIVITY_TRANSITION_ENTER),
+                t(DetectedActivity.IN_VEHICLE, ActivityTransition.ACTIVITY_TRANSITION_EXIT),
+                t(DetectedActivity.WALKING, ActivityTransition.ACTIVITY_TRANSITION_ENTER),
+                t(DetectedActivity.ON_FOOT, ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+            )
             client.requestActivityTransitionUpdates(ActivityTransitionRequest(transitions), pending(context))
                 .addOnFailureListener { log(context, "Couldn't start vehicle detection: ${it.message}") }
         } else {
@@ -50,24 +56,38 @@ object Auto {
         }
     }
 
+    /** Turned off by hand less than 5 minutes ago: automatic on/off stays away. */
+    fun paused(prefs: Prefs) = System.currentTimeMillis() - prefs.manualOffAt < 5 * 60_000L
+
     fun log(context: Context, line: String) {
         val prefs = Prefs(context)
         val stamp = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date())
-        prefs.autoLog = (prefs.autoLog.lines().filter { it.isNotBlank() } + "$stamp  $line").takeLast(6).joinToString("\n")
+        prefs.autoLog = (prefs.autoLog.lines().filter { it.isNotBlank() } + "$stamp  $line").takeLast(10).joinToString("\n")
     }
 }
 
-/** Vehicle ride started or ended. */
+/** Vehicle ride started or ended, or walking started. */
 class AutoReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!ActivityTransitionResult.hasResult(intent)) return
         val prefs = Prefs(context)
         if (!prefs.auto) return
         val event = ActivityTransitionResult.extractResult(intent)?.transitionEvents?.lastOrNull() ?: return
-        if (event.activityType != DetectedActivity.IN_VEHICLE) return
-        if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
-            Auto.log(context, "In a vehicle: dots on")
-            if (!prefs.on) {
+        val entered = event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER
+        val what = when (event.activityType) {
+            DetectedActivity.IN_VEHICLE -> if (entered) "In a vehicle" else "Ride ended"
+            DetectedActivity.WALKING, DetectedActivity.ON_FOOT -> "Walking"
+            DetectedActivity.STILL -> "Still"
+            else -> return
+        }
+        if (Auto.paused(prefs)) {
+            Auto.log(context, "$what: ignored (turned off by hand less than 5 min ago)")
+            return
+        }
+        when {
+            event.activityType == DetectedActivity.IN_VEHICLE && entered -> {
+                if (prefs.on) return
+                Auto.log(context, "$what: dots on")
                 // With the app briefly in front (allowed with "display over other apps"), so the
                 // dots get motion readings; otherwise straight from here.
                 val started = android.provider.Settings.canDrawOverlays(context) && runCatching {
@@ -77,14 +97,14 @@ class AutoReceiver : BroadcastReceiver() {
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     )
                 }.isSuccess
-                if (!started) {
-                    DotsService.set(context, true)
-                    prefs.autoStarted = true
-                }
+                if (!started) DotsService.set(context, true, manual = false)
             }
-        } else {
-            Auto.log(context, "Ride ended: ${if (prefs.autoStarted && prefs.on) "dots off" else "left as is"}")
-            if (prefs.autoStarted && prefs.on) DotsService.set(context, false)
+            // Out of the vehicle (also dots turned on by hand); "still" alone isn't enough, as a
+            // car at the lights is still too: the phone lying still for 4 minutes is (DotsService).
+            event.activityType != DetectedActivity.STILL -> if (prefs.on) {
+                Auto.log(context, "$what: dots off")
+                DotsService.set(context, false, manual = false)
+            }
         }
     }
 }

@@ -47,6 +47,9 @@ class Motion(context: Context) : SensorEventListener {
     @Volatile var readings = 0L; private set
     @Volatile var lastReadingAt = 0L; private set
     @Volatile var restarts = 0; private set
+    /** When the phone last moved more than lying on a table does (any direction, bumps too). */
+    @Volatile var lastMovingAt = android.os.SystemClock.elapsedRealtime(); private set
+    private var shake = 0.0
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var watching = false
 
@@ -141,6 +144,10 @@ class Motion(context: Context) : SensorEventListener {
         val rx = fy * uz - fz * uy
         val ry = fz * ux - fx * uz
         val rz = fx * uy - fy * ux
+        // Shaking of any kind, smoothed over about a second: a phone lying still reads ~0.02 m/s²,
+        // one in a moving (or idling) car well above 0.1.
+        shake += (sqrt((ax * ax + ay * ay + az * az).toDouble()) - shake) * (1 - exp(-dt / 1.0))
+        if (shake > 0.1) lastMovingAt = android.os.SystemClock.elapsedRealtime()
         val rawF = ax * fx + ay * fy + az * fz
         val rawR = ax * rx + ay * ry + az * rz
         // Remove slow bias (about 6 s), then smooth.

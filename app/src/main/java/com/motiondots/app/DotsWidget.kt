@@ -15,8 +15,7 @@ class ToggleActivity : android.app.Activity() {
         super.onCreate(savedInstanceState)
         val prefs = Prefs(this)
         val on = if (intent.hasExtra(EXTRA_ON)) intent.getBooleanExtra(EXTRA_ON, true) else !prefs.on
-        DotsService.set(this, on)
-        if (intent.getBooleanExtra(EXTRA_AUTO, false)) prefs.autoStarted = true
+        DotsService.set(this, on, manual = !intent.getBooleanExtra(EXTRA_AUTO, false))
         finish()
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
     }
@@ -43,9 +42,9 @@ class DotsWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val views = RemoteViews(context.packageName, R.layout.widget).apply {
-                // No background: the icon fills the cell, bright blue when on, faded grey when off.
-                setInt(R.id.widget_icon, "setColorFilter", if (on) 0xFF5EC8FF.toInt() else 0xFF9AA0A6.toInt())
-                setInt(R.id.widget_icon, "setImageAlpha", if (on) 255 else 150)
+                // No background: white when on, faded grey when off, named like the app icons.
+                setInt(R.id.widget_icon, "setColorFilter", if (on) 0xFFFFFFFF.toInt() else 0xFF9AA0A6.toInt())
+                setInt(R.id.widget_icon, "setImageAlpha", if (on) 255 else 140)
                 setOnClickPendingIntent(R.id.widget_root, toggle)
             }
             manager.updateAppWidget(ids, views)

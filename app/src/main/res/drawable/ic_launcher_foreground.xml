@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's dots, white, inside the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="2.4" android:scaleY="2.4" android:translateX="25.2" android:translateY="30">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M4,6a2,2 0,1 1,0.01 0z M4,12a2,2 0,1 1,0.01 0z M4,18a2,2 0,1 1,0.01 0z M20,6a2,2 0,1 1,0.01 0z M20,12a2,2 0,1 1,0.01 0z M20,18a2,2 0,1 1,0.01 0z M12,9a3,3 0,1 1,0.01 0z" />
+    </group>
+</vector>

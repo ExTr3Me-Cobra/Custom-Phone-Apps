@@ -142,9 +142,9 @@ private fun Screen() {
         val motionAllowed = Auto.permitted(context)
         Toggle(
             "Turn on in a vehicle, off when the ride ends",
-            "Uses Google Play services' activity recognition (low battery, works with the app closed). It usually " +
-                "notices a ride within a minute or two of moving, and the end a few minutes after you stop. Dots you " +
-                "turn on yourself stay on.",
+            "Uses Google Play services' activity recognition (low battery, works with the app closed). On within a " +
+                "minute or two of riding; off when the ride ends, you start walking, or the phone lies still for 4 " +
+                "minutes, however the dots were turned on. Turning them off yourself pauses this for 5 minutes.",
             auto && motionAllowed
         ) {
             if (it && !motionAllowed) {
