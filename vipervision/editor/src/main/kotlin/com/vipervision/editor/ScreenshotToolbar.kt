@@ -102,6 +102,7 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
         if (shot.id == lastShownId) return
         lastShownId = shot.id
         ViperLog.i("SCREENSHOT", "New screenshot: ${shot.path ?: shot.uri}")
+        service.getSharedPreferences("Prefs", Context.MODE_PRIVATE).edit().putLong(LAST_SEEN, System.currentTimeMillis()).apply()
         if (samsungPhone) show(shot)
         else if (openPending || card != null) {
             // Tapped already (it opens once saved), or Viper Vision's editor is up: nothing more.
@@ -773,6 +774,8 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
 
     companion object {
         const val PREF_ENABLED = "vv_screenshot_toolbar"
+        /** When a new screenshot was last seen (for the phone check). */
+        const val LAST_SEEN = "vv_last_screenshot_seen"
         /** Shared with the gallery's setup (MainActivity.showViperSetup). */
         const val CHECK_PENDING = "vv_toolbar_check_pending"
         const val CHECK_RESULT = "vv_toolbar_check_result"

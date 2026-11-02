@@ -12,6 +12,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -77,6 +79,8 @@ class DiagnosticsActivity : ComponentActivity() {
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
+                    Spacer(Modifier.height(12.dp))
+                    PhoneCheck.Section()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(16.dp)

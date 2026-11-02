@@ -30,6 +30,10 @@
          normal APK (search/ModelPack.switchToSlim), after the user taps Update. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- The setup asks once for unrestricted battery, so Android doesn't stop the accessibility
+         service in the background (Motorola, Xiaomi, OnePlus and others do it readily). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application>
         <activity
             android:name=".EditorActivity"

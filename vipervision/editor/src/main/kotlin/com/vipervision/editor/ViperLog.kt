@@ -123,6 +123,9 @@ object ViperLog {
             appendLine(versionOf(context))
             appendLine(deviceSummary(context))
             appendLine(runCatching { ServiceStatus.describe(context) }.getOrDefault("Accessibility service: unknown"))
+            appendLine()
+            appendLine("=== Phone check ===")
+            appendLine(runCatching { PhoneCheck.summary(context) }.getOrDefault("couldn't check"))
         }
         appendLine(memory())
         appendLine()

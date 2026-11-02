@@ -529,6 +529,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
     private var viperSetupDialog: androidx.appcompat.app.AlertDialog? = null
     private val APP_INFO_OPENED = "vv_setup_app_info_opened"
+    private val BATTERY_ASKED = "vv_setup_battery_asked"
     private val TOOLBAR_CHECK_PENDING = "vv_toolbar_check_pending"
     private val TOOLBAR_CHECK_RESULT = "vv_toolbar_check_result"
     private val TOOLBAR_CHECK_SHOTS = "vv_toolbar_check_shots"
@@ -551,8 +552,13 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         // Every phone needs the accessibility service (camera shortcut, screenshot toolbar) and,
         // on Android 11+, All files access; Samsung phones also the screenshot toolbar step.
         val needsAllFiles = isRPlus() && !android.os.Environment.isExternalStorageManager()
-        val steps = 1 + (if (isSamsung) 1 else 0) + if (isRPlus()) 1 else 0
+        val steps = 2 + (if (isSamsung) 1 else 0) + if (isRPlus()) 1 else 0
+        val batteryStep = if (isSamsung) 3 else 2
         val prefs = getSharedPreferences("Prefs", MODE_PRIVATE)
+        // Unrestricted battery: otherwise Android may stop the accessibility service in the
+        // background. Asked once; after that it's in Diagnostics → Phone check.
+        val needsBattery = !prefs.getBoolean(BATTERY_ASKED, false) &&
+            getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == false
         val service = "$packageName/com.vipervision.editor.CameraThumbnailService"
         val serviceOn = android.provider.Settings.Secure.getString(
             contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -587,6 +593,17 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
                     .setMessage(R.string.vv_setup_toolbar_message)
                     .setView(toolbarCheckView(prefs))
             }
+
+            needsBattery -> builder
+                .setTitle(getString(R.string.vv_setup_title, batteryStep, steps))
+                .setMessage(R.string.vv_setup_battery_message)
+                .setPositiveButton(R.string.vv_setup_battery_open) { _, _ ->
+                    prefs.edit().putBoolean(BATTERY_ASKED, true).apply()
+                    val ask = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName"))
+                    runCatching { startActivity(ask) }.onFailure {
+                        runCatching { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+                    }
+                }
 
             // Saving over originals, rotating, deleting, moving and hidden albums without Android
             // asking each time. Only "All files" counts (checked here each time).
