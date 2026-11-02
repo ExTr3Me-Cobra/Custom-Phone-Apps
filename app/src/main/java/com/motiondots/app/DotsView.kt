@@ -44,7 +44,7 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
     // Settings, re-read when they change.
     private var sizePx = 0f; private var spacingPx = 0f; private var insetPx = 0f
     private var gain = 0.0; private var maxShift = 0.0; private var allEdges = false
-    private var hideStill = false; private var sign = 1.0; private var alphaFrac = 1f
+    private var hideStill = false; private var hideAfterMs = 20_000L; private var sign = 1.0; private var alphaFrac = 1f
 
     private val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> readSettings() }
 
@@ -65,6 +65,7 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
         travelPx = prefs.travel * density.toDouble()
         allEdges = prefs.layout == 1
         hideStill = prefs.hideWhenStill
+        hideAfterMs = (prefs.hideAfter * 1000).toLong()
         sign = if (prefs.reversed) -1.0 else 1.0
         alphaFrac = minOf(prefs.opacity, maxAlpha).coerceAtLeast(0.1f)
         motion.smoothSeconds = 0.05 + prefs.smoothing * 0.5
@@ -101,11 +102,11 @@ class DotsView(context: Context, private val motion: Motion) : View(context), Ch
         val w = 12.0
         vx += (w * w * (tx - x) - 2 * w * vx) * dt; x += vx * dt
         vy += (w * w * (ty - y) - 2 * w * vy) * dt; y += vy * dt
-        // Hide when still: fade out after 20 s with no vehicle-like motion, back in when it returns.
+        // Hide when still: fade out after the set time with no vehicle-like motion, back in when it returns.
         val now = SystemClock.elapsedRealtime()
         val target = if (!hideStill) 1.0 else {
             if (motion.activity > 0.12) stillSince = now
-            if (now - stillSince < 20_000) 1.0 else 0.0
+            if (now - stillSince < hideAfterMs) 1.0 else 0.0
         }
         shown += (target - shown) * (1 - exp(-dt / 0.4))
         // Swap in a fresh set once the current one has gone far enough.

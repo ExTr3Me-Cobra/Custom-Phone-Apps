@@ -50,6 +50,6 @@ the dots are on and faded grey when they're off.
 
 - **Look:** colour (each has an outline), dot size, gap between dots, distance from the edge,
   opacity, and left and right edges or all four.
-- **Motion:** sensitivity, smoothing, **Hide when not moving** (fades out after 20 s still),
+- **Motion:** sensitivity, smoothing, **Hide when not moving** (fades out after a time you set, 3–120 s, default 20 s),
   and **Facing backwards** (flips the direction).
 - **Live motion:** the forward and sideways acceleration the app sees, for checking it.

@@ -67,13 +67,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("hide_still", false)
         set(v) = sp.edit().putBoolean("hide_still", v).apply()
 
+    /** Seconds without vehicle-like motion before "hide when not moving" fades the dots out. */
+    var hideAfter: Float
+        get() = sp.getFloat("hide_after", 20f)
+        set(v) = sp.edit().putFloat("hide_after", v).apply()
+
     /** Swap the direction (for someone facing backwards, e.g. on a train). */
     var reversed: Boolean
         get() = sp.getBoolean("reversed", false)
         set(v) = sp.edit().putBoolean("reversed", v).apply()
-
-    /** Turn the dots on in a vehicle and off when the ride ends. */
-
 
 
     companion object {

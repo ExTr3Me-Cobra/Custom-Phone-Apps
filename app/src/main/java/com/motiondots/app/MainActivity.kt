@@ -171,9 +171,10 @@ private fun Screen() {
         Text("A set of dots fades out after moving this far and a fresh set fades in at the edge, so they never slide into the middle.", color = Grey, fontSize = 12.sp)
         SliderRow("Smoothing", prefs.smoothing, 0f..1f, { if (it < 0.2f) "snappy" else if (it > 0.7f) "very smooth" else "medium" }) { prefs.smoothing = it }
         var hide by remember { mutableStateOf(prefs.hideWhenStill) }
-        Toggle("Hide when not moving", "Fades the dots out after 20 s without vehicle motion and back in when it starts.", hide) {
+        Toggle("Hide when not moving", "Fades the dots out after a while without vehicle motion and back in when it starts.", hide) {
             hide = it; prefs.hideWhenStill = it
         }
+        if (hide) SliderRow("Fade out after", prefs.hideAfter, 3f..120f, { "${it.toInt()} s" }) { prefs.hideAfter = it.toInt().toFloat() }
         var rev by remember { mutableStateOf(prefs.reversed) }
         Toggle("Facing backwards", "Flips the direction, for a rear-facing seat (e.g. on a train).", rev) {
             rev = it; prefs.reversed = it
