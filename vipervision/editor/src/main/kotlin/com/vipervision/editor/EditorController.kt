@@ -68,10 +68,14 @@ class PaintSession(val purpose: PaintPurpose) {
     /** Polygon: the corners tapped so far (fractions of the photo). */
     val polygon = mutableStateListOf<androidx.compose.ui.geometry.Offset>()
 
+    /** Indices of [polygon]'s corners, oldest first (for Undo). */
+    val polygonOrder = mutableListOf<Int>()
+
     /** The polygon so far becomes a stroke (3+ corners and [closed]: filled inside too). */
     fun finishPolygon(closed: Boolean, radiusPx: Float) {
         if (polygon.size >= 2) addStroke(ScreenStroke(polygon.toList(), radiusPx, exclude = false, closed = closed && polygon.size >= 3, polygon = true))
         polygon.clear()
+        polygonOrder.clear()
     }
 
     /**
@@ -119,7 +123,7 @@ class PaintSession(val purpose: PaintPurpose) {
     fun undo() {
         // A polygon being made: its last corner first.
         if (polygon.isNotEmpty()) {
-            undone.add(Corner(polygon.removeAt(polygon.lastIndex)))
+            removeNewestCorner(polygon, polygonOrder)?.let { undone.add(Corner(it)) }
             return
         }
         when (history.removeLastOrNull()) {
@@ -131,7 +135,7 @@ class PaintSession(val purpose: PaintPurpose) {
     /** Puts back what [undo] last took. */
     fun redo() {
         when (val item = undone.removeLastOrNull()) {
-            is Corner -> polygon.add(item.point)
+            is Corner -> insertCorner(polygon, item.point, order = polygonOrder)
             is ScreenStroke -> { strokes.add(item); history.add(false) }
             is android.graphics.Bitmap -> { selections.add(item); history.add(true) }
         }

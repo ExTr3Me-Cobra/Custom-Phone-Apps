@@ -879,7 +879,7 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             BrushShape.entries.forEach { shape ->
                 ShapePill(shape.label, session.shape == shape) {
-                    if (session.shape == BrushShape.Polygon && shape != BrushShape.Polygon) session.polygon.clear()
+                    if (session.shape == BrushShape.Polygon && shape != BrushShape.Polygon) { session.polygon.clear(); session.polygonOrder.clear() }
                     session.shape = shape
                     if (shape == BrushShape.Polygon) session.excludeMode = false
                 }

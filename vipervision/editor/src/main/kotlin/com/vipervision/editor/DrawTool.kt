@@ -107,6 +107,7 @@ class DrawSession internal constructor(
     /** Polygon's own line width: the thinnest to start with. */
     var polygonWidth by mutableStateOf(1.pt)
     val corners = androidx.compose.runtime.mutableStateListOf<androidx.compose.ui.geometry.Offset>()
+    val cornerOrder = mutableListOf<Int>()
 
     /** The canvas size the drawer works in (the drawing area's size on screen). */
     var canvasSize = androidx.compose.ui.unit.IntSize.Zero
@@ -136,6 +137,7 @@ class DrawSession internal constructor(
             )
         }
         corners.clear()
+        cornerOrder.clear()
     }
 
     /** The canvas as last drawn (for face detection). */
@@ -275,7 +277,7 @@ internal fun DrawScreen(
                     ) {
                         val canFinish = session.corners.size >= 2
                         Pill(if (session.corners.isEmpty()) "Tap the corners" else "Undo corner", false) {
-                            session.corners.removeLastOrNull()
+                            removeNewestCorner(session.corners, session.cornerOrder)
                         }
                         if (canFinish) Pill("Finish", true, filled = true) { session.finishPolygon(closed = true) }
                     }
@@ -363,7 +365,7 @@ internal fun DrawScreen(
                 val on = component.drawPathMode is com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Line && !session.polygonOn
                 ShapeBubble("Line", Icons.Rounded.Line, on) {
                     session.polygonOn = false
-                    session.corners.clear()
+                    session.corners.clear(); session.cornerOrder.clear()
                     component.updateDrawPathMode(
                         if (on) com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free
                         else com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Line
@@ -493,7 +495,7 @@ private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
                         // A tap on the first corner closes the shape.
                         grab == 0 && session.corners.size >= 3 -> session.finishPolygon(closed = true)
                         grab != null -> Unit
-                        !moved -> session.corners.add(down.position)
+                        !moved -> insertCorner(session.corners, down.position, order = session.cornerOrder)
                     }
                 }
             }

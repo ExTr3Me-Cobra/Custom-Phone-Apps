@@ -194,7 +194,8 @@ internal fun PaintOverlay(
                             val image = fittedImageRect(viewSize.width, viewSize.height, imageWidth, imageHeight)
                             val nearFirst = first != null && session.polygon.size >= 3 &&
                                     Offset((p.x - first.x) * image.width, (p.y - first.y) * image.height).getDistance() * zoom.scale < 28.dp.toPx()
-                            if (nearFirst) session.finishPolygon(closed = true, radiusPx = currentPolygonRadius) else session.polygon.add(p)
+                            if (nearFirst) session.finishPolygon(closed = true, radiusPx = currentPolygonRadius)
+                            else insertCorner(session.polygon, p, image.width, image.height, session.polygonOrder)
                         }
                         session.shape == BrushShape.Free && tapped != null && isTap -> tapped(points.first())
                         current.isNotEmpty() -> session.addStroke(ScreenStroke(points, radius, session.excludeMode))

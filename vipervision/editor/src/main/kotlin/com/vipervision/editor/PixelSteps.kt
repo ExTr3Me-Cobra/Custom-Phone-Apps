@@ -115,6 +115,48 @@ fun Geometry.toSourceStrokes(
     }
 }
 
+/**
+ * Where a new polygon corner [p] goes: between the two neighbouring corners it's closest to (the
+ * side whose detour through [p] is shortest), so the outline doesn't cross itself however the
+ * corners are tapped. [sx]/[sy] turn the points' units into the same scale both ways.
+ */
+fun insertCorner(corners: MutableList<Offset>, p: Offset, sx: Float = 1f, sy: Float = 1f, order: MutableList<Int>? = null) {
+    fun put(index: Int) {
+        corners.add(index, p)
+        // Newest last; later corners moved up by one.
+        order?.let { o ->
+            for (k in o.indices) if (o[k] >= index) o[k] = o[k] + 1
+            o.add(index)
+        }
+    }
+    if (corners.size < 3) {
+        put(corners.size)
+        return
+    }
+    fun d(a: Offset, b: Offset) = Offset((a.x - b.x) * sx, (a.y - b.y) * sy).getDistance()
+    var best = 0
+    var bestCost = Float.MAX_VALUE
+    for (i in corners.indices) {
+        val a = corners[i]
+        val b = corners[(i + 1) % corners.size]
+        val cost = d(a, p) + d(p, b) - d(a, b)
+        if (cost < bestCost) {
+            bestCost = cost
+            best = i
+        }
+    }
+    put(best + 1)
+}
+
+/** Takes away the corner added last (see [insertCorner]'s order); false if none. */
+fun removeNewestCorner(corners: MutableList<Offset>, order: MutableList<Int>): Offset? {
+    val index = order.removeLastOrNull() ?: corners.lastIndex.takeIf { it >= 0 } ?: return null
+    if (index !in corners.indices) return null
+    val p = corners.removeAt(index)
+    for (k in order.indices) if (order[k] > index) order[k] = order[k] - 1
+    return p
+}
+
 /** White-on-black mask of the strokes at [width] x [height], as both of Image Toolbox's heal engines expect. */
 fun renderMask(strokes: List<BrushStroke>, width: Int, height: Int): Bitmap {
     val mask = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
