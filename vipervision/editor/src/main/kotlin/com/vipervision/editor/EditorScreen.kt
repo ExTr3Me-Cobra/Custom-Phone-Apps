@@ -402,6 +402,9 @@ internal fun EditorScreen(
         Box(
             Modifier
                 .fillMaxWidth()
+                // While painting the tabs are hidden: keep the panel above the phone's own
+                // back / home buttons.
+                .then(if (compactPanel) Modifier else Modifier.navigationBarsPadding())
                 .height(if (compactPanel) COMPACT_PANEL_HEIGHT else PANEL_HEIGHT)
                 .padding(top = if (compactPanel) BUBBLES_TOP else 0.dp),
             contentAlignment = if (compactPanel) Alignment.TopCenter else Alignment.Center
@@ -506,11 +509,15 @@ private fun TopBar(
                 .clip(RoundedCornerShape(50))
                 .background(PanelGrey)
         ) {
-            IconButton(onClick = controller::undo, enabled = controller.canUndo) {
-                Icon(Icons.Rounded.Undo, "Undo", tint = if (controller.canUndo) Color.White else Color.Gray)
+            // While painting (Heal, Blemish remover), these step through the painting.
+            val paint = controller.paint
+            val canUndo = paint?.canUndo ?: controller.canUndo
+            val canRedo = paint?.canRedo ?: controller.canRedo
+            IconButton(onClick = { if (paint != null) paint.undo() else controller.undo() }, enabled = canUndo) {
+                Icon(Icons.Rounded.Undo, "Undo", tint = if (canUndo) Color.White else Color.Gray)
             }
-            IconButton(onClick = controller::redo, enabled = controller.canRedo) {
-                Icon(Icons.Rounded.Redo, "Redo", tint = if (controller.canRedo) Color.White else Color.Gray)
+            IconButton(onClick = { if (paint != null) paint.redo() else controller.redo() }, enabled = canRedo) {
+                Icon(Icons.Rounded.Redo, "Redo", tint = if (canRedo) Color.White else Color.Gray)
             }
         }
         Spacer(Modifier.weight(1f))
@@ -873,13 +880,8 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
             }
         }
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(if (session.generative) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (session.generative) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel", color = Color.White) }
-            val canUndo = session.hasSomething || session.polygon.isNotEmpty()
-            TextButton(
-                onClick = { session.undo() },
-                enabled = canUndo
-            ) { Text(if (session.generative) "Undo" else "Undo stroke", color = if (canUndo) Color.White else Color.Gray) }
             if (session.generative) {
                 val canSnap = session.strokes.isNotEmpty() && session.busyMessage == null
                 Text(

@@ -88,26 +88,44 @@ class PaintSession(val purpose: PaintPurpose) {
     fun addStroke(stroke: ScreenStroke) {
         strokes.add(stroke)
         history.add(false)
+        undone.clear()
     }
 
     fun addSelection(mask: android.graphics.Bitmap) {
         selections.add(mask)
         history.add(true)
+        undone.clear()
     }
 
-    /** Takes back the last stroke or selection. */
+    /** What Undo took back (a stroke, a selection or a polygon corner), for Redo. */
+    private val undone = mutableStateListOf<Any>()
+
+    val canUndo: Boolean get() = strokes.isNotEmpty() || selections.isNotEmpty() || polygon.isNotEmpty()
+    val canRedo: Boolean get() = undone.isNotEmpty()
+
+    /** Takes back the last polygon corner, stroke or selection. */
     fun undo() {
         // A polygon being made: its last corner first.
         if (polygon.isNotEmpty()) {
-            polygon.removeAt(polygon.lastIndex)
+            undone.add(Corner(polygon.removeAt(polygon.lastIndex)))
             return
         }
         when (history.removeLastOrNull()) {
-            true -> selections.removeLastOrNull()
-            false -> strokes.removeLastOrNull()
-            null -> strokes.removeLastOrNull()
+            true -> selections.removeLastOrNull()?.let { undone.add(it) }
+            else -> strokes.removeLastOrNull()?.let { undone.add(it) }
         }
     }
+
+    /** Puts back what [undo] last took. */
+    fun redo() {
+        when (val item = undone.removeLastOrNull()) {
+            is Corner -> polygon.add(item.point)
+            is ScreenStroke -> { strokes.add(item); history.add(false) }
+            is android.graphics.Bitmap -> { selections.add(item); history.add(true) }
+        }
+    }
+
+    private class Corner(val point: androidx.compose.ui.geometry.Offset)
 
     val hasSomething: Boolean get() = strokes.isNotEmpty() || selections.isNotEmpty()
 
