@@ -129,7 +129,7 @@ internal fun PaintOverlay(
                             Offset((c.x - at.x) * image.width, (c.y - at.y) * image.height).getDistance()
                         }?.takeIf { i ->
                             val c = session.polygon[i]
-                            Offset((c.x - at.x) * image.width, (c.y - at.y) * image.height).getDistance() * zoom.scale < 24.dp.toPx()
+                            Offset((c.x - at.x) * image.width, (c.y - at.y) * image.height).getDistance() * zoom.scale < 12.dp.toPx()
                         }
                         if (grab != null) {
                             var moved = false
@@ -193,7 +193,7 @@ internal fun PaintOverlay(
                             val first = session.polygon.firstOrNull()
                             val image = fittedImageRect(viewSize.width, viewSize.height, imageWidth, imageHeight)
                             val nearFirst = first != null && session.polygon.size >= 3 &&
-                                    Offset((p.x - first.x) * image.width, (p.y - first.y) * image.height).getDistance() * zoom.scale < 28.dp.toPx()
+                                    Offset((p.x - first.x) * image.width, (p.y - first.y) * image.height).getDistance() * zoom.scale < 14.dp.toPx()
                             if (nearFirst) session.finishPolygon(closed = true, radiusPx = currentPolygonRadius)
                             else insertCorner(session.polygon, p, image.width, image.height, session.polygonOrder)
                         }

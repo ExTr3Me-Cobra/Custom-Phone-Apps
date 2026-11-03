@@ -478,7 +478,7 @@ private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
             .pointerInput(session) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    val reach = with(density) { 24.dp.toPx() }
+                    val reach = with(density) { 12.dp.toPx() }
                     // Touching a corner drags it to a better spot; elsewhere a tap adds a corner.
                     val grab = session.corners.indices.minByOrNull { (session.corners[it] - down.position).getDistance() }
                         ?.takeIf { (session.corners[it] - down.position).getDistance() < reach }
