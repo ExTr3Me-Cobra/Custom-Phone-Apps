@@ -83,10 +83,10 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /** AI inpaint's modes (its bottom bubbles). */
-enum class InpaintMode(val label: String, val hint: String) {
-    Erase("Erase", "Tap what to remove. Tap it again to unselect. Brush adds what the tap missed, like a shadow."),
-    Move("Move", "Tap what to move, then drag it to its new spot."),
-    Expand("Expand", "Pick the sides to grow the photo on. Works best with sky, water, grass, sand or plain walls.")
+enum class InpaintMode(val label: String, val title: String, val hint: String) {
+    Erase("Erase", "Object Erase", "Tap what to remove. Tap it again to unselect. Brush adds what the tap missed, like a shadow."),
+    Move("Move", "Object Move", "Tap what to move, then drag it to its new spot."),
+    Expand("Expand", "Expand Image", "Pick the sides to grow the photo on. Works best with sky, water, grass, sand or plain walls.")
 }
 
 /** What a tap does to the selection. */
@@ -99,8 +99,9 @@ class SelectedObject(val points: List<MobileSAM.Point>, val mask: Bitmap)
  * One use of AI inpaint, on the upright photo as edited so far ([preview], screen size). Smart
  * select (EdgeSAM) turns taps into exact outlines; LaMa fills (see [InpaintEngine]).
  */
-class InpaintSession(val preview: Bitmap) {
-    var mode by mutableStateOf(InpaintMode.Erase)
+class InpaintSession(val preview: Bitmap, initialMode: InpaintMode) {
+    /** Each tool (Object Erase, Object Move, Expand Image) is its own bubble; the mode stays put. */
+    var mode by mutableStateOf(initialMode)
     var tapMode by mutableStateOf(TapMode.New)
 
     /** Erase: painting extra area instead of tapping. */
@@ -276,7 +277,7 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onCancel) { Icon(Icons.Rounded.Close, "Cancel", tint = Color.White) }
-            Text("AI inpaint", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            Text(session.mode.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             val ready = when (session.mode) {
                 InpaintMode.Erase -> session.hasSelection
                 InpaintMode.Move -> session.objects.isNotEmpty() && (session.moveOffset != Offset.Zero || session.moveScale != 1f)
@@ -365,6 +366,7 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 132.dp)
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
@@ -404,38 +406,6 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
             }
         }
 
-        // Mode bubbles.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            InpaintMode.entries.forEach { mode ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(68.dp)) {
-                    Box(
-                        Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(if (session.mode == mode) accent else BubbleGrey)
-                            .clickable(enabled = session.busyMessage == null) {
-                                if (session.mode == mode) return@clickable
-                                // Each mode starts fresh (an Erase selection isn't what to move).
-                                session.clear()
-                                session.brushing = false
-                                session.tapMode = TapMode.New
-                                session.mode = mode
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(mode.icon, mode.label, tint = if (session.mode == mode) accent.contentOn() else Color.White, modifier = Modifier.size(24.dp))
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(mode.label, color = Color.White, fontSize = 11.sp, maxLines = 1)
-                }
-            }
-        }
     }
 }
 
@@ -446,7 +416,7 @@ private fun TapModes(session: InpaintSession) {
     }
 }
 
-private val InpaintMode.icon: ImageVector
+internal val InpaintMode.icon: ImageVector
     get() = when (this) {
         InpaintMode.Erase -> Icons.Rounded.Eraser
         InpaintMode.Move -> EditorIcons.Move

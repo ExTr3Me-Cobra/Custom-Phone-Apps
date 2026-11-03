@@ -95,7 +95,7 @@ internal fun EditorScreen(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
-    onStartInpaint: () -> Unit,
+    onStartInpaint: (InpaintMode) -> Unit,
     onApplyInpaint: () -> Unit,
     onCancelInpaint: () -> Unit,
     onApplyCutOut: () -> Unit,
@@ -569,7 +569,7 @@ private fun AiPanel(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
-    onStartInpaint: () -> Unit
+    onStartInpaint: (InpaintMode) -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -628,16 +628,16 @@ private fun AiPanel(
                     onClick = onStartObjectEraser
                 )
             }
-            // AI inpaint: tap to erase, move an object, or expand the photo (Smart select + LaMa).
-            item {
+            // Object Erase, Object Move and Expand Image (Smart select + LaMa, see InpaintScreen).
+            items(InpaintMode.entries) { mode ->
                 AiBubble(
-                    icon = Icons.Rounded.AutoAwesome,
-                    label = "AI inpaint",
-                    download = if (lamaReady) null else "~240 MB",
-                    applied = controller.state.pixelSteps.any { it is PixelStep.Inpaint },
+                    icon = mode.icon,
+                    label = mode.title,
+                    download = if (lamaReady) null else if (mode == InpaintMode.Expand) "~200 MB" else "~240 MB",
+                    applied = controller.state.pixelSteps.any { it is PixelStep.Inpaint && it.mode == mode },
                     selected = false,
                     enabled = !controller.isBusy,
-                    onClick = onStartInpaint
+                    onClick = { onStartInpaint(mode) }
                 )
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).

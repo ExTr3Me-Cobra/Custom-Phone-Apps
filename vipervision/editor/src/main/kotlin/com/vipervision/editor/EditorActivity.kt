@@ -238,12 +238,17 @@ class EditorActivity : ComposeActivity() {
                 if (pendingInpaintDownload) {
                     AlertDialog(
                         onDismissRequest = { pendingInpaintDownload = false },
-                        title = { Text("Download AI inpaint?") },
+                        title = { Text("Download ${pendingInpaintMode.title}?") },
                         text = {
                             Text(
-                                "AI inpaint uses two AI models: Smart select (EdgeSAM, about 38 MB) finds exactly " +
-                                        "what you tap, and LaMa (about 200 MB) fills in where it was.\n\nIt's a " +
-                                        "one-time download of what's missing. After that it works offline."
+                                if (pendingInpaintMode == InpaintMode.Expand) {
+                                    "Expand Image uses the LaMa AI model (about 200 MB) to fill in the new edges.\n\n" +
+                                            "It's a one-time download. After that it works offline."
+                                } else {
+                                    "${pendingInpaintMode.title} uses two AI models: Smart select (EdgeSAM, about 38 MB) " +
+                                            "finds exactly what you tap, and LaMa (about 200 MB) fills in where it was." +
+                                            "\n\nIt's a one-time download of what's missing. After that it works offline."
+                                }
                             )
                         },
                         confirmButton = {
@@ -686,15 +691,20 @@ class EditorActivity : ComposeActivity() {
     }
 
     /** Opens AI inpaint on the photo as edited so far, downloading its models first if needed (after asking). */
-    private fun startInpaint() {
+    private fun startInpaint(mode: InpaintMode) {
         if (controller.isBusy || controller.inpaint != null) return
-        if (!LaMaProcessor.isDownloaded.value || !EdgeSAM.isDownloaded()) {
+        // Expand Image only needs LaMa; Object Erase and Move also Smart select.
+        if (!LaMaProcessor.isDownloaded.value || (mode != InpaintMode.Expand && !EdgeSAM.isDownloaded())) {
+            pendingInpaintMode = mode
             pendingInpaintDownload = true
             return
         }
         val preview = controller.workingPreview ?: return
-        controller.inpaint = InpaintSession(preview)
+        controller.inpaint = InpaintSession(preview, mode)
     }
+
+    /** The tool to open once its models are downloaded. */
+    private var pendingInpaintMode = InpaintMode.Erase
 
     private fun closeInpaint() {
         controller.inpaint?.close()
@@ -705,7 +715,7 @@ class EditorActivity : ComposeActivity() {
         if (controller.isBusy) return@launch
         controller.isBusy = true
         runCatching {
-            if (!EdgeSAM.isDownloaded()) {
+            if (pendingInpaintMode != InpaintMode.Expand && !EdgeSAM.isDownloaded()) {
                 EdgeSAM.download { controller.busyMessage = "Downloading Smart select… ${(it * 100).toInt()}%" }
                 check(EdgeSAM.isDownloaded()) { "Smart select's download didn't finish" }
             }
@@ -718,10 +728,10 @@ class EditorActivity : ComposeActivity() {
         }.onSuccess {
             controller.busyMessage = null
             controller.isBusy = false
-            startInpaint()
+            startInpaint(pendingInpaintMode)
         }.onFailure {
             ViperLog.error("EDITOR", "downloadInpaint failed", it)
-            Toast.makeText(this@EditorActivity, "Couldn't download AI inpaint: ${it.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@EditorActivity, "Couldn't download ${pendingInpaintMode.title}: ${it.message}", Toast.LENGTH_LONG).show()
         }
         controller.busyMessage = null
         controller.isBusy = false
@@ -744,7 +754,7 @@ class EditorActivity : ComposeActivity() {
         val amount = session.amount
         if (mode == InpaintMode.Erase && selections.isEmpty() || mode == InpaintMode.Move && moveMask == null || mode == InpaintMode.Expand && sides.isEmpty()) return@launch
         controller.isBusy = true
-        val label = "AI inpaint (${mode.label})"
+        val label = mode.title
         ViperLog.i("INPAINT", "$label: ${selections.size} selections, move $offset ×$scale, expand $sides ${amount}. ${ViperLog.memory()}")
         controller.busyMessage = when (mode) {
             InpaintMode.Erase -> "Erasing…"
