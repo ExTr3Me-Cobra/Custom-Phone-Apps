@@ -178,6 +178,11 @@ internal fun PaintOverlay(
         if (corners.isNotEmpty()) {
             val path = Path()
             corners.forEachIndexed { i, p -> val s = toScreen(p); if (i == 0) path.moveTo(s.x, s.y) else path.lineTo(s.x, s.y) }
+            // 3 or more corners: a shape, filled inside.
+            if (corners.size >= 3) {
+                path.close()
+                drawPath(path, brushColor)
+            }
             drawPath(path, brushColor, style = Stroke(width = radiusPx / zoom.scale * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             corners.forEachIndexed { i, p ->
                 drawCircle(Color.White, (if (i == 0) 7.dp.toPx() else 5.dp.toPx()) / zoom.scale, toScreen(p))

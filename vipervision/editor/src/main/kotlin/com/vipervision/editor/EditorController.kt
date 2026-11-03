@@ -56,7 +56,7 @@ class PaintSession(val purpose: PaintPurpose) {
     /** Polygon: the corners tapped so far (fractions of the photo). */
     val polygon = mutableStateListOf<androidx.compose.ui.geometry.Offset>()
 
-    /** The polygon so far becomes a stroke (closed = filled inside too). */
+    /** The polygon so far becomes a stroke (3+ corners and [closed]: filled inside too). */
     fun finishPolygon(closed: Boolean, radiusPx: Float) {
         if (polygon.size >= 2) addStroke(ScreenStroke(polygon.toList(), radiusPx, exclude = false, closed = closed && polygon.size >= 3))
         polygon.clear()

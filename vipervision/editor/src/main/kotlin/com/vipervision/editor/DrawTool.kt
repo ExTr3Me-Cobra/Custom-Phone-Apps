@@ -109,9 +109,11 @@ class DrawSession internal constructor(
     /** The polygon so far as one drawn path ([closed]: back to the first corner). */
     fun finishPolygon(closed: Boolean) {
         if (corners.size >= 2 && canvasSize.width > 0) {
+            // 3 or more corners: a filled shape (Image Toolbox's Lasso fills its path).
+            val filled = closed && corners.size >= 3
             val path = androidx.compose.ui.graphics.Path().apply {
                 corners.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
-                if (closed && corners.size >= 3) close()
+                if (filled) close()
             }
             component.addPath(
                 com.t8rin.imagetoolbox.feature.draw.presentation.components.UiPathPaint(
@@ -122,7 +124,8 @@ class DrawSession internal constructor(
                     isErasing = false,
                     drawMode = component.drawMode,
                     canvasSize = com.t8rin.imagetoolbox.core.domain.model.IntegerSize(canvasSize.width, canvasSize.height),
-                    drawPathMode = com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free,
+                    drawPathMode = if (filled) com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Lasso
+                    else com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free,
                     drawLineStyle = component.drawLineStyle
                 )
             )
@@ -269,7 +272,7 @@ internal fun DrawScreen(
                         Pill(if (session.corners.isEmpty()) "Tap the corners" else "Undo corner", false) {
                             session.corners.removeLastOrNull()
                         }
-                        if (canFinish) Pill("Finish", true, filled = true) { session.finishPolygon(closed = false) }
+                        if (canFinish) Pill("Finish", true, filled = true) { session.finishPolygon(closed = true) }
                     }
                 }
                 if (component.drawPathMode.canChangeStrokeWidth) {
@@ -356,7 +359,7 @@ internal fun DrawScreen(
             item {
                 ShapeBubble("Polygon", Icons.Rounded.Polygon, session.polygonOn) {
                     if (session.polygonOn) {
-                        session.finishPolygon(closed = false)
+                        session.finishPolygon(closed = true)
                         session.polygonOn = false
                     } else {
                         session.polygonOn = true
@@ -471,6 +474,10 @@ private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
         if (pts.isEmpty()) return@Canvas
         val path = androidx.compose.ui.graphics.Path().apply {
             pts.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
+        }
+        if (pts.size >= 3) {
+            path.close()
+            drawPath(path, session.drawColor.copy(session.alpha * 0.6f))
         }
         drawPath(path, session.drawColor.copy(session.alpha), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
         pts.forEachIndexed { i, p -> drawCircle(Color.White, if (i == 0) 7.dp.toPx() else 5.dp.toPx(), p) }

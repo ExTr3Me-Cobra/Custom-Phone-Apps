@@ -852,7 +852,7 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
         )
         Text(
             when {
-                session.shape == BrushShape.Polygon -> "Tap the corners · tap the first one to close"
+                session.shape == BrushShape.Polygon -> "Tap 3 or more corners · the inside is filled · Finish when done"
                 session.generative -> "Tap selects the whole object · Auto Borders snaps edges"
                 else -> "Pinch to zoom · brush size on the right"
             },
@@ -873,7 +873,7 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
             if (session.shape == BrushShape.Polygon) {
                 val canFinish = session.polygon.size >= 2
                 ShapePill(if (canFinish) "Finish" else "Tap corners", false, enabled = canFinish) {
-                    session.finishPolygon(closed = false, radiusPx = with(density) { session.brushRadiusDp.dp.toPx() })
+                    session.finishPolygon(closed = true, radiusPx = with(density) { session.brushRadiusDp.dp.toPx() })
                 }
             } else {
                 ShapePill("Eraser", session.excludeMode) { session.excludeMode = !session.excludeMode }
