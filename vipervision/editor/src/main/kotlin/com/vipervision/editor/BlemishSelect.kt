@@ -65,7 +65,7 @@ object BlemishSelect {
             val painted = strokeMask(group, session.shownWidthPx, shown)
             val bounds = maskBounds(painted)
             val reach = bounds?.let { max(it.width(), it.height()) * 0.2f } ?: 0f
-            val near = with(ObjectEraser) { painted.grownBy(max(reach, 6f)) }
+            val near = with(ObjectEraser) { painted.grownBy(max(reach, max(shown.width, shown.height) * 0.02f)) }
             painted.recycle()
             Canvas(outline).drawBitmap(near, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) })
             near.recycle()
@@ -123,8 +123,75 @@ object BlemishSelect {
             drawBitmap(seg, 0f, 0f, null)
         }
         seg.recycle()
+        // Smart select outlines at a quarter of the photo's size and is unsure right at the edge,
+        // so its 50% line sits a few pixels inside the object (leaving its rim and contact
+        // shadow). Anything it's at least a quarter sure of counts, and the outline then reaches
+        // a little past the edge.
+        solidify(out, EDGE_LEVEL)
+        val pad = max(EDGE_PAD_MIN, max(shown.width, shown.height) * EDGE_PAD_FRACTION)
+        dilate(out, pad.toInt())
         return out
     }
+
+    /** Grows the white of [mask] by [radius] px (a round brush around every edge pixel). */
+    private fun dilate(mask: Bitmap, radius: Int) {
+        if (radius < 1) return
+        val w = mask.width
+        val h = mask.height
+        val px = IntArray(w * h)
+        mask.getPixels(px, 0, w, 0, 0, w, h)
+        val on = BooleanArray(w * h) { Color.red(px[it]) >= 128 }
+        // Distance per row, then per column (squared-distance chamfer is overkill here): a
+        // pixel is on if any on pixel lies within the circle.
+        val offsets = (-radius..radius).map { dy ->
+            val half = kotlin.math.sqrt((radius * radius - dy * dy).toFloat()).toInt()
+            dy to half
+        }
+        // Horizontal run length to the nearest on pixel, left and right, per pixel.
+        val near = IntArray(w * h) { Int.MAX_VALUE }
+        for (y in 0 until h) {
+            var last = -1_000_000
+            for (x in 0 until w) {
+                if (on[y * w + x]) last = x
+                near[y * w + x] = x - last
+            }
+            last = 1_000_000
+            for (x in w - 1 downTo 0) {
+                if (on[y * w + x]) last = x
+                near[y * w + x] = minOf(near[y * w + x], last - x)
+            }
+        }
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (on[y * w + x]) continue
+                var hit = false
+                for ((dy, half) in offsets) {
+                    val yy = y + dy
+                    if (yy < 0 || yy >= h) continue
+                    if (near[yy * w + x] <= half) { hit = true; break }
+                }
+                if (hit) px[y * w + x] = Color.WHITE
+            }
+        }
+        mask.setPixels(px, 0, w, 0, 0, w, h)
+    }
+
+    /** White where the mask is at least [level], black elsewhere. */
+    private fun solidify(mask: Bitmap, level: Int) {
+        val row = IntArray(mask.width)
+        for (y in 0 until mask.height) {
+            mask.getPixels(row, 0, row.size, 0, y, row.size, 1)
+            for (x in row.indices) row[x] = if (Color.red(row[x]) >= level) Color.WHITE else Color.BLACK
+            mask.setPixels(row, 0, row.size, 0, y, row.size, 1)
+        }
+    }
+
+    /** How sure Smart select must be (0-255) for a pixel to count. */
+    private const val EDGE_LEVEL = 64
+
+    /** How far past the edge the outline reaches: 0.5% of the photo's long side, at least 3 px. */
+    private const val EDGE_PAD_FRACTION = 0.005f
+    private const val EDGE_PAD_MIN = 3f
 
     /** The painted strokes as a mask at [shown]'s size. */
     private fun strokeMask(strokes: List<ScreenStroke>, shownWidthPx: Float, shown: Bitmap): Bitmap {
