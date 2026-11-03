@@ -1,5 +1,7 @@
 package com.vipervision.editor
 
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -101,6 +103,9 @@ class DrawSession internal constructor(
 
     /** Polygon: tap corners to draw straight connected lines (not with the eraser). */
     var polygonOn by mutableStateOf(false)
+
+    /** Polygon's own line width: the thinnest to start with. */
+    var polygonWidth by mutableStateOf(1.pt)
     val corners = androidx.compose.runtime.mutableStateListOf<androidx.compose.ui.geometry.Offset>()
 
     /** The canvas size the drawer works in (the drawing area's size on screen). */
@@ -118,7 +123,7 @@ class DrawSession internal constructor(
             component.addPath(
                 com.t8rin.imagetoolbox.feature.draw.presentation.components.UiPathPaint(
                     path = path,
-                    strokeWidth = strokeWidth,
+                    strokeWidth = polygonWidth,
                     brushSoftness = brushSoftness,
                     drawColor = drawColor.copy(alpha),
                     isErasing = false,
@@ -275,7 +280,16 @@ internal fun DrawScreen(
                         if (canFinish) Pill("Finish", true, filled = true) { session.finishPolygon(closed = true) }
                     }
                 }
-                if (component.drawPathMode.canChangeStrokeWidth) {
+                if (session.polygonOn) {
+                    SideSlider(
+                        value = session.polygonWidth.value,
+                        range = 1f..100f,
+                        onValueChange = { session.polygonWidth = it.pt },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 6.dp)
+                    )
+                } else if (component.drawPathMode.canChangeStrokeWidth) {
                     SideSlider(
                         value = session.strokeWidth.value,
                         range = if (drawMode is DrawMode.Image) 10f..120f else 1f..100f,
@@ -460,12 +474,26 @@ private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
         modifier
             .then(Modifier.onSizeChanged { session.canvasSize = it })
             .pointerInput(session) {
-                detectTapGestures { p ->
-                    val first = session.corners.firstOrNull()
-                    if (first != null && session.corners.size >= 3 && (p - first).getDistance() < with(density) { 28.dp.toPx() }) {
-                        session.finishPolygon(closed = true)
-                    } else {
-                        session.corners.add(p)
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val reach = with(density) { 24.dp.toPx() }
+                    // Touching a corner drags it to a better spot; elsewhere a tap adds a corner.
+                    val grab = session.corners.indices.minByOrNull { (session.corners[it] - down.position).getDistance() }
+                        ?.takeIf { (session.corners[it] - down.position).getDistance() < reach }
+                    var moved = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.pressed } ?: break
+                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                        if (moved && grab != null) session.corners[grab] = change.position
+                        change.consume()
+                    }
+                    when {
+                        grab != null && moved -> Unit
+                        // A tap on the first corner closes the shape.
+                        grab == 0 && session.corners.size >= 3 -> session.finishPolygon(closed = true)
+                        grab != null -> Unit
+                        !moved -> session.corners.add(down.position)
                     }
                 }
             }
@@ -479,7 +507,9 @@ private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
             path.close()
             drawPath(path, session.drawColor.copy(session.alpha * 0.6f))
         }
-        drawPath(path, session.drawColor.copy(session.alpha), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+        // About as thick as it will be drawn (the width is a share of the canvas size).
+        val width = (session.polygonWidth.value / 500f * minOf(size.width, size.height)).coerceAtLeast(1.5f)
+        drawPath(path, session.drawColor.copy(session.alpha), style = androidx.compose.ui.graphics.drawscope.Stroke(width = width))
         pts.forEachIndexed { i, p -> drawCircle(Color.White, if (i == 0) 7.dp.toPx() else 5.dp.toPx(), p) }
     }
 }

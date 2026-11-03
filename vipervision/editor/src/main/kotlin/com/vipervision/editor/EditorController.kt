@@ -53,12 +53,24 @@ class PaintSession(val purpose: PaintPurpose) {
     /** Free painting, straight lines, or a polygon of tapped corners. */
     var shape by mutableStateOf(BrushShape.Free)
 
+    /** Polygon's own line thickness (radius in dp): thinnest to start with. */
+    var polygonRadiusDp by mutableFloatStateOf(BrushRadiusRange.start)
+
+    /** Changes Polygon's thickness, also of polygons already finished ([px]: the same on screen). */
+    fun setPolygonRadius(dp: Float, px: Float) {
+        polygonRadiusDp = dp
+        for (i in strokes.indices) {
+            val s = strokes[i]
+            if (s.polygon && s.radiusPx != px) strokes[i] = s.copy(radiusPx = px)
+        }
+    }
+
     /** Polygon: the corners tapped so far (fractions of the photo). */
     val polygon = mutableStateListOf<androidx.compose.ui.geometry.Offset>()
 
     /** The polygon so far becomes a stroke (3+ corners and [closed]: filled inside too). */
     fun finishPolygon(closed: Boolean, radiusPx: Float) {
-        if (polygon.size >= 2) addStroke(ScreenStroke(polygon.toList(), radiusPx, exclude = false, closed = closed && polygon.size >= 3))
+        if (polygon.size >= 2) addStroke(ScreenStroke(polygon.toList(), radiusPx, exclude = false, closed = closed && polygon.size >= 3, polygon = true))
         polygon.clear()
     }
 

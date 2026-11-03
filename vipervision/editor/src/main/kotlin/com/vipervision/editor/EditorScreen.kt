@@ -347,7 +347,7 @@ internal fun EditorScreen(
                 var adjustingBrush by remember { mutableStateOf(false) }
                 if (adjustingBrush) {
                     // How big the brush is, at the same size it paints on screen.
-                    val radius = paint.brushRadiusDp.dp
+                    val radius = (if (paint.shape == BrushShape.Polygon) paint.polygonRadiusDp else paint.brushRadiusDp).dp
                     Box(
                         Modifier
                             .size(radius * 2)
@@ -355,13 +355,27 @@ internal fun EditorScreen(
                             .background(Color(0x55FF3B30), CircleShape)
                     )
                 }
-                BrushSizeSlider(
-                    session = paint,
-                    onAdjusting = { adjustingBrush = it },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 6.dp)
-                )
+                if (paint.shape == BrushShape.Polygon) {
+                    // Polygon's own thickness: also changes polygons already finished.
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    SideSlider(
+                        value = paint.polygonRadiusDp,
+                        range = BrushRadiusRange,
+                        onValueChange = { dp -> paint.setPolygonRadius(dp, with(density) { dp.dp.toPx() }) },
+                        onAdjusting = { adjustingBrush = it },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 6.dp)
+                    )
+                } else {
+                    BrushSizeSlider(
+                        session = paint,
+                        onAdjusting = { adjustingBrush = it },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 6.dp)
+                    )
+                }
             }
             if (showOriginal) {
                 Text(
@@ -873,7 +887,7 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
             if (session.shape == BrushShape.Polygon) {
                 val canFinish = session.polygon.size >= 2
                 ShapePill(if (canFinish) "Finish" else "Tap corners", false, enabled = canFinish) {
-                    session.finishPolygon(closed = true, radiusPx = with(density) { session.brushRadiusDp.dp.toPx() })
+                    session.finishPolygon(closed = true, radiusPx = with(density) { session.polygonRadiusDp.dp.toPx() })
                 }
             } else {
                 ShapePill("Eraser", session.excludeMode) { session.excludeMode = !session.excludeMode }

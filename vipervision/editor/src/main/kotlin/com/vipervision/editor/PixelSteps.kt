@@ -62,7 +62,14 @@ data class BrushStroke(
  * A stroke being painted on screen: points as fractions of the shown photo, radius in screen pixels.
  * [exclude] marks Cut out's "not this" brush.
  */
-data class ScreenStroke(val points: List<Offset>, val radiusPx: Float, val exclude: Boolean = false, val closed: Boolean = false)
+data class ScreenStroke(
+    val points: List<Offset>,
+    val radiusPx: Float,
+    val exclude: Boolean = false,
+    val closed: Boolean = false,
+    /** Made with the Polygon tool: its thickness follows the Polygon slider, even once finished. */
+    val polygon: Boolean = false
+)
 
 /**
  * Maps a point on the shown photo (fractions of the rotated and cropped image) back to the upright

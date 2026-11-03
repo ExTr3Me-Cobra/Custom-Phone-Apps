@@ -99,6 +99,9 @@ internal fun PaintOverlay(
     val density = LocalDensity.current
     val radiusPx = with(density) { session.brushRadiusDp.dp.toPx() }
     val currentRadius by rememberUpdatedState(radiusPx)
+    // Polygon lines: their own thickness, part of the photo (they zoom with it).
+    val polygonRadiusPx = with(density) { session.polygonRadiusDp.dp.toPx() }
+    val currentPolygonRadius by rememberUpdatedState(polygonRadiusPx)
     var current by remember { mutableStateOf<List<Offset>>(emptyList()) }
 
     Canvas(
@@ -117,6 +120,39 @@ internal fun PaintOverlay(
                 }
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    // Polygon: touching a corner drags it to a better spot.
+                    if (session.shape == BrushShape.Polygon) {
+                        val image = fittedImageRect(viewSize.width, viewSize.height, imageWidth, imageHeight)
+                        val at = toPhoto(down.position)
+                        val grab = session.polygon.indices.minByOrNull { i ->
+                            val c = session.polygon[i]
+                            Offset((c.x - at.x) * image.width, (c.y - at.y) * image.height).getDistance()
+                        }?.takeIf { i ->
+                            val c = session.polygon[i]
+                            Offset((c.x - at.x) * image.width, (c.y - at.y) * image.height).getDistance() * zoom.scale < 24.dp.toPx()
+                        }
+                        if (grab != null) {
+                            var moved = false
+                            var pinch = false
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.isEmpty()) break
+                                if (pressed.size >= 2) pinch = true
+                                if (!pinch) {
+                                    val pos = pressed.first().position
+                                    if ((pos - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                                    if (moved) session.polygon[grab] = toPhoto(pos)
+                                }
+                                event.changes.forEach { it.consume() }
+                            }
+                            // A tap on the first corner (not a drag) still closes the shape.
+                            if (!moved && !pinch && grab == 0 && session.polygon.size >= 3) {
+                                session.finishPolygon(closed = true, radiusPx = currentPolygonRadius)
+                            }
+                            return@awaitEachGesture
+                        }
+                    }
                     // Brush size in layout pixels, so it looks the same on screen at any zoom.
                     val radius = currentRadius / zoom.scale
                     var pinching = false
@@ -158,7 +194,7 @@ internal fun PaintOverlay(
                             val image = fittedImageRect(viewSize.width, viewSize.height, imageWidth, imageHeight)
                             val nearFirst = first != null && session.polygon.size >= 3 &&
                                     Offset((p.x - first.x) * image.width, (p.y - first.y) * image.height).getDistance() * zoom.scale < 28.dp.toPx()
-                            if (nearFirst) session.finishPolygon(closed = true, radiusPx = radius) else session.polygon.add(p)
+                            if (nearFirst) session.finishPolygon(closed = true, radiusPx = currentPolygonRadius) else session.polygon.add(p)
                         }
                         session.shape == BrushShape.Free && tapped != null && isTap -> tapped(points.first())
                         current.isNotEmpty() -> session.addStroke(ScreenStroke(points, radius, session.excludeMode))
@@ -183,7 +219,7 @@ internal fun PaintOverlay(
                 path.close()
                 drawPath(path, brushColor)
             }
-            drawPath(path, brushColor, style = Stroke(width = radiusPx / zoom.scale * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, brushColor, style = Stroke(width = polygonRadiusPx * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             corners.forEachIndexed { i, p ->
                 drawCircle(Color.White, (if (i == 0) 7.dp.toPx() else 5.dp.toPx()) / zoom.scale, toScreen(p))
             }
