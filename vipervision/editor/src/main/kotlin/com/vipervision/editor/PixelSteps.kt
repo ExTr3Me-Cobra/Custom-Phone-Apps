@@ -49,13 +49,20 @@ sealed interface PixelStep {
  * rotate and crop: points as fractions (0..1) of its width and height, [radius] as a fraction of
  * its longer side. That makes the same stroke work on the preview and on the full-size photo.
  */
-data class BrushStroke(val points: List<Offset>, val radius: Float)
+data class BrushStroke(
+    val points: List<Offset>,
+    val radius: Float,
+    /** The eraser: takes away what was painted before it. */
+    val exclude: Boolean = false,
+    /** A finished polygon: its inside is filled too. */
+    val closed: Boolean = false
+)
 
 /**
  * A stroke being painted on screen: points as fractions of the shown photo, radius in screen pixels.
  * [exclude] marks Cut out's "not this" brush.
  */
-data class ScreenStroke(val points: List<Offset>, val radiusPx: Float, val exclude: Boolean = false)
+data class ScreenStroke(val points: List<Offset>, val radiusPx: Float, val exclude: Boolean = false, val closed: Boolean = false)
 
 /**
  * Maps a point on the shown photo (fractions of the rotated and cropped image) back to the upright
@@ -94,7 +101,9 @@ fun Geometry.toSourceStrokes(
     return strokes.map { stroke ->
         BrushStroke(
             points = stroke.points.map(::toSource),
-            radius = stroke.radiusPx * sourcePxPerScreenPx / longSide
+            radius = stroke.radiusPx * sourcePxPerScreenPx / longSide,
+            exclude = stroke.exclude,
+            closed = stroke.closed
         )
     }
 }
@@ -104,27 +113,40 @@ fun renderMask(strokes: List<BrushStroke>, width: Int, height: Int): Bitmap {
     val mask = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(mask)
     canvas.drawColor(android.graphics.Color.BLACK)
+    drawStrokes(canvas, strokes, width, height)
+    return mask
+}
+
+/**
+ * Draws [strokes] in order on a mask [width] x [height]: painting white, the eraser black (so it
+ * takes away what's under it), closed polygons filled.
+ */
+fun drawStrokes(canvas: Canvas, strokes: List<BrushStroke>, width: Int, height: Int) {
     val longSide = max(width, height)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     for (stroke in strokes) {
+        paint.color = if (stroke.exclude) android.graphics.Color.BLACK else android.graphics.Color.WHITE
         val radius = stroke.radius * longSide
         if (stroke.points.size == 1) {
             paint.style = Paint.Style.FILL
             val p = stroke.points.first()
             canvas.drawCircle(p.x * width, p.y * height, radius, paint)
         } else {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = radius * 2f
             val path = Path()
             stroke.points.forEachIndexed { i, p ->
                 if (i == 0) path.moveTo(p.x * width, p.y * height) else path.lineTo(p.x * width, p.y * height)
             }
+            if (stroke.closed) {
+                path.close()
+                paint.style = Paint.Style.FILL
+                canvas.drawPath(path, paint)
+            }
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = radius * 2f
             canvas.drawPath(path, paint)
         }
     }
-    return mask
 }

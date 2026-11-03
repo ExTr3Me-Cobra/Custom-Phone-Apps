@@ -819,6 +819,20 @@ private fun AiBubble(
 }
 
 @Composable
+private fun ShapePill(text: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    Text(
+        text,
+        color = when { selected -> Color.Black; enabled -> Color.White; else -> Color.Gray },
+        fontSize = 13.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) Accent else BubbleGrey)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
 private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () -> Unit, onAutoBorders: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -830,14 +844,38 @@ private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () 
             fontSize = 14.sp
         )
         Text(
-            if (session.generative) "Tap selects the whole object · Auto Borders snaps painting to edges" else "Pinch to zoom · brush size on the right",
+            when {
+                session.shape == BrushShape.Polygon -> "Tap the corners · tap the first one to close"
+                session.generative -> "Tap selects the whole object · Auto Borders snaps edges"
+                else -> "Pinch to zoom · brush size on the right"
+            },
             color = Color.Gray,
             fontSize = 12.sp
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(8.dp))
+        // Brush shapes and the eraser (not for polygons).
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            BrushShape.entries.forEach { shape ->
+                ShapePill(shape.label, session.shape == shape) {
+                    if (session.shape == BrushShape.Polygon && shape != BrushShape.Polygon) session.polygon.clear()
+                    session.shape = shape
+                    if (shape == BrushShape.Polygon) session.excludeMode = false
+                }
+            }
+            if (session.shape == BrushShape.Polygon) {
+                val canFinish = session.polygon.size >= 2
+                ShapePill(if (canFinish) "Finish" else "Tap corners", false, enabled = canFinish) {
+                    session.finishPolygon(closed = false, radiusPx = with(density) { session.brushRadiusDp.dp.toPx() })
+                }
+            } else {
+                ShapePill("Eraser", session.excludeMode) { session.excludeMode = !session.excludeMode }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(if (session.generative) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel", color = Color.White) }
-            val canUndo = session.hasSomething
+            val canUndo = session.hasSomething || session.polygon.isNotEmpty()
             TextButton(
                 onClick = { session.undo() },
                 enabled = canUndo

@@ -645,13 +645,8 @@ class EditorActivity : ComposeActivity() {
                 if (session.generative && selections.isNotEmpty()) {
                     // The selections plus anything still painted, as one mask on the full photo.
                     val mask = BlemishSelect.toSourceMask(selections, geometry, full.width, full.height)
-                    if (strokes.isNotEmpty()) {
-                        val painted = renderMask(strokes, full.width, full.height)
-                        android.graphics.Canvas(mask).drawBitmap(painted, 0f, 0f, android.graphics.Paint().apply {
-                            xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.LIGHTEN)
-                        })
-                        painted.recycle()
-                    }
+                    // Painting adds, the eraser takes away (also from tapped selections).
+                    drawStrokes(android.graphics.Canvas(mask), strokes, full.width, full.height)
                     ObjectEraser.eraseMask(full, mask).also { mask.recycle() }
                 } else if (session.generative) {
                     ObjectEraser.erase(full, strokes)

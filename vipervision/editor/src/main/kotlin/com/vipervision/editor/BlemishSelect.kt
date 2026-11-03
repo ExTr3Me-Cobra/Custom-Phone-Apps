@@ -276,7 +276,7 @@ object BlemishSelect {
     private fun strokeMask(strokes: List<ScreenStroke>, shownWidthPx: Float, shown: Bitmap): Bitmap {
         val long = max(shown.width, shown.height).toFloat()
         val perScreenPx = shown.width / shownWidthPx
-        return renderMask(strokes.map { BrushStroke(it.points, it.radiusPx * perScreenPx / long) }, shown.width, shown.height)
+        return renderMask(strokes.map { BrushStroke(it.points, it.radiusPx * perScreenPx / long, it.exclude, it.closed) }, shown.width, shown.height)
     }
 
     /** The red, half see-through tint of all [selections] (null if none). */

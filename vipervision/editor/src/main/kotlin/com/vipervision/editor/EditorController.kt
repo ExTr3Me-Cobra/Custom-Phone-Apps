@@ -22,6 +22,9 @@ data class EditState(
 
 enum class EditorTab { Ai, Transform, Adjust, Decorate }
 
+/** How the brush paints: freehand, straight lines, or a polygon of tapped corners. */
+enum class BrushShape(val label: String) { Free("Free"), Line("Line"), Polygon("Polygon") }
+
 /** What a painting session is for. */
 enum class PaintPurpose { Heal, Erase }
 
@@ -44,8 +47,20 @@ class PaintSession(val purpose: PaintPurpose) {
     /** How wide the photo is on screen while painting, to convert the brush size. */
     var shownWidthPx = 0f
 
-    /** Cut out's Smart select: the next strokes mark what to leave out. */
+    /** Cut out's Smart select: the next strokes mark what to leave out. Blemish remover: the eraser. */
     var excludeMode by mutableStateOf(false)
+
+    /** Free painting, straight lines, or a polygon of tapped corners. */
+    var shape by mutableStateOf(BrushShape.Free)
+
+    /** Polygon: the corners tapped so far (fractions of the photo). */
+    val polygon = mutableStateListOf<androidx.compose.ui.geometry.Offset>()
+
+    /** The polygon so far becomes a stroke (closed = filled inside too). */
+    fun finishPolygon(closed: Boolean, radiusPx: Float) {
+        if (polygon.size >= 2) addStroke(ScreenStroke(polygon.toList(), radiusPx, exclude = false, closed = closed && polygon.size >= 3))
+        polygon.clear()
+    }
 
     /**
      * Blemish remover: whole objects picked by tapping, and paintings snapped to the object
@@ -82,6 +97,11 @@ class PaintSession(val purpose: PaintPurpose) {
 
     /** Takes back the last stroke or selection. */
     fun undo() {
+        // A polygon being made: its last corner first.
+        if (polygon.isNotEmpty()) {
+            polygon.removeAt(polygon.lastIndex)
+            return
+        }
         when (history.removeLastOrNull()) {
             true -> selections.removeLastOrNull()
             false -> strokes.removeLastOrNull()

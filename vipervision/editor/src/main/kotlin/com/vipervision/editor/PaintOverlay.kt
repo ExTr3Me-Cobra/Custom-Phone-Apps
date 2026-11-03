@@ -136,17 +136,32 @@ internal fun PaintOverlay(
                                 size = viewSize
                             )
                         } else if (!pinching) {
-                            current = current + toPhoto(pressed.first().position)
+                            val p = toPhoto(pressed.first().position)
+                            current = when (session.shape) {
+                                // A straight line from where the finger went down to where it is.
+                                BrushShape.Line -> listOf(current.first(), p)
+                                else -> current + p
+                            }
                         }
                         event.changes.forEach { it.consume() }
                     }
                     val tapped = tapHandler
                     val points = current.distinct()
                     val spread = if (points.isEmpty()) 0f else max(points.maxOf { it.x } - points.minOf { it.x }, points.maxOf { it.y } - points.minOf { it.y })
-                    if (!pinching && tapped != null && points.isNotEmpty() && spread * viewSize.width < viewConfiguration.touchSlop / zoom.scale * 2f) {
-                        tapped(points.first())
-                    } else if (!pinching && current.isNotEmpty()) {
-                        session.addStroke(ScreenStroke(points, radius, session.excludeMode))
+                    val isTap = points.isNotEmpty() && spread * viewSize.width < viewConfiguration.touchSlop / zoom.scale * 2f
+                    when {
+                        pinching -> Unit
+                        // Polygon: each tap is a corner; tapping the first corner again closes it.
+                        session.shape == BrushShape.Polygon -> if (isTap) {
+                            val p = points.first()
+                            val first = session.polygon.firstOrNull()
+                            val image = fittedImageRect(viewSize.width, viewSize.height, imageWidth, imageHeight)
+                            val nearFirst = first != null && session.polygon.size >= 3 &&
+                                    Offset((p.x - first.x) * image.width, (p.y - first.y) * image.height).getDistance() * zoom.scale < 28.dp.toPx()
+                            if (nearFirst) session.finishPolygon(closed = true, radiusPx = radius) else session.polygon.add(p)
+                        }
+                        session.shape == BrushShape.Free && tapped != null && isTap -> tapped(points.first())
+                        current.isNotEmpty() -> session.addStroke(ScreenStroke(points, radius, session.excludeMode))
                     }
                     current = emptyList()
                 }
@@ -158,8 +173,24 @@ internal fun PaintOverlay(
         fun toScreen(p: Offset) = Offset(image.left + p.x * image.width, image.top + p.y * image.height)
 
         val live = current.takeIf { it.isNotEmpty() }?.let { ScreenStroke(it.distinct(), radiusPx / zoom.scale, session.excludeMode) }
+        // The polygon being made: its corners and the lines between them.
+        val corners = session.polygon.toList()
+        if (corners.isNotEmpty()) {
+            val path = Path()
+            corners.forEachIndexed { i, p -> val s = toScreen(p); if (i == 0) path.moveTo(s.x, s.y) else path.lineTo(s.x, s.y) }
+            drawPath(path, brushColor, style = Stroke(width = radiusPx / zoom.scale * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            corners.forEachIndexed { i, p ->
+                drawCircle(Color.White, (if (i == 0) 7.dp.toPx() else 5.dp.toPx()) / zoom.scale, toScreen(p))
+            }
+        }
         for (stroke in session.strokes + listOfNotNull(live)) {
             val color = if (stroke.exclude) ExcludeColor else brushColor
+            if (stroke.closed) {
+                val fill = Path()
+                stroke.points.forEachIndexed { i, p -> val s = toScreen(p); if (i == 0) fill.moveTo(s.x, s.y) else fill.lineTo(s.x, s.y) }
+                fill.close()
+                drawPath(fill, color)
+            }
             if (stroke.points.size == 1) {
                 drawCircle(color, stroke.radiusPx, toScreen(stroke.points.first()))
             } else {

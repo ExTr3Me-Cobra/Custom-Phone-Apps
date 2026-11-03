@@ -1,5 +1,10 @@
 package com.vipervision.editor
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import com.t8rin.imagetoolbox.core.resources.icons.Polygon
+import com.t8rin.imagetoolbox.core.resources.icons.Line
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -94,6 +99,37 @@ class DrawSession internal constructor(
     var showLineAngle by mutableStateOf(false)
     var showSettings by mutableStateOf(false)
 
+    /** Polygon: tap corners to draw straight connected lines (not with the eraser). */
+    var polygonOn by mutableStateOf(false)
+    val corners = androidx.compose.runtime.mutableStateListOf<androidx.compose.ui.geometry.Offset>()
+
+    /** The canvas size the drawer works in (the drawing area's size on screen). */
+    var canvasSize = androidx.compose.ui.unit.IntSize.Zero
+
+    /** The polygon so far as one drawn path ([closed]: back to the first corner). */
+    fun finishPolygon(closed: Boolean) {
+        if (corners.size >= 2 && canvasSize.width > 0) {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                corners.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
+                if (closed && corners.size >= 3) close()
+            }
+            component.addPath(
+                com.t8rin.imagetoolbox.feature.draw.presentation.components.UiPathPaint(
+                    path = path,
+                    strokeWidth = strokeWidth,
+                    brushSoftness = brushSoftness,
+                    drawColor = drawColor.copy(alpha),
+                    isErasing = false,
+                    drawMode = component.drawMode,
+                    canvasSize = com.t8rin.imagetoolbox.core.domain.model.IntegerSize(canvasSize.width, canvasSize.height),
+                    drawPathMode = com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free,
+                    drawLineStyle = component.drawLineStyle
+                )
+            )
+        }
+        corners.clear()
+    }
+
     /** The canvas as last drawn (for face detection). */
     internal var drawingBitmap: Bitmap? = null
 
@@ -162,8 +198,11 @@ internal fun DrawScreen(
             IconButton(onClick = component::redo, enabled = component.undonePaths.isNotEmpty()) {
                 Icon(Icons.Rounded.Redo, "Redo", tint = if (component.undonePaths.isNotEmpty()) Color.White else Color.Gray)
             }
-            IconButton(onClick = { session.isEraserOn = !session.isEraserOn }) {
-                Icon(Icons.Rounded.Eraser, "Eraser", tint = if (session.isEraserOn) LocalAccent.current else Color.White)
+            IconButton(onClick = { session.isEraserOn = !session.isEraserOn }, enabled = !session.polygonOn) {
+                Icon(
+                    Icons.Rounded.Eraser, "Eraser",
+                    tint = when { session.polygonOn -> Color.DarkGray; session.isEraserOn -> LocalAccent.current; else -> Color.White }
+                )
             }
             IconButton(onClick = {
                 if (component.pendingSpotHealPaths.isNotEmpty()) component.applySpotHeal() else onApply()
@@ -214,6 +253,25 @@ internal fun DrawScreen(
                     showLineAngle = session.showLineAngle,
                     onRemovePath = component::removePath
                 )
+                if (session.polygonOn) {
+                    PolygonOverlay(
+                        session = session,
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .aspectRatio(imageBitmap.width.toFloat() / imageBitmap.height)
+                            .fillMaxSize()
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp)
+                    ) {
+                        val canFinish = session.corners.size >= 2
+                        Pill(if (session.corners.isEmpty()) "Tap the corners" else "Undo corner", false) {
+                            session.corners.removeLastOrNull()
+                        }
+                        if (canFinish) Pill("Finish", true, filled = true) { session.finishPolygon(closed = false) }
+                    }
+                }
                 if (component.drawPathMode.canChangeStrokeWidth) {
                     SideSlider(
                         value = session.strokeWidth.value,
@@ -283,6 +341,30 @@ internal fun DrawScreen(
                     Text(label, color = Color.White, fontSize = 10.sp, maxLines = 1)
                 }
             }
+            // Straight lines (also for the eraser), and polygons of tapped corners.
+            item {
+                val on = component.drawPathMode is com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Line && !session.polygonOn
+                ShapeBubble("Line", Icons.Rounded.Line, on) {
+                    session.polygonOn = false
+                    session.corners.clear()
+                    component.updateDrawPathMode(
+                        if (on) com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free
+                        else com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Line
+                    )
+                }
+            }
+            item {
+                ShapeBubble("Polygon", Icons.Rounded.Polygon, session.polygonOn) {
+                    if (session.polygonOn) {
+                        session.finishPolygon(closed = false)
+                        session.polygonOn = false
+                    } else {
+                        session.polygonOn = true
+                        session.isEraserOn = false
+                        component.updateDrawPathMode(com.t8rin.imagetoolbox.feature.draw.domain.DrawPathMode.Free)
+                    }
+                }
+            }
             item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
                     Box(
@@ -345,6 +427,53 @@ internal fun DrawScreen(
                 Spacer(Modifier.navigationBarsPadding().height(16.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun ShapeBubble(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(if (selected) LocalAccent.current else BubbleGrey)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) { Icon(icon, label, tint = if (selected) LocalAccent.current.contentOn() else Color.White, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.height(3.dp))
+        Text(label, color = Color.White, fontSize = 10.sp, maxLines = 1)
+    }
+}
+
+/**
+ * Polygon: each tap is a corner joined to the last by a straight line; tapping the first corner
+ * again closes the shape. Drawn in the drawer's own canvas pixels (same box as the drawer).
+ */
+@Composable
+private fun PolygonOverlay(session: DrawSession, modifier: Modifier) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.foundation.Canvas(
+        modifier
+            .then(Modifier.onSizeChanged { session.canvasSize = it })
+            .pointerInput(session) {
+                detectTapGestures { p ->
+                    val first = session.corners.firstOrNull()
+                    if (first != null && session.corners.size >= 3 && (p - first).getDistance() < with(density) { 28.dp.toPx() }) {
+                        session.finishPolygon(closed = true)
+                    } else {
+                        session.corners.add(p)
+                    }
+                }
+            }
+    ) {
+        val pts = session.corners.toList()
+        if (pts.isEmpty()) return@Canvas
+        val path = androidx.compose.ui.graphics.Path().apply {
+            pts.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
+        }
+        drawPath(path, session.drawColor.copy(session.alpha), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+        pts.forEachIndexed { i, p -> drawCircle(Color.White, if (i == 0) 7.dp.toPx() else 5.dp.toPx(), p) }
     }
 }
 
