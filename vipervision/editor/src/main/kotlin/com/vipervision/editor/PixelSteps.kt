@@ -18,7 +18,12 @@ sealed interface PixelStep {
      * Fills in the painted area: with Image Toolbox's content-aware fill (OpenCV, [generative] =
      * false, the Heal bubble) or its LaMa AI model ([generative] = true, the Object eraser).
      */
-    data class Heal(val strokes: List<BrushStroke>, val generative: Boolean) : PixelStep
+    data class Heal(
+        val strokes: List<BrushStroke>,
+        val generative: Boolean,
+        /** Set when tapped selections or Auto Borders are part of it (they aren't in [strokes]). */
+        val selectionId: Long = 0L
+    ) : PixelStep
 
     /** The Cut out tool's result (background removed by models, brushes and/or Smart select). */
     data class CutOut(val id: Long = System.nanoTime()) : PixelStep
@@ -34,9 +39,6 @@ sealed interface PixelStep {
 
     /** The Draw tool's (or Markup layers') result. */
     data class Drawing(val id: Long = System.nanoTime()) : PixelStep
-
-    /** Object Erase or Object Move's result (Smart select + LaMa). */
-    data class Inpaint(val mode: InpaintMode, val id: Long = System.nanoTime()) : PixelStep
 
     /** A model from "All AI models"; [alpha] when its result has transparency. */
     data class AiModel(val modelName: String, val alpha: Boolean, val id: Long = System.nanoTime()) : PixelStep

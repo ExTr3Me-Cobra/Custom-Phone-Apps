@@ -1,5 +1,7 @@
 package com.vipervision.editor
 
+import kotlinx.coroutines.launch
+import android.widget.Toast
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -95,9 +97,6 @@ internal fun EditorScreen(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
-    onStartInpaint: (InpaintMode) -> Unit,
-    onApplyInpaint: () -> Unit,
-    onCancelInpaint: () -> Unit,
     onApplyCutOut: () -> Unit,
     onCancelCutOut: () -> Unit,
     onNeedSamDownload: () -> Unit,
@@ -120,6 +119,7 @@ internal fun EditorScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     // The photo the edits apply to: the original, or the result of any AI steps.
     val base = controller.workingPreview
 
@@ -181,12 +181,6 @@ internal fun EditorScreen(
 
     controller.draw?.let { session ->
         DrawScreen(session = session, onCancel = onCancelDraw, onApply = onApplyDraw)
-        if (controller.isBusy) BusyOverlay(controller.busyMessage)
-        return
-    }
-
-    controller.inpaint?.let { session ->
-        InpaintScreen(session = session, onCancel = onCancelInpaint, onApply = onApplyInpaint)
         if (controller.isBusy) BusyOverlay(controller.busyMessage)
         return
     }
@@ -301,13 +295,55 @@ internal fun EditorScreen(
             // Painting over something to heal or erase.
             val paint = controller.paint
             if (paint != null && shown != null && !cropMode) {
+                // Blemish remover: what's been tapped or snapped (Smart select), tinted red.
+                if (paint.generative) {
+                    LaunchedEffect(paint) {
+                        snapshotFlow { paint.selections.toList() }.collect { list ->
+                            paint.selectionTint = withContext(Dispatchers.Default) { BlemishSelect.tint(list) }
+                        }
+                    }
+                    paint.selectionTint?.let { tinted ->
+                        Image(
+                            bitmap = remember(tinted) { tinted.asImageBitmap() },
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = with(paintZoom) { imageModifier.zoomed() }
+                        )
+                    }
+                }
+                val samReady = paint.generative && com.t8rin.neural_tools.bgremover.EdgeSAM.isDownloaded()
                 PaintOverlay(
                     imageWidth = shown.width,
                     imageHeight = shown.height,
                     session = paint,
                     zoom = paintZoom,
-                    modifier = imageModifier
+                    modifier = imageModifier,
+                    // Tap: Smart select picks the whole object (tap it again to unselect).
+                    onTap = if (samReady) { point ->
+                        if (paint.busyMessage == null) scope.launch {
+                            paint.busyMessage = if (paint.sam == null) "Getting Smart select ready…" else "Selecting…"
+                            runCatching { withContext(Dispatchers.Default) { BlemishSelect.tap(paint, shown, point) } }
+                                .onFailure {
+                                    ViperLog.error("PAINT", "tap select failed", it)
+                                    Toast.makeText(context, "Couldn't select that: ${it.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            paint.busyMessage = null
+                        }
+                    } else null
                 )
+                paint.busyMessage?.let { message ->
+                    Text(
+                        message,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
                 var adjustingBrush by remember { mutableStateOf(false) }
                 if (adjustingBrush) {
                     // How big the brush is, at the same size it paints on screen.
@@ -374,13 +410,29 @@ internal fun EditorScreen(
             if (paint != null) {
                 PaintPanel(
                     session = paint,
-                    onCancel = { controller.paint = null },
-                    onApply = onApplyPaint
+                    onCancel = { paint.close(); controller.paint = null },
+                    onApply = onApplyPaint,
+                    onAutoBorders = {
+                        val shownNow = controller.editedPreview ?: controller.workingPreview
+                        if (shownNow != null && paint.busyMessage == null && paint.strokes.isNotEmpty()) scope.launch {
+                            if (!com.t8rin.neural_tools.bgremover.EdgeSAM.isDownloaded()) {
+                                Toast.makeText(context, "Auto Borders needs Smart select: download it in Settings → AI models", Toast.LENGTH_LONG).show()
+                                return@launch
+                            }
+                            paint.busyMessage = "Snapping to the edges…"
+                            runCatching { withContext(Dispatchers.Default) { BlemishSelect.autoBorders(paint, shownNow) } }
+                                .onFailure {
+                                    ViperLog.error("PAINT", "Auto Borders failed", it)
+                                    Toast.makeText(context, "Auto Borders failed: ${it.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            paint.busyMessage = null
+                        }
+                    }
                 )
             } else {
                 when (controller.tab) {
                     EditorTab.Adjust -> AdjustPanel(controller)
-                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartInpaint)
+                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool)
                     EditorTab.Transform -> TransformPanel(controller, onStartCropStudio)
                     EditorTab.Decorate -> DecoratePanel(controller, onStartDraw, onStartMarkup)
                 }
@@ -568,8 +620,7 @@ private fun AiPanel(
     onStartObjectEraser: () -> Unit,
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
-    onSamsungTool: (SamsungTool) -> Unit,
-    onStartInpaint: (InpaintMode) -> Unit
+    onSamsungTool: (SamsungTool) -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -626,18 +677,6 @@ private fun AiPanel(
                     selected = false,
                     enabled = !controller.isBusy,
                     onClick = onStartObjectEraser
-                )
-            }
-            // Object Erase and Object Move (Smart select + LaMa, see InpaintScreen).
-            items(InpaintMode.entries) { mode ->
-                AiBubble(
-                    icon = mode.icon,
-                    label = mode.title,
-                    download = if (lamaReady) null else "~240 MB",
-                    applied = controller.state.pixelSteps.any { it is PixelStep.Inpaint && it.mode == mode },
-                    selected = false,
-                    enabled = !controller.isBusy,
-                    onClick = { onStartInpaint(mode) }
                 )
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).
@@ -780,37 +819,52 @@ private fun AiBubble(
 }
 
 @Composable
-private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () -> Unit) {
+private fun PaintPanel(session: PaintSession, onCancel: () -> Unit, onApply: () -> Unit, onAutoBorders: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
             when (session.purpose) {
-                PaintPurpose.Erase -> "Blemish remover — paint over what to remove"
+                PaintPurpose.Erase -> "Blemish remover — paint over it, or tap it"
                 PaintPurpose.Heal -> "Heal — paint over spots and small marks (bigger things: AI Blemish remover)"
             },
             color = Color.White,
             fontSize = 14.sp
         )
         Text(
-            "Pinch to zoom · brush size on the right",
+            if (session.generative) "Tap selects the whole object · Auto Borders snaps painting to edges" else "Pinch to zoom · brush size on the right",
             color = Color.Gray,
             fontSize = 12.sp
         )
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (session.generative) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel", color = Color.White) }
+            val canUndo = session.hasSomething
             TextButton(
-                onClick = { session.strokes.removeLastOrNull() },
-                enabled = session.strokes.isNotEmpty()
-            ) { Text("Undo stroke", color = if (session.strokes.isNotEmpty()) Color.White else Color.Gray) }
+                onClick = { session.undo() },
+                enabled = canUndo
+            ) { Text(if (session.generative) "Undo" else "Undo stroke", color = if (canUndo) Color.White else Color.Gray) }
+            if (session.generative) {
+                val canSnap = session.strokes.isNotEmpty() && session.busyMessage == null
+                Text(
+                    "Auto Borders",
+                    color = if (canSnap) Color.White else Color.Gray,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(BubbleGrey)
+                        .clickable(enabled = canSnap, onClick = onAutoBorders)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+            val ready = session.hasSomething && session.busyMessage == null
             Text(
                 if (session.generative) "Erase" else "Heal",
-                color = if (session.strokes.isNotEmpty()) Color.Black else Color.DarkGray,
+                color = if (ready) Color.Black else Color.DarkGray,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (session.strokes.isNotEmpty()) Accent else BubbleGrey)
-                    .clickable(enabled = session.strokes.isNotEmpty(), onClick = onApply)
+                    .background(if (ready) Accent else BubbleGrey)
+                    .clickable(enabled = ready, onClick = onApply)
                     .padding(horizontal = 22.dp, vertical = 10.dp)
             )
         }

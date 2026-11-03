@@ -46,6 +46,55 @@ class PaintSession(val purpose: PaintPurpose) {
 
     /** Cut out's Smart select: the next strokes mark what to leave out. */
     var excludeMode by mutableStateOf(false)
+
+    /**
+     * Blemish remover: whole objects picked by tapping, and paintings snapped to the object
+     * under them (Auto Borders). Smart select's masks, white on black, the size of the photo as
+     * shown ([selectionsOf]).
+     */
+    val selections = mutableStateListOf<android.graphics.Bitmap>()
+
+    /** The photo the [selections] were made on (its size and look on screen). */
+    var selectionsOf: android.graphics.Bitmap? = null
+
+    /** Red tint of the [selections], for showing over the photo. */
+    var selectionTint by mutableStateOf<android.graphics.Bitmap?>(null)
+
+    /** What was added, newest last (true: a selection, false: a stroke), for Undo. */
+    val history = mutableListOf<Boolean>()
+
+    /** Smart select's prepared photo (opened once, then each tap is quick). */
+    internal var sam: com.t8rin.neural_tools.bgremover.EdgeSAM.Session? = null
+    internal val samLock = kotlinx.coroutines.sync.Mutex()
+
+    /** Shown over the photo while Smart select works. */
+    var busyMessage by mutableStateOf<String?>(null)
+
+    fun addStroke(stroke: ScreenStroke) {
+        strokes.add(stroke)
+        history.add(false)
+    }
+
+    fun addSelection(mask: android.graphics.Bitmap) {
+        selections.add(mask)
+        history.add(true)
+    }
+
+    /** Takes back the last stroke or selection. */
+    fun undo() {
+        when (history.removeLastOrNull()) {
+            true -> selections.removeLastOrNull()
+            false -> strokes.removeLastOrNull()
+            null -> strokes.removeLastOrNull()
+        }
+    }
+
+    val hasSomething: Boolean get() = strokes.isNotEmpty() || selections.isNotEmpty()
+
+    fun close() {
+        sam?.close()
+        sam = null
+    }
 }
 
 /** Crop frame shapes. [ratio] is width / height, or null for no fixed shape. */
@@ -138,9 +187,6 @@ class EditorController {
 
     /** Set while the user is painting over something to heal or erase. */
     var paint by mutableStateOf<PaintSession?>(null)
-
-    /** Set while AI inpaint (Erase, Move, Expand) is open. */
-    var inpaint by mutableStateOf<InpaintSession?>(null)
 
     /** Set while the Cut out tool is open. */
     var cutOut by mutableStateOf<CutOutSession?>(null)

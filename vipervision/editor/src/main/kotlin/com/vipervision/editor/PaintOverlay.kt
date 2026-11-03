@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import kotlin.math.max
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -90,8 +91,11 @@ internal fun PaintOverlay(
     session: PaintSession,
     zoom: PaintZoom,
     modifier: Modifier = Modifier,
-    brushColor: Color = BrushColor
+    brushColor: Color = BrushColor,
+    /** If set, a tap (finger down and up without moving) goes here instead of painting a dot. */
+    onTap: ((Offset) -> Unit)? = null
 ) {
+    val tapHandler by rememberUpdatedState(onTap)
     val density = LocalDensity.current
     val radiusPx = with(density) { session.brushRadiusDp.dp.toPx() }
     val currentRadius by rememberUpdatedState(radiusPx)
@@ -136,8 +140,13 @@ internal fun PaintOverlay(
                         }
                         event.changes.forEach { it.consume() }
                     }
-                    if (!pinching && current.isNotEmpty()) {
-                        session.strokes.add(ScreenStroke(current.distinct(), radius, session.excludeMode))
+                    val tapped = tapHandler
+                    val points = current.distinct()
+                    val spread = if (points.isEmpty()) 0f else max(points.maxOf { it.x } - points.minOf { it.x }, points.maxOf { it.y } - points.minOf { it.y })
+                    if (!pinching && tapped != null && points.isNotEmpty() && spread * viewSize.width < viewConfiguration.touchSlop / zoom.scale * 2f) {
+                        tapped(points.first())
+                    } else if (!pinching && current.isNotEmpty()) {
+                        session.addStroke(ScreenStroke(points, radius, session.excludeMode))
                     }
                     current = emptyList()
                 }
