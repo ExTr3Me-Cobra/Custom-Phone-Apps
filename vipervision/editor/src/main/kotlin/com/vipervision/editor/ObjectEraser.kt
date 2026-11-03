@@ -89,9 +89,6 @@ object ObjectEraser {
         }
     }
 
-    /** LaMa's fill of [mask] over the whole photo (no blending), for AI inpaint's Expand. */
-    internal fun fillOnly(image: Bitmap, mask: Bitmap): Bitmap = fill(image, mask)
-
     fun erase(image: Bitmap, strokes: List<BrushStroke>): Bitmap {
         val longSide = max(image.width, image.height)
         val grow = GROW_FRACTION * longSide

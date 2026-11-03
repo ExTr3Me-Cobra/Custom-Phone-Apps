@@ -71,7 +71,6 @@ import com.t8rin.imagetoolbox.core.resources.Icons
 import com.t8rin.imagetoolbox.core.resources.icons.Close
 import com.t8rin.imagetoolbox.core.resources.icons.Done
 import com.t8rin.imagetoolbox.core.resources.icons.Eraser
-import com.t8rin.imagetoolbox.core.resources.icons.Fullscreen
 import com.t8rin.neural_tools.bgremover.EdgeSAM
 import com.t8rin.neural_tools.bgremover.MobileSAM
 import kotlinx.coroutines.Dispatchers
@@ -85,8 +84,7 @@ import kotlin.math.roundToInt
 /** AI inpaint's modes (its bottom bubbles). */
 enum class InpaintMode(val label: String, val title: String, val hint: String) {
     Erase("Erase", "Object Erase", "Tap what to remove. Tap it again to unselect. Brush adds what the tap missed, like a shadow."),
-    Move("Move", "Object Move", "Tap what to move, then drag it to its new spot."),
-    Expand("Expand", "Expand Image", "Pick the sides to grow the photo on. Works best with sky, water, grass, sand or plain walls.")
+    Move("Move", "Object Move", "Tap what to move, then drag it to its new spot.")
 }
 
 /** What a tap does to the selection. */
@@ -100,7 +98,7 @@ class SelectedObject(val points: List<MobileSAM.Point>, val mask: Bitmap)
  * select (EdgeSAM) turns taps into exact outlines; LaMa fills (see [InpaintEngine]).
  */
 class InpaintSession(val preview: Bitmap, initialMode: InpaintMode) {
-    /** Each tool (Object Erase, Object Move, Expand Image) is its own bubble; the mode stays put. */
+    /** Each tool (Object Erase, Object Move) is its own bubble; the mode stays put. */
     var mode by mutableStateOf(initialMode)
     var tapMode by mutableStateOf(TapMode.New)
 
@@ -121,10 +119,6 @@ class InpaintSession(val preview: Bitmap, initialMode: InpaintMode) {
         internal set
     var pieceBounds by mutableStateOf<Rect?>(null)
         internal set
-
-    // Expand.
-    var sides by mutableStateOf(setOf(Side.Left, Side.Right))
-    var amount by mutableFloatStateOf(0.2f)
 
     var busyMessage by mutableStateOf<String?>(null)
 
@@ -194,7 +188,7 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
 
     // Smart select's model looks at the photo once (a second or two), then every tap is quick.
     LaunchedEffect(session.mode) {
-        if (session.mode == InpaintMode.Expand || session.sam != null) return@LaunchedEffect
+        if (session.sam != null) return@LaunchedEffect
         session.busyMessage = "Getting Smart select ready…"
         runCatching { withContext(Dispatchers.Default) { session.samLock.withLock { session.sam ?: EdgeSAM.openSession(preview).also { session.sam = it } } } }
             .onFailure {
@@ -281,7 +275,6 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
             val ready = when (session.mode) {
                 InpaintMode.Erase -> session.hasSelection
                 InpaintMode.Move -> session.objects.isNotEmpty() && (session.moveOffset != Offset.Zero || session.moveScale != 1f)
-                InpaintMode.Expand -> session.sides.isNotEmpty()
             }
             IconButton(onClick = { if (ready && session.busyMessage == null) onApply() }) {
                 Icon(Icons.Rounded.Done, "Apply", tint = if (ready) accent else Color.Gray)
@@ -296,9 +289,8 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
                 .clipToBounds(),
             contentAlignment = Alignment.Center
         ) {
-            when (session.mode) {
-                InpaintMode.Expand -> ExpandPreview(session)
-                else -> {
+            run {
+                run {
                     val moving = session.mode == InpaintMode.Move
                     Image(
                         bitmap = remember(preview) { preview.asImageBitmap() },
@@ -392,17 +384,6 @@ private fun InpaintContent(session: InpaintSession, onCancel: () -> Unit, onAppl
                         LabeledSlider("Size ${(session.moveScale * 100).roundToInt()}%", session.moveScale, 0.5f..2f) { session.moveScale = it }
                     }
                 }
-                InpaintMode.Expand -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Side.entries.forEach { side ->
-                            Pill(side.label, side in session.sides) {
-                                session.sides = if (side in session.sides) session.sides - side else session.sides + side
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    LabeledSlider("Each side ${(session.amount * 100).roundToInt()}%", session.amount, 0.05f..0.5f) { session.amount = it }
-                }
             }
         }
 
@@ -420,7 +401,6 @@ internal val InpaintMode.icon: ImageVector
     get() = when (this) {
         InpaintMode.Erase -> Icons.Rounded.Eraser
         InpaintMode.Move -> EditorIcons.Move
-        InpaintMode.Expand -> Icons.Rounded.Fullscreen
     }
 
 /**
@@ -512,30 +492,6 @@ private fun MovedPiece(
             pieceImage,
             dstOffset = IntOffset((cx - dw / 2f).roundToInt(), (cy - dh / 2f).roundToInt()),
             dstSize = IntSize(dw.roundToInt().coerceAtLeast(1), dh.roundToInt().coerceAtLeast(1))
-        )
-    }
-}
-
-/** Expand's preview: the photo inside the bigger frame, the new area in grey. */
-@Composable
-private fun ExpandPreview(session: InpaintSession) {
-    val preview = session.preview
-    val image = remember(preview) { preview.asImageBitmap() }
-    val a = session.amount
-    val l = if (Side.Left in session.sides) a else 0f
-    val r = if (Side.Right in session.sides) a else 0f
-    val t = if (Side.Top in session.sides) a else 0f
-    val b = if (Side.Bottom in session.sides) a else 0f
-    Canvas(Modifier.fillMaxSize().padding(16.dp)) {
-        val totalW = preview.width * (1f + l + r)
-        val totalH = preview.height * (1f + t + b)
-        val frame = fittedImageRect(size.width, size.height, totalW.roundToInt().coerceAtLeast(1), totalH.roundToInt().coerceAtLeast(1))
-        val k = frame.width / totalW
-        drawRect(Color(0xFF3A3A3C), topLeft = Offset(frame.left, frame.top), size = Size(frame.width, frame.height))
-        drawImage(
-            image,
-            dstOffset = IntOffset((frame.left + l * preview.width * k).roundToInt(), (frame.top + t * preview.height * k).roundToInt()),
-            dstSize = IntSize((preview.width * k).roundToInt(), (preview.height * k).roundToInt())
         )
     }
 }

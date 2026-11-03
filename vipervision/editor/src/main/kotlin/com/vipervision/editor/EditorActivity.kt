@@ -241,10 +241,7 @@ class EditorActivity : ComposeActivity() {
                         title = { Text("Download ${pendingInpaintMode.title}?") },
                         text = {
                             Text(
-                                if (pendingInpaintMode == InpaintMode.Expand) {
-                                    "Expand Image uses the LaMa AI model (about 200 MB) to fill in the new edges.\n\n" +
-                                            "It's a one-time download. After that it works offline."
-                                } else {
+                                run {
                                     "${pendingInpaintMode.title} uses two AI models: Smart select (EdgeSAM, about 38 MB) " +
                                             "finds exactly what you tap, and LaMa (about 200 MB) fills in where it was." +
                                             "\n\nIt's a one-time download of what's missing. After that it works offline."
@@ -693,8 +690,7 @@ class EditorActivity : ComposeActivity() {
     /** Opens AI inpaint on the photo as edited so far, downloading its models first if needed (after asking). */
     private fun startInpaint(mode: InpaintMode) {
         if (controller.isBusy || controller.inpaint != null) return
-        // Expand Image only needs LaMa; Object Erase and Move also Smart select.
-        if (!LaMaProcessor.isDownloaded.value || (mode != InpaintMode.Expand && !EdgeSAM.isDownloaded())) {
+        if (!LaMaProcessor.isDownloaded.value || !EdgeSAM.isDownloaded()) {
             pendingInpaintMode = mode
             pendingInpaintDownload = true
             return
@@ -715,7 +711,7 @@ class EditorActivity : ComposeActivity() {
         if (controller.isBusy) return@launch
         controller.isBusy = true
         runCatching {
-            if (pendingInpaintMode != InpaintMode.Expand && !EdgeSAM.isDownloaded()) {
+            if (!EdgeSAM.isDownloaded()) {
                 EdgeSAM.download { controller.busyMessage = "Downloading Smart select… ${(it * 100).toInt()}%" }
                 check(EdgeSAM.isDownloaded()) { "Smart select's download didn't finish" }
             }
@@ -738,8 +734,8 @@ class EditorActivity : ComposeActivity() {
     }
 
     /**
-     * AI inpaint's Apply, on the full-size photo: erases what was selected, moves it, or expands
-     * the photo (see [InpaintEngine]). The result becomes an undoable step.
+     * Object Erase / Object Move's Apply, on the full-size photo: erases or moves what was
+     * selected (see [InpaintEngine]). The result becomes an undoable step.
      */
     private fun CoroutineScope.applyInpaint(source: Uri) = launch {
         val session = controller.inpaint ?: return@launch
@@ -750,16 +746,13 @@ class EditorActivity : ComposeActivity() {
         val moveMask = if (mode == InpaintMode.Move) session.objects.lastOrNull()?.mask else null
         val offset = session.moveOffset.toPointF()
         val scale = session.moveScale
-        val sides = session.sides
-        val amount = session.amount
-        if (mode == InpaintMode.Erase && selections.isEmpty() || mode == InpaintMode.Move && moveMask == null || mode == InpaintMode.Expand && sides.isEmpty()) return@launch
+        if (mode == InpaintMode.Erase && selections.isEmpty() || mode == InpaintMode.Move && moveMask == null) return@launch
         controller.isBusy = true
         val label = mode.title
-        ViperLog.i("INPAINT", "$label: ${selections.size} selections, move $offset ×$scale, expand $sides ${amount}. ${ViperLog.memory()}")
+        ViperLog.i("INPAINT", "$label: ${selections.size} selections, move $offset ×$scale. ${ViperLog.memory()}")
         controller.busyMessage = when (mode) {
             InpaintMode.Erase -> "Erasing…"
             InpaintMode.Move -> "Moving…"
-            InpaintMode.Expand -> "Expanding…"
         }
         ObjectEraser.chooseFillSize(this@EditorActivity)
         runCatching {
@@ -771,9 +764,6 @@ class EditorActivity : ComposeActivity() {
                         if (n > 1) controller.busyMessage = "Erasing… $i of $n"
                     }
                     InpaintMode.Move -> InpaintEngine.move(full, moveMask!!, offset, scale)
-                    InpaintMode.Expand -> InpaintEngine.expand(full, sides, amount) { i, n ->
-                        controller.busyMessage = "Expanding… $i of $n"
-                    }
                 }
             }
             controller.busyMessage = "Finishing…"

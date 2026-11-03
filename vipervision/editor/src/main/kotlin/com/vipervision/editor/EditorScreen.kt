@@ -628,12 +628,12 @@ private fun AiPanel(
                     onClick = onStartObjectEraser
                 )
             }
-            // Object Erase, Object Move and Expand Image (Smart select + LaMa, see InpaintScreen).
+            // Object Erase and Object Move (Smart select + LaMa, see InpaintScreen).
             items(InpaintMode.entries) { mode ->
                 AiBubble(
                     icon = mode.icon,
                     label = mode.title,
-                    download = if (lamaReady) null else if (mode == InpaintMode.Expand) "~200 MB" else "~240 MB",
+                    download = if (lamaReady) null else "~240 MB",
                     applied = controller.state.pixelSteps.any { it is PixelStep.Inpaint && it.mode == mode },
                     selected = false,
                     enabled = !controller.isBusy,
