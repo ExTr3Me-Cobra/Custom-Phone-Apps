@@ -50,8 +50,8 @@ object BlemishSelect {
     }
 
     /**
-     * Auto Borders: each group of strokes that touch becomes Smart select's outline of the object
-     * they cover, kept to near where was painted (so it doesn't run off over a whole wall).
+     * Auto Borders: each group of strokes that touch has its edge snapped to the object's real
+     * edge, within a thin rim (see [EdgeSnap]).
      */
     suspend fun autoBorders(session: PaintSession, shown: Bitmap) {
         val strokes = session.strokes.toList()
@@ -62,21 +62,18 @@ object BlemishSelect {
             val (points, box) = samPrompt(group, session.shownWidthPx, aspect)
             val painted = strokeMask(group, session.shownWidthPx, shown)
             val bounds = maskBounds(painted)
-            val outline = segment(session, shown, points, box, bounds)
-            // Near the painting only: the painting grown by about a fifth of its size.
-            val reach = bounds?.let { max(it.width(), it.height()) * 0.2f } ?: 0f
-            val near = with(ObjectEraser) { painted.grownBy(max(reach, max(shown.width, shown.height) * 0.02f)) }
-            painted.recycle()
-            Canvas(outline).drawBitmap(near, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) })
-            near.recycle()
-            // Where it was clearly painted (well inside the strokes, not their overshooting
-            // edge), it stays selected even if Smart select left it out, like an object's dark
-            // shadowed side.
-            val core = strokeMask(group, session.shownWidthPx, shown)
-            val perScreenPx = shown.width / session.shownWidthPx
-            erode(core, (group.maxOf { it.radiusPx } * perScreenPx * CORE_SHRINK).toInt().coerceAtLeast(1))
-            Canvas(outline).drawBitmap(core, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.LIGHTEN) })
-            core.recycle()
+            // Smart select's outline only hints where the object carries on past the painting;
+            // the edge itself is found by colour in a thin rim (EdgeSnap), and the inside of the
+            // painting always stays.
+            val hint = runCatching { segment(session, shown, points, box, bounds) }
+                .onFailure { ViperLog.error("PAINT", "Smart select hint failed", it) }.getOrNull()
+            val radius = group.maxOf { it.radiusPx } * shown.width / session.shownWidthPx
+            val outline = try {
+                EdgeSnap.snap(shown, painted, hint, radius)
+            } finally {
+                painted.recycle()
+                hint?.recycle()
+            }
             if (maskBounds(outline) == null) {
                 outline.recycle()
                 continue
@@ -267,9 +264,6 @@ object BlemishSelect {
             mask.setPixels(row, 0, row.size, 0, y, row.size, 1)
         }
     }
-
-    /** How much of the brush's radius is taken off the painting's edge to find its sure core. */
-    private const val CORE_SHRINK = 0.8f
 
     /** How sure Smart select must be (0-255) for a pixel to count. */
     private const val EDGE_LEVEL = 64
