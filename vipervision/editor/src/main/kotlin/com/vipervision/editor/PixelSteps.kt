@@ -134,18 +134,50 @@ fun insertCorner(corners: MutableList<Offset>, p: Offset, sx: Float = 1f, sy: Fl
         return
     }
     fun d(a: Offset, b: Offset) = Offset((a.x - b.x) * sx, (a.y - b.y) * sy).getDistance()
-    var best = 0
+    val n = corners.size
+    // Each side the new corner could go into: its detour, and whether the two new sides would
+    // cross any other side (a folded outline, which fills patchily).
+    var best = -1
     var bestCost = Float.MAX_VALUE
-    for (i in corners.indices) {
+    var fallback = 0
+    var fallbackCost = Float.MAX_VALUE
+    for (i in 0 until n) {
         val a = corners[i]
-        val b = corners[(i + 1) % corners.size]
+        val b = corners[(i + 1) % n]
         val cost = d(a, p) + d(p, b) - d(a, b)
-        if (cost < bestCost) {
+        if (cost < fallbackCost) {
+            fallbackCost = cost
+            fallback = i
+        }
+        if (cost >= bestCost) continue
+        var crosses = false
+        for (j in 0 until n) {
+            if (j == i) continue
+            val c = corners[j]
+            val e = corners[(j + 1) % n]
+            // Sides that share a corner with the new ones touch there, which doesn't count.
+            val sharesA = j == (i - 1 + n) % n
+            val sharesB = j == (i + 1) % n
+            if (!sharesA && segmentsCross(a, p, c, e)) crosses = true
+            if (!sharesB && segmentsCross(p, b, c, e)) crosses = true
+            if (crosses) break
+        }
+        if (!crosses) {
             bestCost = cost
             best = i
         }
     }
-    put(best + 1)
+    put((if (best >= 0) best else fallback) + 1)
+}
+
+/** Whether segments [a]-[b] and [c]-[d] cross (touching at an end doesn't count). */
+private fun segmentsCross(a: Offset, b: Offset, c: Offset, d: Offset): Boolean {
+    fun side(p: Offset, q: Offset, r: Offset) = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
+    val d1 = side(c, d, a)
+    val d2 = side(c, d, b)
+    val d3 = side(a, b, c)
+    val d4 = side(a, b, d)
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
 }
 
 /** Takes away the corner added last (see [insertCorner]'s order); false if none. */

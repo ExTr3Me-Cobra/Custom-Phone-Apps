@@ -215,12 +215,13 @@ internal fun PaintOverlay(
         if (corners.isNotEmpty()) {
             val path = Path()
             corners.forEachIndexed { i, p -> val s = toScreen(p); if (i == 0) path.moveTo(s.x, s.y) else path.lineTo(s.x, s.y) }
-            // 3 or more corners: a shape, filled inside.
-            if (corners.size >= 3) {
-                path.close()
-                drawPath(path, brushColor)
+            // 3 or more corners: a shape, filled inside. Fill and outline as one even layer (drawn
+            // solid, then made see-through together), so the edge isn't darker where they overlap.
+            if (corners.size >= 3) path.close()
+            evenly(brushColor) { solid ->
+                if (corners.size >= 3) drawPath(path, solid)
+                drawPath(path, solid, style = Stroke(width = polygonRadiusPx * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
-            drawPath(path, brushColor, style = Stroke(width = polygonRadiusPx * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             corners.forEachIndexed { i, p ->
                 drawCircle(Color.White, (if (i == 0) 7.dp.toPx() else 5.dp.toPx()) / zoom.scale, toScreen(p))
             }
@@ -231,7 +232,11 @@ internal fun PaintOverlay(
                 val fill = Path()
                 stroke.points.forEachIndexed { i, p -> val s = toScreen(p); if (i == 0) fill.moveTo(s.x, s.y) else fill.lineTo(s.x, s.y) }
                 fill.close()
-                drawPath(fill, color)
+                evenly(color) { solid ->
+                    drawPath(fill, solid)
+                    drawPath(fill, solid, style = Stroke(width = stroke.radiusPx * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                }
+                continue
             }
             if (stroke.points.size == 1) {
                 drawCircle(color, stroke.radiusPx, toScreen(stroke.points.first()))
@@ -251,6 +256,17 @@ internal fun PaintOverlay(
     }
 }
 
+/** Draws [block] with [color] made solid, then the whole lot at [color]'s see-through-ness. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.evenly(
+    color: Color,
+    block: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit
+) {
+    val layer = androidx.compose.ui.graphics.Paint().apply { alpha = color.alpha }
+    drawContext.canvas.saveLayer(androidx.compose.ui.geometry.Rect(Offset.Zero, size), layer)
+    block(color.copy(alpha = 1f))
+    drawContext.canvas.restore()
+}
+
 /**
  * Upright slider for the brush size, drawn as a wedge from thin (bottom) to thick (top). Drag or
  * tap it; while it's touched, a circle the size of the brush shows over the photo's centre.
@@ -268,7 +284,11 @@ internal fun BrushSizeSlider(
     modifier = modifier
 )
 
-/** An upright wedge slider for the side of the photo: bottom is [range]'s start, top its end. */
+/**
+ * An upright wedge slider for the side of the photo: bottom is [range]'s start, top its end.
+ * Out of the way while it isn't used: a thin, faint strip at the edge. Touching it brings back the
+ * full slider until a moment after letting go.
+ */
 @Composable
 internal fun SideSlider(
     value: Float,
@@ -280,27 +300,41 @@ internal fun SideSlider(
     val accent = LocalAccent.current
     val onAdjustingNow by rememberUpdatedState(onAdjusting)
     val onChange by rememberUpdatedState(onValueChange)
+    var touching by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(touching) {
+        if (touching) expanded = true else {
+            kotlinx.coroutines.delay(1200)
+            expanded = false
+        }
+    }
+    fun adjusting(on: Boolean) {
+        touching = on
+        onAdjustingNow(on)
+    }
+    val width by androidx.compose.animation.core.animateDpAsState(if (expanded) 44.dp else 20.dp, label = "slider width")
+    val fade by androidx.compose.animation.core.animateFloatAsState(if (expanded) 1f else 0.45f, label = "slider fade")
     fun setFrom(y: Float, height: Float) {
         val f = 1f - (y / height).coerceIn(0f, 1f)
         onChange(range.start + f * (range.endInclusive - range.start))
     }
     Box(
         modifier
-            .width(44.dp)
+            .width(width)
             .height(240.dp)
             .pointerInput(range) {
                 detectTapGestures(onPress = {
-                    onAdjustingNow(true)
+                    adjusting(true)
                     setFrom(it.y, size.height.toFloat())
                     tryAwaitRelease()
-                    onAdjustingNow(false)
+                    adjusting(false)
                 })
             }
             .pointerInput(range) {
                 detectVerticalDragGestures(
-                    onDragStart = { onAdjustingNow(true); setFrom(it.y, size.height.toFloat()) },
-                    onDragEnd = { onAdjustingNow(false) },
-                    onDragCancel = { onAdjustingNow(false) },
+                    onDragStart = { adjusting(true); setFrom(it.y, size.height.toFloat()) },
+                    onDragEnd = { adjusting(false) },
+                    onDragCancel = { adjusting(false) },
                     onVerticalDrag = { change, _ ->
                         change.consume()
                         setFrom(change.position.y, size.height.toFloat())
@@ -313,21 +347,25 @@ internal fun SideSlider(
             val top = pad
             val bottom = size.height - pad
             val cx = size.width / 2f
-            // Wedge: wide at the top, narrow at the bottom.
-            val track = Path().apply {
-                moveTo(cx - 9.dp.toPx(), top)
-                lineTo(cx + 9.dp.toPx(), top)
-                lineTo(cx + 1.5.dp.toPx(), bottom)
-                lineTo(cx - 1.5.dp.toPx(), bottom)
-                close()
-            }
-            drawPath(track, Color.Black.copy(alpha = 0.45f))
-            drawPath(track, Color.White.copy(alpha = 0.7f), style = Stroke(1.dp.toPx()))
             val f = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
             val y = bottom - f * (bottom - top)
-            drawCircle(Color.Black.copy(alpha = 0.35f), 13.dp.toPx(), Offset(cx, y))
-            drawCircle(accent, 11.dp.toPx(), Offset(cx, y))
-            drawCircle(Color.White, 11.dp.toPx(), Offset(cx, y), style = Stroke(2.dp.toPx()))
+            // Grows from a thin strip into the full wedge.
+            val grow = ((size.width - 20.dp.toPx()) / 24.dp.toPx()).coerceIn(0f, 1f)
+            val wide = (2.5f + 6.5f * grow).dp.toPx()
+            val narrow = (1f + 0.5f * grow).dp.toPx()
+            val track = Path().apply {
+                moveTo(cx - wide, top)
+                lineTo(cx + wide, top)
+                lineTo(cx + narrow, bottom)
+                lineTo(cx - narrow, bottom)
+                close()
+            }
+            drawPath(track, Color.Black.copy(alpha = 0.45f * fade))
+            drawPath(track, Color.White.copy(alpha = 0.7f * fade), style = Stroke(1.dp.toPx()))
+            val knob = (5f + 6f * grow).dp.toPx()
+            drawCircle(Color.Black.copy(alpha = 0.35f * fade), knob + 2.dp.toPx(), Offset(cx, y))
+            drawCircle(accent.copy(alpha = fade), knob, Offset(cx, y))
+            drawCircle(Color.White.copy(alpha = fade), knob, Offset(cx, y), style = Stroke((1f + grow).dp.toPx()))
         }
     }
 }
