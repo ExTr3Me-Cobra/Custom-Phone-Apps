@@ -60,15 +60,23 @@ object BlemishSelect {
         val aspect = shown.width.toFloat() / shown.height
         for (group in groups(strokes, session.shownWidthPx, aspect)) {
             val (points, box) = samPrompt(group, session.shownWidthPx, aspect)
-            val outline = segment(session, shown, points, box)
-            // Near the painting only: the painting grown by about a fifth of its size.
             val painted = strokeMask(group, session.shownWidthPx, shown)
             val bounds = maskBounds(painted)
+            val outline = segment(session, shown, points, box, bounds)
+            // Near the painting only: the painting grown by about a fifth of its size.
             val reach = bounds?.let { max(it.width(), it.height()) * 0.2f } ?: 0f
             val near = with(ObjectEraser) { painted.grownBy(max(reach, max(shown.width, shown.height) * 0.02f)) }
             painted.recycle()
             Canvas(outline).drawBitmap(near, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) })
             near.recycle()
+            // Where it was clearly painted (well inside the strokes, not their overshooting
+            // edge), it stays selected even if Smart select left it out, like an object's dark
+            // shadowed side.
+            val core = strokeMask(group, session.shownWidthPx, shown)
+            val perScreenPx = shown.width / session.shownWidthPx
+            erode(core, (group.maxOf { it.radiusPx } * perScreenPx * CORE_SHRINK).toInt().coerceAtLeast(1))
+            Canvas(outline).drawBitmap(core, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.LIGHTEN) })
+            core.recycle()
             if (maskBounds(outline) == null) {
                 outline.recycle()
                 continue
@@ -109,28 +117,102 @@ object BlemishSelect {
         return groups.map { it.second }
     }
 
-    /** Smart select's outline for the prompt, white on black at [shown]'s size. */
-    private suspend fun segment(session: PaintSession, shown: Bitmap, points: List<MobileSAM.Point>, box: RectF?): Bitmap {
-        val white = Bitmap.createBitmap(shown.width, shown.height, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
+    /**
+     * Smart select's outline for the prompt, white on black at [shown]'s size. Two passes: the
+     * whole photo finds the object, then a crop around just the object (Smart select always
+     * looks at 1024 px and outlines on a 256 grid, so on the crop that grid is far finer).
+     */
+    private suspend fun segment(session: PaintSession, shown: Bitmap, points: List<MobileSAM.Point>, box: RectF?, extra: Rect? = null): Bitmap {
+        val coarse = session.samLock.withLock {
+            raw((session.sam ?: error("Smart select isn't ready")), shown, points, box)
+        }
+        solidify(coarse, EDGE_LEVEL)
+        val out = runCatching { zoomed(shown, coarse, points, box, extra) }
+            .onFailure { ViperLog.error("PAINT", "Smart select's close-up pass failed", it) }
+            .getOrNull()?.also { coarse.recycle() } ?: coarse
+        // Smart select is unsure right at the edge (its line sits a few pixels inside, leaving
+        // the rim and contact shadow): anything it's a quarter sure of counts, and the outline
+        // then reaches a little past the edge.
+        val pad = max(EDGE_PAD_MIN, max(shown.width, shown.height) * EDGE_PAD_FRACTION)
+        dilate(out, pad.toInt())
+        return out
+    }
+
+    /** Smart select on [image]: how sure it is per pixel, as white on black at [image]'s size. */
+    private fun raw(sam: EdgeSAM.Session, image: Bitmap, points: List<MobileSAM.Point>, box: RectF?): Bitmap {
+        val white = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
         val seg = try {
-            session.samLock.withLock { (session.sam ?: error("Smart select isn't ready")).segment(points = points, box = box, outputImage = white) }
+            sam.segment(points = points, box = box, outputImage = white)
         } finally {
             white.recycle()
         }
-        val out = Bitmap.createBitmap(shown.width, shown.height, Bitmap.Config.ARGB_8888)
+        val out = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
         Canvas(out).apply {
             drawColor(Color.BLACK)
             drawBitmap(seg, 0f, 0f, null)
         }
         seg.recycle()
-        // Smart select outlines at a quarter of the photo's size and is unsure right at the edge,
-        // so its 50% line sits a few pixels inside the object (leaving its rim and contact
-        // shadow). Anything it's at least a quarter sure of counts, and the outline then reaches
-        // a little past the edge.
-        solidify(out, EDGE_LEVEL)
-        val pad = max(EDGE_PAD_MIN, max(shown.width, shown.height) * EDGE_PAD_FRACTION)
-        dilate(out, pad.toInt())
         return out
+    }
+
+    /**
+     * The close-up pass: Smart select again on a crop around [coarse] (and [extra], e.g. the
+     * painting), with the same prompt moved into the crop. Null when the object already fills
+     * most of the photo (nothing to gain) or nothing was found.
+     */
+    private fun zoomed(shown: Bitmap, coarse: Bitmap, points: List<MobileSAM.Point>, box: RectF?, extra: Rect?): Bitmap? {
+        val found = maskBounds(coarse) ?: return null
+        extra?.let { found.union(it) }
+        val long = max(shown.width, shown.height)
+        if (max(found.width(), found.height()) > long * 0.7f) return null
+        val pad = max(24, (max(found.width(), found.height()) * 0.15f).toInt())
+        val crop = Rect(
+            (found.left - pad).coerceAtLeast(0), (found.top - pad).coerceAtLeast(0),
+            (found.right + pad).coerceAtMost(shown.width), (found.bottom + pad).coerceAtMost(shown.height)
+        )
+        val piece = Bitmap.createBitmap(shown, crop.left, crop.top, crop.width(), crop.height())
+        fun inCrop(x: Float, y: Float) = Offset((x * shown.width - crop.left) / crop.width(), (y * shown.height - crop.top) / crop.height())
+        val cropPoints = points.map { p -> inCrop(p.x, p.y).let { MobileSAM.Point(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f), p.positive) } }
+        // The box: the one given, or what the first pass found (a box helps it take the whole object).
+        val b = box?.let { RectF(it.left * shown.width, it.top * shown.height, it.right * shown.width, it.bottom * shown.height) }
+            ?: RectF(maskBounds(coarse)!!)
+        val cropBox = RectF(
+            ((b.left - crop.left) / crop.width()).coerceIn(0f, 1f), ((b.top - crop.top) / crop.height()).coerceIn(0f, 1f),
+            ((b.right - crop.left) / crop.width()).coerceIn(0f, 1f), ((b.bottom - crop.top) / crop.height()).coerceIn(0f, 1f)
+        )
+        val fine = try {
+            EdgeSAM.openSession(piece).use { sam -> raw(sam, piece, cropPoints, cropBox) }
+        } finally {
+            if (piece !== shown) piece.recycle()
+        }
+        solidify(fine, EDGE_LEVEL)
+        if (maskBounds(fine) == null) {
+            fine.recycle()
+            return null
+        }
+        val out = Bitmap.createBitmap(shown.width, shown.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).apply {
+            drawColor(Color.BLACK)
+            drawBitmap(fine, crop.left.toFloat(), crop.top.toFloat(), null)
+        }
+        fine.recycle()
+        return out
+    }
+
+    /** Shrinks the white of [mask] by [radius] px. */
+    private fun erode(mask: Bitmap, radius: Int) {
+        invert(mask)
+        dilate(mask, radius)
+        invert(mask)
+    }
+
+    private fun invert(mask: Bitmap) {
+        val row = IntArray(mask.width)
+        for (y in 0 until mask.height) {
+            mask.getPixels(row, 0, row.size, 0, y, row.size, 1)
+            for (x in row.indices) row[x] = if (Color.red(row[x]) >= 128) Color.BLACK else Color.WHITE
+            mask.setPixels(row, 0, row.size, 0, y, row.size, 1)
+        }
     }
 
     /** Grows the white of [mask] by [radius] px (a round brush around every edge pixel). */
@@ -185,6 +267,9 @@ object BlemishSelect {
             mask.setPixels(row, 0, row.size, 0, y, row.size, 1)
         }
     }
+
+    /** How much of the brush's radius is taken off the painting's edge to find its sure core. */
+    private const val CORE_SHRINK = 0.8f
 
     /** How sure Smart select must be (0-255) for a pixel to count. */
     private const val EDGE_LEVEL = 64
