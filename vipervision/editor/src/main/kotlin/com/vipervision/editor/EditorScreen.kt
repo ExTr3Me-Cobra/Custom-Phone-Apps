@@ -95,6 +95,9 @@ internal fun EditorScreen(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
+    onStartInpaint: () -> Unit,
+    onApplyInpaint: () -> Unit,
+    onCancelInpaint: () -> Unit,
     onApplyCutOut: () -> Unit,
     onCancelCutOut: () -> Unit,
     onNeedSamDownload: () -> Unit,
@@ -178,6 +181,12 @@ internal fun EditorScreen(
 
     controller.draw?.let { session ->
         DrawScreen(session = session, onCancel = onCancelDraw, onApply = onApplyDraw)
+        if (controller.isBusy) BusyOverlay(controller.busyMessage)
+        return
+    }
+
+    controller.inpaint?.let { session ->
+        InpaintScreen(session = session, onCancel = onCancelInpaint, onApply = onApplyInpaint)
         if (controller.isBusy) BusyOverlay(controller.busyMessage)
         return
     }
@@ -371,7 +380,7 @@ internal fun EditorScreen(
             } else {
                 when (controller.tab) {
                     EditorTab.Adjust -> AdjustPanel(controller)
-                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool)
+                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartInpaint)
                     EditorTab.Transform -> TransformPanel(controller, onStartCropStudio)
                     EditorTab.Decorate -> DecoratePanel(controller, onStartDraw, onStartMarkup)
                 }
@@ -559,7 +568,8 @@ private fun AiPanel(
     onStartObjectEraser: () -> Unit,
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
-    onSamsungTool: (SamsungTool) -> Unit
+    onSamsungTool: (SamsungTool) -> Unit,
+    onStartInpaint: () -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -616,6 +626,18 @@ private fun AiPanel(
                     selected = false,
                     enabled = !controller.isBusy,
                     onClick = onStartObjectEraser
+                )
+            }
+            // AI inpaint: tap to erase, move an object, or expand the photo (Smart select + LaMa).
+            item {
+                AiBubble(
+                    icon = Icons.Rounded.AutoAwesome,
+                    label = "AI inpaint",
+                    download = if (lamaReady) null else "~240 MB",
+                    applied = controller.state.pixelSteps.any { it is PixelStep.Inpaint },
+                    selected = false,
+                    enabled = !controller.isBusy,
+                    onClick = onStartInpaint
                 )
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).

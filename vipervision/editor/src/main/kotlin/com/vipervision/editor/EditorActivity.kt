@@ -92,6 +92,9 @@ class EditorActivity : ComposeActivity() {
     private val aiRunner by lazy { AiRunner(aiRepository) }
 
 
+    /** Set while asking whether to download AI inpaint's models (LaMa and EdgeSAM). */
+    private var pendingInpaintDownload by mutableStateOf(false)
+
     /** Set while asking whether to download the Object eraser's LaMa model. */
     private var pendingLamaDownload by mutableStateOf(false)
 
@@ -174,6 +177,9 @@ class EditorActivity : ComposeActivity() {
                     samsungAvailable = SamsungHandoff.enabled(this@EditorActivity) &&
                             (samsungEditor != null || SamsungHandoff.isSamsung),
                     onSamsungTool = { tool -> scope.sendToSamsung(source, tool) },
+                    onStartInpaint = ::startInpaint,
+                    onApplyInpaint = { scope.applyInpaint(source) },
+                    onCancelInpaint = ::closeInpaint,
                     onApplyCutOut = { scope.applyCutOut() },
                     onCancelCutOut = ::closeCutOut,
                     onNeedSamDownload = { pendingSamDownload = true },
@@ -225,6 +231,29 @@ class EditorActivity : ComposeActivity() {
                                 pendingSamDownload = false
                                 controller.cutOut?.tool = CutTool.Erase
                             }) { Text("Cancel") }
+                        }
+                    )
+                }
+
+                if (pendingInpaintDownload) {
+                    AlertDialog(
+                        onDismissRequest = { pendingInpaintDownload = false },
+                        title = { Text("Download AI inpaint?") },
+                        text = {
+                            Text(
+                                "AI inpaint uses two AI models: Smart select (EdgeSAM, about 38 MB) finds exactly " +
+                                        "what you tap, and LaMa (about 200 MB) fills in where it was.\n\nIt's a " +
+                                        "one-time download of what's missing. After that it works offline."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingInpaintDownload = false
+                                scope.downloadInpaint()
+                            }) { Text("Download") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingInpaintDownload = false }) { Text("Cancel") }
                         }
                     )
                 }
@@ -635,6 +664,7 @@ class EditorActivity : ComposeActivity() {
         runCatching {
             val input = controller.workingFile?.let(Uri::fromFile) ?: source
             val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
+            if (session.generative) ObjectEraser.chooseFillSize(this@EditorActivity)
             val output = withContext(Dispatchers.Default) {
                 if (session.generative) {
                     ObjectEraser.erase(full, strokes)
@@ -651,6 +681,101 @@ class EditorActivity : ComposeActivity() {
             Toast.makeText(this@EditorActivity, "$label failed: ${it.message}", Toast.LENGTH_LONG).show()
         }
         if (session.generative) withContext(Dispatchers.IO) { aiRunner.release() }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /** Opens AI inpaint on the photo as edited so far, downloading its models first if needed (after asking). */
+    private fun startInpaint() {
+        if (controller.isBusy || controller.inpaint != null) return
+        if (!LaMaProcessor.isDownloaded.value || !EdgeSAM.isDownloaded()) {
+            pendingInpaintDownload = true
+            return
+        }
+        val preview = controller.workingPreview ?: return
+        controller.inpaint = InpaintSession(preview)
+    }
+
+    private fun closeInpaint() {
+        controller.inpaint?.close()
+        controller.inpaint = null
+    }
+
+    private fun CoroutineScope.downloadInpaint() = launch {
+        if (controller.isBusy) return@launch
+        controller.isBusy = true
+        runCatching {
+            if (!EdgeSAM.isDownloaded()) {
+                EdgeSAM.download { controller.busyMessage = "Downloading Smart select… ${(it * 100).toInt()}%" }
+                check(EdgeSAM.isDownloaded()) { "Smart select's download didn't finish" }
+            }
+            if (!LaMaProcessor.isDownloaded.value) {
+                LaMaProcessor.startDownload().collect {
+                    controller.busyMessage = "Downloading LaMa… ${(it.currentPercent * 100).toInt()}%"
+                }
+                check(LaMaProcessor.isDownloaded.value) { "LaMa's download didn't finish" }
+            }
+        }.onSuccess {
+            controller.busyMessage = null
+            controller.isBusy = false
+            startInpaint()
+        }.onFailure {
+            ViperLog.error("EDITOR", "downloadInpaint failed", it)
+            Toast.makeText(this@EditorActivity, "Couldn't download AI inpaint: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /**
+     * AI inpaint's Apply, on the full-size photo: erases what was selected, moves it, or expands
+     * the photo (see [InpaintEngine]). The result becomes an undoable step.
+     */
+    private fun CoroutineScope.applyInpaint(source: Uri) = launch {
+        val session = controller.inpaint ?: return@launch
+        if (controller.isBusy) return@launch
+        val mode = session.mode
+        // What to do, taken before the screen closes.
+        val selections = if (mode == InpaintMode.Erase) session.selections() else emptyList()
+        val moveMask = if (mode == InpaintMode.Move) session.objects.lastOrNull()?.mask else null
+        val offset = session.moveOffset.toPointF()
+        val scale = session.moveScale
+        val sides = session.sides
+        val amount = session.amount
+        if (mode == InpaintMode.Erase && selections.isEmpty() || mode == InpaintMode.Move && moveMask == null || mode == InpaintMode.Expand && sides.isEmpty()) return@launch
+        controller.isBusy = true
+        val label = "AI inpaint (${mode.label})"
+        ViperLog.i("INPAINT", "$label: ${selections.size} selections, move $offset ×$scale, expand $sides ${amount}. ${ViperLog.memory()}")
+        controller.busyMessage = when (mode) {
+            InpaintMode.Erase -> "Erasing…"
+            InpaintMode.Move -> "Moving…"
+            InpaintMode.Expand -> "Expanding…"
+        }
+        ObjectEraser.chooseFillSize(this@EditorActivity)
+        runCatching {
+            val input = controller.workingFile?.let(Uri::fromFile) ?: source
+            val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
+            val output = withContext(Dispatchers.Default) {
+                when (mode) {
+                    InpaintMode.Erase -> InpaintEngine.erase(full, selections) { i, n ->
+                        if (n > 1) controller.busyMessage = "Erasing… $i of $n"
+                    }
+                    InpaintMode.Move -> InpaintEngine.move(full, moveMask!!, offset, scale)
+                    InpaintMode.Expand -> InpaintEngine.expand(full, sides, amount) { i, n ->
+                        controller.busyMessage = "Expanding… $i of $n"
+                    }
+                }
+            }
+            controller.busyMessage = "Finishing…"
+            storeResult(output)
+        }.onSuccess { result ->
+            controller.addPixelStep(controller.state.pixelSteps + PixelStep.Inpaint(mode), result)
+            closeInpaint()
+        }.onFailure {
+            ViperLog.error("EDITOR", "applyInpaint failed", it)
+            Toast.makeText(this@EditorActivity, "$label failed: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        withContext(Dispatchers.IO) { aiRunner.release() }
         controller.busyMessage = null
         controller.isBusy = false
     }
@@ -855,6 +980,7 @@ class EditorActivity : ComposeActivity() {
         if (isFinishing) {
             File(cacheDir, "vv_ai").deleteRecursively()
             controller.cutOut?.close()
+            controller.inpaint?.close()
             controller.draw?.close()
             controller.markup?.close()
             controller.cropStudio?.close()

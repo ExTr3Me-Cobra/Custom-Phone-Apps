@@ -139,6 +139,9 @@ class EditorController {
     /** Set while the user is painting over something to heal or erase. */
     var paint by mutableStateOf<PaintSession?>(null)
 
+    /** Set while AI inpaint (Erase, Move, Expand) is open. */
+    var inpaint by mutableStateOf<InpaintSession?>(null)
+
     /** Set while the Cut out tool is open. */
     var cutOut by mutableStateOf<CutOutSession?>(null)
 

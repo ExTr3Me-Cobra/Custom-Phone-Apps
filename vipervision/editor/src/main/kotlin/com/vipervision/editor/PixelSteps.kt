@@ -35,6 +35,9 @@ sealed interface PixelStep {
     /** The Draw tool's (or Markup layers') result. */
     data class Drawing(val id: Long = System.nanoTime()) : PixelStep
 
+    /** AI inpaint's result: [mode] Erase, Move or Expand (LaMa, with Smart select for the first two). */
+    data class Inpaint(val mode: InpaintMode, val id: Long = System.nanoTime()) : PixelStep
+
     /** A model from "All AI models"; [alpha] when its result has transparency. */
     data class AiModel(val modelName: String, val alpha: Boolean, val id: Long = System.nanoTime()) : PixelStep
 }
