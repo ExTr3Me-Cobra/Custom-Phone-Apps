@@ -79,8 +79,6 @@ class DiagnosticsActivity : ComponentActivity() {
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
-                    Spacer(Modifier.height(12.dp))
-                    PhoneCheck.Section()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(16.dp)
@@ -95,6 +93,9 @@ class DiagnosticsActivity : ComponentActivity() {
                             }
                         }
                     }
+                    // Collapsed to one line (tap it for the list), so the log keeps its room.
+                    PhoneCheck.Section()
+                    Spacer(Modifier.height(8.dp))
                     SelectionContainer(
                         Modifier
                             .weight(1f)

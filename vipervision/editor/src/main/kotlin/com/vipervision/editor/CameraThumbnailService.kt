@@ -175,11 +175,12 @@ class CameraThumbnailService : AccessibilityService() {
      * so the shortcut works on other phones too, not only with Samsung's camera.
      */
     private val cameraPackages: Set<String> by lazy {
-        val found = listOf(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA, MediaStore.ACTION_IMAGE_CAPTURE, MediaStore.INTENT_ACTION_VIDEO_CAMERA)
-            .flatMap { action ->
-                runCatching { packageManager.queryIntentActivities(Intent(action), 0) }.getOrDefault(emptyList())
-                    .map { it.activityInfo.packageName }
-            }
+        // Only the phone's own camera apps: apps like Snapchat also offer to take photos for other
+        // apps, and the invisible thumbnail button ended up over them.
+        val found = runCatching { packageManager.queryIntentActivities(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), 0) }
+            .getOrDefault(emptyList())
+            .filter { (it.activityInfo.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 }
+            .map { it.activityInfo.packageName }
         (KNOWN_CAMERAS + found).filter { it != packageName }.toSet().also {
             ViperLog.i("CAMERA", "Camera apps: ${it.joinToString()}")
         }

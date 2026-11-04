@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -145,6 +146,7 @@ object PhoneCheck {
     fun Section() {
         val context = LocalContext.current
         var items by remember { mutableStateOf(items(context)) }
+        var open by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
             while (true) {
                 delay(1000)
@@ -159,8 +161,19 @@ object PhoneCheck {
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text("Phone check", color = Color.White, fontSize = 15.sp)
-            for (item in items) {
+            val problems = items.count { it.ok == false }
+            val unknown = items.count { it.ok == null }
+            Text(
+                "Phone check: " + when {
+                    problems > 0 -> "$problems to fix"
+                    unknown > 0 -> "all fine so far ($unknown not checked yet)"
+                    else -> "all fine"
+                } + if (open) "  ▾" else "  ▸",
+                color = if (problems > 0) Color(0xFFFF6E6E) else Color.White,
+                fontSize = 15.sp,
+                modifier = Modifier.fillMaxWidth().clickable { open = !open }
+            )
+            if (open) for (item in items) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         mark(item.ok),
