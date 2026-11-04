@@ -272,6 +272,7 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             else (((skinL[i] / skinW[i]) - lum[i] - 8f) / 35f).coerceIn(0f, 1f) * region[i]
         }
         val soft = blur(hair, w, h, max(1, (faceSize * 0.004f).roundToInt()))
+        evenColour(r, g, b, soft, amount)
         if (amount > 0f) {
             // The hair's colour nearby, to fill the gaps with.
             val near = max(2, (faceSize * 0.025f).roundToInt())
@@ -299,6 +300,46 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
                     plane[i] += (bc[i] / bw[i] - plane[i]) * (-amount) * 0.85f * soft[i]
                 }
             }
+        }
+    }
+
+    /**
+     * One colour for the facial hair: its main colour comes from its more colourful hairs (greys
+     * don't count), and each hair is moved toward it, keeping its own brightness. Grey hairs move
+     * most, and with a fuller beard they're also brought to the beard's own darkness.
+     */
+    private fun evenColour(r: FloatArray, g: FloatArray, b: FloatArray, hair: FloatArray, amount: Float) {
+        var sr = 0.0
+        var sg = 0.0
+        var sb = 0.0
+        var sw = 0.0
+        val sat = FloatArray(hair.size)
+        for (i in hair.indices) {
+            if (hair[i] <= 0.05f) continue
+            val mx = max(r[i], max(g[i], b[i]))
+            val mn = min(r[i], min(g[i], b[i]))
+            sat[i] = (mx - mn) / max(1f, mx)
+            val k = hair[i] * ((sat[i] - 0.08f) / 0.2f).coerceIn(0f, 1f)
+            sr += r[i] * k; sg += g[i] * k; sb += b[i] * k; sw += k
+        }
+        if (sw < 20.0) return
+        val tr = (sr / sw).toFloat()
+        val tg = (sg / sw).toFloat()
+        val tb = (sb / sw).toFloat()
+        val tl = max(1f, 0.299f * tr + 0.587f * tg + 0.114f * tb)
+        val tmx = max(tr, max(tg, tb))
+        val tSat = ((tmx - min(tr, min(tg, tb))) / max(1f, tmx)).coerceAtLeast(0.05f)
+        val strength = kotlin.math.abs(amount)
+        for (i in hair.indices) {
+            if (hair[i] <= 0.01f) continue
+            val grey = 1f - (sat[i] / tSat).coerceIn(0f, 1f)
+            val k = (strength * hair[i] * (0.55f + 0.45f * grey)).coerceAtMost(1f)
+            var l = 0.299f * r[i] + 0.587f * g[i] + 0.114f * b[i]
+            if (amount > 0f) l += (tl - l) * 0.6f * grey
+            val f = l / tl
+            r[i] += (tr * f - r[i]) * k
+            g[i] += (tg * f - g[i]) * k
+            b[i] += (tb * f - b[i]) * k
         }
     }
 
