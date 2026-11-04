@@ -1186,11 +1186,19 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
     // A clock that never loops (so nothing jumps), in seconds.
     var time by remember { mutableFloatStateOf(0f) }
     val sparkles = remember { List(6) { SparkleState().apply { respawn(0f, first = true) } } }
-    LaunchedEffect(Unit) {
+    // Still while the AI tools are open (it carries on from where it stopped afterwards).
+    LaunchedEffect(selected) {
+        if (selected) return@LaunchedEffect
+        val from = time
         val start = withFrameNanos { it }
         while (true) {
-            withFrameNanos { now -> time = (now - start) / 1_000_000_000f }
+            withFrameNanos { now -> time = from + (now - start) / 1_000_000_000f }
         }
+    }
+    // The pulse reaches the far corners of the screen.
+    val screen = androidx.compose.ui.platform.LocalConfiguration.current
+    val reach = with(androidx.compose.ui.platform.LocalDensity.current) {
+        kotlin.math.hypot(screen.screenWidthDp.dp.toPx(), screen.screenHeightDp.dp.toPx())
     }
     val pulse = remember { androidx.compose.animation.core.Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -1200,17 +1208,24 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
             .size(52.dp)
             .drawBehind {
                 // The tap's pulse: a soft glow and a ring growing out and fading.
+                // The tap's pulse: a glowing wave spreading out across the whole screen.
                 val p = pulse.value
                 if (p < 1f) {
-                    val r = size.minDimension / 2f * (1f + 0.95f * p)
+                    val start = size.minDimension / 2f
+                    val r = start + (reach - start) * p
+                    val fade = 1f - p
+                    val band = (r * 0.35f).coerceAtLeast(1f)
                     drawCircle(
                         Brush.radialGradient(
-                            listOf(glow.copy(alpha = 0.55f * (1f - p)), glow.copy(alpha = 0f)),
+                            0f to glow.copy(alpha = 0f),
+                            ((r - band) / r).coerceIn(0f, 1f) to glow.copy(alpha = 0f),
+                            0.97f to glow.copy(alpha = 0.45f * fade),
+                            1f to glow.copy(alpha = 0f),
                             center = center, radius = r
                         ),
                         radius = r
                     )
-                    drawCircle(glow.copy(alpha = 0.9f * (1f - p)), radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx() * (1f - p) + 0.5f))
+                    drawCircle(glow.copy(alpha = 0.85f * fade), radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx() * fade + 0.5f))
                 }
             }
             .drawWithContent {
@@ -1218,7 +1233,7 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                 // Sparkles: each appears somewhere random, twinkles once (fading in and out, so
                 // none pops) and is replaced by a new one somewhere else.
                 val half = size.minDimension / 2f
-                for (s in sparkles) {
+                if (!selected) for (s in sparkles) {
                     if (time >= s.born + s.life) s.respawn(time)
                     val age = (time - s.born) / s.life
                     if (age < 0f) continue
@@ -1252,10 +1267,9 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                     val o = Offset((size.width - 24f * u) / 2f, (size.height - 24f * u) / 2f)
                     fun wave(a: Float, b: Float, c: Float) =
                         (0.5f + 0.25f * kotlin.math.sin(time * a) + 0.25f * kotlin.math.sin(time * b + c)).coerceIn(0f, 1f)
+                    // One big star in the middle (steady while the AI tools are open).
                     val stars = listOf(
-                        Triple(Offset(9.5f, 14f), 6.2f, wave(1.3f, 2.17f, 0.4f)),
-                        Triple(Offset(17.5f, 6.5f), 3.2f, wave(1.9f, 3.11f, 2.1f)),
-                        Triple(Offset(17.5f, 17.5f), 3.2f, wave(1.6f, 2.71f, 4.3f))
+                        Triple(Offset(12f, 12f), 7.5f, if (selected) 0.6f else wave(1.3f, 2.17f, 0.4f))
                     )
                     for ((at, big, t) in stars) {
                         val c = o + at * u
@@ -1268,7 +1282,7 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                 .clickable {
                     scope.launch {
                         pulse.snapTo(0f)
-                        pulse.animateTo(1f, androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                        pulse.animateTo(1f, androidx.compose.animation.core.tween(1100, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
                     }
                     onClick()
                 }
