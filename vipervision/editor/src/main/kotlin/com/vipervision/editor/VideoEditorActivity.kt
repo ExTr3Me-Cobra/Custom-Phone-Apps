@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.requiredSize
 import com.t8rin.imagetoolbox.core.resources.icons.RotateRight
 import com.t8rin.imagetoolbox.core.resources.icons.CropSmall
 import com.t8rin.imagetoolbox.core.resources.icons.Speed
+import com.t8rin.imagetoolbox.core.resources.icons.MotionMode
+import com.t8rin.neural_tools.viper.Rife
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -219,8 +221,11 @@ class VideoEditorActivity : ComponentActivity() {
         val output = File(cacheDir, "vv_video").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
             .let { File(it, "export_${System.currentTimeMillis()}.mp4") }
         runCatching {
+            state.exportLabel = "Saving video…"
             export(source, output)
-            withContext(Dispatchers.IO) { saveVideoCopy(this@VideoEditorActivity, output, source, realPath) }
+            val final = postProcess(source, output)
+            withContext(Dispatchers.IO) { saveVideoCopy(this@VideoEditorActivity, final, source, realPath) }
+            if (final !== output) final.delete()
         }.onSuccess {
             Toast.makeText(this, "Saved as a new video", Toast.LENGTH_SHORT).show()
             finish()
@@ -230,6 +235,42 @@ class VideoEditorActivity : ComponentActivity() {
         }
         output.delete()
         state.exportProgress = null
+    }
+
+    /**
+     * Steadying and smooth slow motion (see VideoPost), after Media3's export: returns the
+     * finished file ([exported] itself when neither is needed).
+     */
+    private suspend fun postProcess(source: Uri, exported: File): File {
+        val slowed = state.speed < 1f
+        if (state.stabilize == 0 && !slowed) return exported
+        // RIFE makes slow motion's missing frames; fetched the first time it's needed.
+        var smooth = slowed
+        if (slowed && !Rife.isDownloaded()) {
+            runCatching {
+                state.exportLabel = "Downloading slow-motion smoothing…"
+                Rife.download { state.exportProgress = it }
+            }.onFailure { ViperLog.error("VIDEO", "RIFE download failed (slow motion stays as it is)", it) }
+            smooth = Rife.isDownloaded()
+        }
+        if (state.stabilize == 0 && !smooth) return exported
+        val fps = withContext(Dispatchers.IO) {
+            runCatching {
+                val ex = android.media.MediaExtractor().apply { setDataSource(this@VideoEditorActivity, source, null) }
+                val t = (0 until ex.trackCount).first { ex.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)!!.startsWith("video/") }
+                val f = ex.getTrackFormat(t)
+                (if (f.containsKey(android.media.MediaFormat.KEY_FRAME_RATE)) f.getInteger(android.media.MediaFormat.KEY_FRAME_RATE).toFloat() else 30f)
+                    .also { ex.release() }
+            }.getOrDefault(30f).coerceIn(15f, 60f)
+        }
+        val out = File(exported.parentFile, "post_${System.currentTimeMillis()}.mp4")
+        withContext(Dispatchers.Default) {
+            VideoPost.process(exported, out, VideoPost.Plan(state.stabilize, smooth, fps)) { label, progress ->
+                state.exportLabel = label
+                state.exportProgress = progress
+            }
+        }
+        return out
     }
 
     private suspend fun export(source: Uri, output: File) {
@@ -364,6 +405,12 @@ class VideoEditState {
     var speedStart by mutableLongStateOf(0L)
     var speedEnd by mutableLongStateOf(0L)
 
+    /** Stabilize: 0 off, 1–3 low to high (done when saving, see VideoPost). */
+    var stabilize by mutableIntStateOf(0)
+
+    /** What's happening while saving. */
+    var exportLabel by mutableStateOf("Saving video…")
+
     /** Rotate: quarter turns clockwise. */
     var turns by mutableIntStateOf(0)
 
@@ -380,11 +427,11 @@ class VideoEditState {
 
     val changed: Boolean
         get() = !adjustments.isIdentity || trimStart > 0 || (durationMs > 0 && trimEnd < durationMs) ||
-            speed != 1f || turns % 4 != 0 || cropRatio != null
+            speed != 1f || turns % 4 != 0 || cropRatio != null || stabilize > 0
 }
 
 /** The video editor's tools besides the dials. */
-enum class VideoTool(val label: String) { Trim("Trim"), Speed("Speed"), Crop("Crop"), Rotate("Rotate") }
+enum class VideoTool(val label: String) { Trim("Trim"), Speed("Speed"), Crop("Crop"), Rotate("Rotate"), Stabilize("Stabilize") }
 
 /** Speeds offered. */
 private val Speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f)
@@ -637,6 +684,7 @@ private fun VideoEditorScreen(
                     VideoTool.Speed -> Icons.Rounded.Speed
                     VideoTool.Crop -> Icons.Rounded.CropSmall
                     VideoTool.Rotate -> Icons.Rounded.RotateRight
+                    VideoTool.Stabilize -> Icons.Outlined.MotionMode
                 }
                 Box(
                     Modifier
@@ -683,6 +731,14 @@ private fun VideoEditorScreen(
                     VideoTool.Crop -> ChoiceRow(CropRatios.map { it.first }, CropRatios.indexOfFirst { it.second == state.cropRatio }) {
                         state.cropRatio = CropRatios[it].second
                     }
+                    VideoTool.Stabilize -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ChoiceRow(listOf("Off", "Low", "Medium", "High"), state.stabilize) { state.stabilize = it }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (state.stabilize == 0) "Steadies shaky video" else "Steadied when you save (a little zoomed in)",
+                            color = Color.Gray, fontSize = 12.sp
+                        )
+                    }
                     VideoTool.Rotate -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         ChoicePill("↺  Left", false) { state.turns = (state.turns + 3) % 4 }
                         Text("${(state.turns % 4) * 90}°", color = Color.White, fontSize = 15.sp)
@@ -712,7 +768,7 @@ private fun VideoEditorScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(progress = { progress }, color = Accent)
                 Spacer(Modifier.height(12.dp))
-                Text("Saving video… ${(progress * 100).roundToInt()}%", color = Color.White)
+                Text("${state.exportLabel} ${(progress * 100).roundToInt()}%", color = Color.White)
             }
         }
     }
@@ -752,6 +808,10 @@ private fun SpeedPanel(state: VideoEditState, player: ExoPlayer, scrubber: Scrub
         }
         Spacer(Modifier.height(6.dp))
         ChoiceRow(Speeds.map { if (it % 1f == 0f) "${it.toInt()}×" else "$it×" }, Speeds.indexOf(state.speed)) { state.speed = Speeds[it] }
+        if (state.speedWhole && state.speed < 1f) {
+            Spacer(Modifier.height(8.dp))
+            Text("Slow motion is smoothed with AI when you save", color = Color.Gray, fontSize = 12.sp)
+        }
         if (!state.speedWhole) {
             Spacer(Modifier.height(4.dp))
             RangeBar(

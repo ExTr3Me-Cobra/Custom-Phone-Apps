@@ -193,6 +193,26 @@ object PaddleOCR : NeuralTool() {
         )
     }
 
+    /**
+     * Viper Vision: where there's text in [image] (no reading), each as its outline's four
+     * corners in [image]'s pixels.
+     */
+    fun detectText(
+        image: Bitmap,
+        model: Model = Model.English
+    ): List<List<PointF>> {
+        if (!checkModel(model)) return emptyList()
+        val files = modelFiles(model) ?: return emptyList()
+        val options = OrtSession.SessionOptions().apply {
+            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT)
+        }
+        return options.use {
+            env.createSession(files.detectionModel.absolutePath, it).use { session ->
+                TextDetector(session, env).detect(image).map { box -> box.points }
+            }
+        }
+    }
+
     fun close() {
         processor?.close()
         processor = null

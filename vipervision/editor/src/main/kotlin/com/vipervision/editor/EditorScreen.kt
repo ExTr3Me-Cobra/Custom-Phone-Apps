@@ -100,6 +100,8 @@ internal fun EditorScreen(
     onSamsungTool: (SamsungTool) -> Unit,
     onStartPortraitBlur: () -> Unit,
     onApplyPortraitBlur: () -> Unit,
+    onStartStudio: (StudioKind) -> Unit,
+    onApplyStudio: () -> Unit,
     onApplyCutOut: () -> Unit,
     onCancelCutOut: () -> Unit,
     onNeedSamDownload: () -> Unit,
@@ -184,6 +186,12 @@ internal fun EditorScreen(
 
     controller.draw?.let { session ->
         DrawScreen(session = session, onCancel = onCancelDraw, onApply = onApplyDraw)
+        if (controller.isBusy) BusyOverlay(controller.busyMessage)
+        return
+    }
+
+    controller.studio?.let { tool ->
+        tool.Screen(onCancel = { controller.closeStudio() }, onApply = onApplyStudio)
         if (controller.isBusy) BusyOverlay(controller.busyMessage)
         return
     }
@@ -458,7 +466,7 @@ internal fun EditorScreen(
             } else {
                 when (controller.tab) {
                     EditorTab.Adjust -> AdjustPanel(controller)
-                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartPortraitBlur)
+                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartPortraitBlur, onStartStudio)
                     EditorTab.Transform -> TransformPanel(controller, onStartCropStudio)
                     EditorTab.Decorate -> DecoratePanel(controller, onStartDraw, onStartMarkup)
                 }
@@ -651,7 +659,8 @@ private fun AiPanel(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
-    onStartPortraitBlur: () -> Unit
+    onStartPortraitBlur: () -> Unit,
+    onStartStudio: (StudioKind) -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -720,6 +729,18 @@ private fun AiPanel(
                     selected = false,
                     enabled = !controller.isBusy,
                     onClick = onStartPortraitBlur
+                )
+            }
+            // Selective adjust, Remove text, Relight, Face retouch and Red eye (see StudioKind).
+            items(StudioKind.entries) { kind ->
+                AiBubble(
+                    icon = kind.icon,
+                    label = kind.label,
+                    download = if (remember(controller.studio, controller.state.pixelSteps) { kind.ready() }) null else "${kind.downloadMb} MB",
+                    applied = controller.state.pixelSteps.any { it is PixelStep.Tool && it.name == kind.label },
+                    selected = false,
+                    enabled = !controller.isBusy,
+                    onClick = { onStartStudio(kind) }
                 )
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).

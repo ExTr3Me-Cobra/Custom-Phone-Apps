@@ -40,6 +40,9 @@ sealed interface PixelStep {
     /** The Draw tool's (or Markup layers') result. */
     data class Drawing(val id: Long = System.nanoTime()) : PixelStep
 
+    /** A full-screen tool's result (see StudioKind), by its name. */
+    data class Tool(val name: String, val id: Long = System.nanoTime()) : PixelStep
+
     /** Portrait blur's result. */
     data class PortraitBlur(val id: Long = System.nanoTime()) : PixelStep
 

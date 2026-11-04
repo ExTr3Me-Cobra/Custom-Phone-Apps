@@ -27,6 +27,9 @@ import com.t8rin.imagetoolbox.feature.markup_layers.presentation.screenLogic.Mar
 import com.t8rin.imagetoolbox.feature.erase_background.presentation.screenLogic.EraseBackgroundComponent
 import com.t8rin.neural_tools.bgremover.Sam2
 import com.t8rin.neural_tools.depth.DepthAnything
+import com.t8rin.neural_tools.ocr.PaddleOCR
+import com.t8rin.neural_tools.viper.FaceParser
+import com.t8rin.neural_tools.viper.YuNet
 import com.t8rin.imagetoolbox.core.domain.image.ImageCompressor
 import com.t8rin.imagetoolbox.core.settings.presentation.model.toUiState
 import com.t8rin.imagetoolbox.core.ui.utils.ComposeActivity
@@ -177,6 +180,8 @@ class EditorActivity : ComposeActivity() {
                     onSamsungTool = { tool -> scope.sendToSamsung(source, tool) },
                     onStartPortraitBlur = { scope.startPortraitBlur() },
                     onApplyPortraitBlur = { scope.applyPortraitBlur(source) },
+                    onStartStudio = { kind -> scope.startStudio(kind, source) },
+                    onApplyStudio = { scope.applyStudio(source) },
                     onApplyCutOut = { scope.applyCutOut() },
                     onCancelCutOut = ::closeCutOut,
                     onNeedSamDownload = { pendingSamDownload = true },
@@ -710,6 +715,104 @@ class EditorActivity : ComposeActivity() {
             Toast.makeText(this@EditorActivity, "Portrait blur couldn't start: ${it.message}", Toast.LENGTH_LONG).show()
         }
         withContext(Dispatchers.IO) { aiRunner.release() }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /**
+     * Opens one of the AI tab's newer tools (see StudioKind), downloading its AI models first if
+     * they aren't here yet. Red eye has no screen: it fixes the photo straight away.
+     */
+    private fun CoroutineScope.startStudio(kind: StudioKind, source: Uri) = launch {
+        if (controller.isBusy || controller.studio != null) return@launch
+        val preview = controller.workingPreview ?: return@launch
+        controller.isBusy = true
+        suspend fun need(name: String, here: () -> Boolean, get: suspend (suspend (Float) -> Unit) -> Unit) {
+            if (here()) return
+            controller.busyMessage = "Downloading $name…"
+            get { controller.busyMessage = "Downloading $name… ${(it * 100).toInt()}%" }
+            check(here()) { "the $name download didn't finish" }
+        }
+        runCatching {
+            when (kind) {
+                StudioKind.Selective -> {
+                    need("Smart select", { Sam2.isDownloaded() }) { Sam2.download(it) }
+                    controller.busyMessage = "Getting Smart select ready…"
+                    val sam = withContext(Dispatchers.Default) { Sam2.openSession(preview) }
+                    SelectiveAdjustTool(preview, sam)
+                }
+                StudioKind.RemoveText -> {
+                    need("the text finder", { PaddleOCR.isModelDownloaded(PaddleOCR.Model.English) }) { p ->
+                        PaddleOCR.startDownload(PaddleOCR.Model.English).collect { p(it.currentPercent) }
+                    }
+                    need("the eraser", { LaMaProcessor.isDownloaded.value }) { p ->
+                        LaMaProcessor.startDownload().collect { p(it.currentPercent) }
+                    }
+                    controller.busyMessage = "Finding text…"
+                    withContext(Dispatchers.Default) { RemoveTextTool.find(preview) }
+                }
+                StudioKind.Relight -> {
+                    need("the depth model", { DepthAnything.isDownloaded() }) { DepthAnything.download(it) }
+                    controller.busyMessage = "Working out depth…"
+                    withContext(Dispatchers.Default) { RelightTool(preview, DepthAnything.estimate(preview)) }
+                }
+                StudioKind.FaceRetouch -> {
+                    need("the face finder", { YuNet.isDownloaded() }) { YuNet.download(it) }
+                    need("the face model", { FaceParser.isDownloaded() }) { FaceParser.download(it) }
+                    controller.busyMessage = "Finding faces…"
+                    withContext(Dispatchers.Default) {
+                        val faces = Faces.detect(preview)
+                        check(faces.isNotEmpty()) { "no faces found" }
+                        FaceRetouchTool(preview, Faces.parse(preview, faces))
+                    }
+                }
+                StudioKind.RedEye -> {
+                    need("the face finder", { YuNet.isDownloaded() }) { YuNet.download(it) }
+                    controller.busyMessage = "Fixing red eye…"
+                    val faces = withContext(Dispatchers.Default) { Faces.detect(preview) }
+                    check(faces.isNotEmpty()) { "no faces found" }
+                    val input = controller.workingFile?.let(Uri::fromFile) ?: source
+                    val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
+                    val (output, fixed) = withContext(Dispatchers.Default) { RedEye.fix(full, faces) }
+                    if (fixed == 0) {
+                        Toast.makeText(this@EditorActivity, "No red eyes found", Toast.LENGTH_SHORT).show()
+                    } else {
+                        controller.busyMessage = "Finishing…"
+                        val result = storeResult(output)
+                        controller.addPixelStep(controller.state.pixelSteps + PixelStep.Tool(kind.label), result)
+                        Toast.makeText(this@EditorActivity, "Fixed $fixed eye${if (fixed == 1) "" else "s"}", Toast.LENGTH_SHORT).show()
+                    }
+                    null
+                }
+            }
+        }.onSuccess { tool -> controller.studio = tool }.onFailure {
+            ViperLog.error("EDITOR", "startStudio ${kind.name} failed", it)
+            Toast.makeText(this@EditorActivity, "${kind.label}: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /** A full-screen tool's Apply, on the full-size photo. */
+    private fun CoroutineScope.applyStudio(source: Uri) = launch {
+        val tool = controller.studio ?: return@launch
+        if (controller.isBusy) return@launch
+        controller.isBusy = true
+        controller.busyMessage = "${tool.stepName}…"
+        runCatching {
+            val input = controller.workingFile?.let(Uri::fromFile) ?: source
+            val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
+            val output = withContext(Dispatchers.Default) { tool.render(this@EditorActivity, full) }
+            controller.busyMessage = "Finishing…"
+            storeResult(output)
+        }.onSuccess { result ->
+            controller.addPixelStep(controller.state.pixelSteps + PixelStep.Tool(tool.stepName), result)
+            controller.closeStudio()
+        }.onFailure {
+            ViperLog.error("EDITOR", "applyStudio ${tool.stepName} failed", it)
+            Toast.makeText(this@EditorActivity, "${tool.stepName} failed: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        if (tool is RemoveTextTool) withContext(Dispatchers.IO) { aiRunner.release() }
         controller.busyMessage = null
         controller.isBusy = false
     }

@@ -19,3 +19,6 @@ https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upsca
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN-x4v3.ort
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN_x2plus.ort
 https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx
+https://github.com/facefusion/facefusion-assets/releases/download/models-3.1.0/bisenet_resnet_18.onnx
+https://huggingface.co/edgetools/rife/resolve/main/rife49.onnx

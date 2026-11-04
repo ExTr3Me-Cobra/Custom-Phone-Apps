@@ -20,6 +20,9 @@ import com.t8rin.imagetoolbox.feature.ai_tools.domain.model.NeuralModel
 import com.t8rin.neural_tools.bgremover.BgRemover
 import com.t8rin.neural_tools.bgremover.Sam2
 import com.t8rin.neural_tools.depth.DepthAnything
+import com.t8rin.neural_tools.viper.FaceParser
+import com.t8rin.neural_tools.viper.Rife
+import com.t8rin.neural_tools.viper.YuNet
 import com.t8rin.neural_tools.inpaint.LaMaProcessor
 import com.t8rin.neural_tools.ocr.PaddleOCR
 import com.vipervision.editor.AiTool
@@ -111,6 +114,9 @@ object ModelPack {
             Item("Depth Anything V2 (Portrait blur)", DepthAnything.SIZE, { DepthAnything.isDownloaded() }) { _, _, progress ->
                 DepthAnything.download(progress)
             },
+            Item("YuNet (finds faces)", YuNet.SIZE, { YuNet.isDownloaded() }) { _, _, progress -> YuNet.download(progress) },
+            Item("BiSeNet (Face retouch)", FaceParser.SIZE, { FaceParser.isDownloaded() }) { _, _, progress -> FaceParser.download(progress) },
+            Item("RIFE (smooth slow motion)", Rife.SIZE, { Rife.isDownloaded() }) { _, _, progress -> Rife.download(progress) },
             Item("SAM 2.1 (Smart select)", Sam2.SIZE, { Sam2.isDownloaded() }) { _, _, progress ->
                 Sam2.download(progress)
             },

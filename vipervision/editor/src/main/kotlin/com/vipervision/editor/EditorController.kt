@@ -242,6 +242,14 @@ class EditorController {
     /** Set while the user is painting over something to heal or erase. */
     var paint by mutableStateOf<PaintSession?>(null)
 
+    /** Set while a full-screen tool (Selective adjust, Relight…) is open. */
+    var studio by mutableStateOf<StudioTool?>(null)
+
+    fun closeStudio() {
+        studio?.close()
+        studio = null
+    }
+
     /** Set while Portrait blur is open. */
     var portraitBlur by mutableStateOf<PortraitBlurSession?>(null)
 
