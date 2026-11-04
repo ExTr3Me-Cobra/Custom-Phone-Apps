@@ -95,7 +95,7 @@ class PaintSession(val purpose: PaintPurpose) {
     val history = mutableListOf<Boolean>()
 
     /** Smart select's prepared photo (opened once, then each tap is quick). */
-    internal var sam: com.t8rin.neural_tools.bgremover.EdgeSAM.Session? = null
+    internal var sam: com.t8rin.neural_tools.bgremover.Sam2.Session? = null
     internal val samLock = kotlinx.coroutines.sync.Mutex()
 
     /** Shown over the photo while Smart select works. */

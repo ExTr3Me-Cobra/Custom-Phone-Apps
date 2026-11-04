@@ -10,11 +10,12 @@ https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/zero_dcepp.onnx
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/other-models/nanomodels/1xOverExposureCorrection_compact-fp16.onnx
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/birefnet_swin_tiny.ort
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/inpaint/lama/LaMa_dynamic.onnx
-https://huggingface.co/chongzhou/EdgeSAM/resolve/main/edge_sam_3x_encoder.onnx
-https://huggingface.co/chongzhou/EdgeSAM/resolve/main/edge_sam_3x_decoder.onnx
+https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/main/encoder.onnx
+https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/main/decoder.onnx
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/paddleocr/paddleocr_v5_en.zip
 https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/resolve/main/onnx/vision_model_quantized.onnx
 https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/resolve/main/onnx/text_model_quantized.onnx
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/x4-UltraSharpV2_Lite_fp16_op17.ort
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN-x4v3.ort
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN_x2plus.ort
+https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx

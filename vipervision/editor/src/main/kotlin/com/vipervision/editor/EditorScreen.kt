@@ -320,7 +320,7 @@ internal fun EditorScreen(
                         )
                     }
                 }
-                val samReady = paint.generative && com.t8rin.neural_tools.bgremover.EdgeSAM.isDownloaded()
+                val samReady = paint.generative && com.t8rin.neural_tools.bgremover.Sam2.isDownloaded()
                 PaintOverlay(
                     imageWidth = shown.width,
                     imageHeight = shown.height,
@@ -441,7 +441,7 @@ internal fun EditorScreen(
                     onAutoBorders = {
                         val shownNow = controller.editedPreview ?: controller.workingPreview
                         if (shownNow != null && paint.busyMessage == null && paint.strokes.isNotEmpty()) scope.launch {
-                            if (!com.t8rin.neural_tools.bgremover.EdgeSAM.isDownloaded()) {
+                            if (!com.t8rin.neural_tools.bgremover.Sam2.isDownloaded()) {
                                 Toast.makeText(context, "Auto Borders needs Smart select: download it in Settings → AI models", Toast.LENGTH_LONG).show()
                                 return@launch
                             }
@@ -686,7 +686,7 @@ private fun AiPanel(
             // other AI tools.
             item { aiToolBubble(AiTool.RemoveBackground) }
             // Manual background remover (Cut out): Image Toolbox's full background remover, with Smart select (paint roughly,
-            // EdgeSAM finds the edge), all its models and erase/restore brushes.
+            // SAM 2.1 finds the edge), all its models and erase/restore brushes.
             item {
                 AiBubble(
                     icon = Icons.Rounded.Scissors,
@@ -710,12 +710,12 @@ private fun AiPanel(
                     onClick = onStartObjectEraser
                 )
             }
-            // Portrait blur: the background behind the subject blurred (the background remover's cut-out).
+            // Portrait blur: blur by distance from the focus (Depth Anything), the subject kept crisp.
             item {
                 AiBubble(
                     icon = Icons.Rounded.BlurCircular,
                     label = "Portrait blur",
-                    download = null,
+                    download = if (remember(controller.portraitBlur) { com.t8rin.neural_tools.depth.DepthAnything.isDownloaded() }) null else "99 MB",
                     applied = controller.state.pixelSteps.any { it is PixelStep.PortraitBlur },
                     selected = false,
                     enabled = !controller.isBusy,

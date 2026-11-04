@@ -25,7 +25,8 @@ import com.t8rin.imagetoolbox.feature.crop.presentation.screenLogic.CropComponen
 import com.t8rin.imagetoolbox.feature.draw.presentation.screenLogic.DrawComponent
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.screenLogic.MarkupLayersComponent
 import com.t8rin.imagetoolbox.feature.erase_background.presentation.screenLogic.EraseBackgroundComponent
-import com.t8rin.neural_tools.bgremover.EdgeSAM
+import com.t8rin.neural_tools.bgremover.Sam2
+import com.t8rin.neural_tools.depth.DepthAnything
 import com.t8rin.imagetoolbox.core.domain.image.ImageCompressor
 import com.t8rin.imagetoolbox.core.settings.presentation.model.toUiState
 import com.t8rin.imagetoolbox.core.ui.utils.ComposeActivity
@@ -76,7 +77,7 @@ class EditorActivity : ComposeActivity() {
     @Inject
     lateinit var cropFactory: CropComponent.Factory
 
-    /** Set while asking whether to download EdgeSAM for Cut out's Smart select. */
+    /** Set while asking whether to download Sam2 for Cut out's Smart select. */
     private var pendingSamDownload by mutableStateOf(false)
 
     /** Adjustments and curves, shared by the preview and saving. */
@@ -211,9 +212,9 @@ class EditorActivity : ComposeActivity() {
                         title = { Text("Download Smart select?") },
                         text = {
                             Text(
-                                "Smart select uses the EdgeSAM (Segment Anything) AI model: roughly paint over " +
+                                "Smart select uses the SAM 2.1 (Segment Anything) AI model: roughly paint over " +
                                         "what to keep and it finds the exact edge.\n\nIt needs a one-time download of " +
-                                        "about 38 MB. After that it works offline."
+                                        "about 130 MB. After that it works offline."
                             )
                         },
                         confirmButton = {
@@ -679,24 +680,34 @@ class EditorActivity : ComposeActivity() {
     }
 
     /**
-     * Opens Portrait blur: finds the subject on the photo as edited so far with the background
-     * remover (BiRefNet if downloaded, else the built-in U2NetP).
+     * Opens Portrait blur: Depth Anything works out how near each part of the photo (as edited so
+     * far) is, and the background remover (BiRefNet if downloaded, else the built-in U2NetP) finds
+     * the subject, whose cut-out keeps its edges crisp.
      */
     private fun CoroutineScope.startPortraitBlur() = launch {
         if (controller.isBusy || controller.portraitBlur != null) return@launch
         val preview = controller.workingPreview ?: return@launch
         controller.isBusy = true
-        controller.busyMessage = "Finding the subject…"
         runCatching {
+            if (!DepthAnything.isDownloaded()) {
+                controller.busyMessage = "Downloading the depth model…"
+                DepthAnything.download { controller.busyMessage = "Downloading the depth model… ${(it * 100).toInt()}%" }
+                check(DepthAnything.isDownloaded()) { "the download didn't finish" }
+            }
+            controller.busyMessage = "Working out depth…"
+            val depth = withContext(Dispatchers.Default) { DepthAnything.estimate(preview) }
+            controller.busyMessage = "Finding the subject…"
             val choices = AiTool.RemoveBackground.choices
             val choice = choices.firstOrNull { !it.isBundled && aiRunner.isReady(it) } ?: choices.first { it.isBundled }
             if (choice.isBundled) aiRunner.download(choice) {}
-            val subject = withContext(Dispatchers.Default) { aiRunner.run(choice, preview) { _, _ -> } }
-            ViperLog.i("BLUR", "Subject found with ${choice.title}: ${ViperLog.transparency(subject)}")
-            PortraitBlurSession(preview, subject)
+            val subject = runCatching { withContext(Dispatchers.Default) { aiRunner.run(choice, preview) { _, _ -> } } }
+                .onFailure { ViperLog.error("BLUR", "Couldn't find the subject (depth only)", it) }
+                .getOrNull()
+            ViperLog.i("BLUR", "Depth ${depth.width}x${depth.height}; subject with ${choice.title}: ${subject?.let(ViperLog::transparency)}")
+            withContext(Dispatchers.Default) { PortraitBlurSession(preview, subject, depth) }
         }.onSuccess { controller.portraitBlur = it }.onFailure {
             ViperLog.error("EDITOR", "startPortraitBlur failed", it)
-            Toast.makeText(this@EditorActivity, "Couldn't find the subject: ${it.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@EditorActivity, "Portrait blur couldn't start: ${it.message}", Toast.LENGTH_LONG).show()
         }
         withContext(Dispatchers.IO) { aiRunner.release() }
         controller.busyMessage = null
@@ -712,7 +723,7 @@ class EditorActivity : ComposeActivity() {
         runCatching {
             val input = controller.workingFile?.let(Uri::fromFile) ?: source
             val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
-            val output = withContext(Dispatchers.Default) { PortraitBlur.apply(full, session.subject, session.strength) }
+            val output = withContext(Dispatchers.Default) { PortraitBlur.apply(full, session.depth, session.matte, session.settings()) }
             controller.busyMessage = "Finishing…"
             storeResult(output)
         }.onSuccess { result ->
@@ -902,8 +913,8 @@ class EditorActivity : ComposeActivity() {
         val session = controller.cutOut ?: return@launch
         session.busyMessage = "Downloading Smart select…"
         runCatching {
-            EdgeSAM.download { session.busyMessage = "Downloading Smart select… ${(it * 100).toInt()}%" }
-            check(EdgeSAM.isDownloaded()) { "the download didn't finish" }
+            Sam2.download { session.busyMessage = "Downloading Smart select… ${(it * 100).toInt()}%" }
+            check(Sam2.isDownloaded()) { "the download didn't finish" }
         }.onSuccess {
             session.busyMessage = null
             // Re-run Smart select's setup now that the model is here.

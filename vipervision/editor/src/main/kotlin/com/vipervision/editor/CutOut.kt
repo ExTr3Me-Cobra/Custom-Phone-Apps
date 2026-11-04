@@ -83,7 +83,7 @@ import com.t8rin.imagetoolbox.feature.erase_background.domain.model.BgModelType
 import com.t8rin.imagetoolbox.feature.erase_background.presentation.components.BitmapEraser
 import com.t8rin.imagetoolbox.feature.erase_background.presentation.screenLogic.EraseBackgroundComponent
 import com.t8rin.neural_tools.bgremover.BgRemover
-import com.t8rin.neural_tools.bgremover.EdgeSAM
+import com.t8rin.neural_tools.bgremover.Sam2
 import com.t8rin.neural_tools.bgremover.MobileSAM
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -117,7 +117,7 @@ private val CutShapes: List<Pair<String, DrawPathMode>> = listOf(
 /**
  * One use of the Cut out tool. It runs Image Toolbox's Background Remover ([component]) on the
  * upright photo: its auto models, brushes and trimming, plus Smart select, which turns rough
- * painting into EdgeSAM (Segment Anything) prompts, optionally with BiRefNet refining the edge.
+ * painting into SAM 2.1 (Segment Anything) prompts, optionally with BiRefNet refining the edge.
  */
 class CutOutSession internal constructor(
     val component: EraseBackgroundComponent,
@@ -142,7 +142,7 @@ class CutOutSession internal constructor(
     /** Smart select's latest result at screen size (background removed), or null. */
     var samPreview by mutableStateOf<Bitmap?>(null)
         internal set
-    internal var samSession: EdgeSAM.Session? = null
+    internal var samSession: Sam2.Session? = null
 
     /** Smart select: let BiRefNet redraw the edge when cutting out (see [EdgeRefiner]). */
     var refineEdges by mutableStateOf(false)
@@ -297,10 +297,10 @@ private fun CutOutContent(
         if (component.trimImage) component.setTrimImage(false)
     }
 
-    // Smart select: prepare EdgeSAM on the current cut-out, then re-segment after every stroke.
+    // Smart select: prepare SAM 2.1 on the current cut-out, then re-segment after every stroke.
     LaunchedEffect(session.tool, component.bitmap) {
         if (session.tool != CutTool.Smart || component.bitmap == null) return@LaunchedEffect
-        if (!EdgeSAM.isDownloaded()) {
+        if (!Sam2.isDownloaded()) {
             onNeedSamDownload()
             return@LaunchedEffect
         }
@@ -314,7 +314,7 @@ private fun CutOutContent(
                     val source = full.scaledToFit(SMART_MAX_SIDE)
                     session.samSource = source
                     session.samPreviewSource = source.scaledToFit(1536)
-                    session.samSession = EdgeSAM.openSession(source)
+                    session.samSession = Sam2.openSession(source)
                 }
             }.onFailure {
                 session.resetSmart()

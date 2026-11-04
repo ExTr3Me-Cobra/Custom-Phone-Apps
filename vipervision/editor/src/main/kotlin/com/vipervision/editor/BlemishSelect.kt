@@ -12,13 +12,13 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
-import com.t8rin.neural_tools.bgremover.EdgeSAM
+import com.t8rin.neural_tools.bgremover.Sam2
 import com.t8rin.neural_tools.bgremover.MobileSAM
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
 
 /**
- * The Blemish remover's Smart select (EdgeSAM): tapping picks a whole object, and Auto Borders
+ * The Blemish remover's Smart select (SAM 2.1): tapping picks a whole object, and Auto Borders
  * snaps what was painted to the edges of the object under it. Both make masks the size of the
  * photo as shown, which [toSourceMask] turns into a mask on the full-size upright photo.
  */
@@ -28,7 +28,7 @@ object BlemishSelect {
     suspend fun prepare(session: PaintSession, shown: Bitmap) = session.samLock.withLock {
         if (session.sam == null || session.selectionsOf !== shown) {
             session.sam?.close()
-            session.sam = EdgeSAM.openSession(shown)
+            session.sam = Sam2.openSession(shown)
             session.selectionsOf = shown
         }
     }
@@ -136,7 +136,7 @@ object BlemishSelect {
     }
 
     /** Smart select on [image]: how sure it is per pixel, as white on black at [image]'s size. */
-    private fun raw(sam: EdgeSAM.Session, image: Bitmap, points: List<MobileSAM.Point>, box: RectF?): Bitmap {
+    private fun raw(sam: Sam2.Session, image: Bitmap, points: List<MobileSAM.Point>, box: RectF?): Bitmap {
         val white = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
         val seg = try {
             sam.segment(points = points, box = box, outputImage = white)
@@ -178,7 +178,7 @@ object BlemishSelect {
             ((b.right - crop.left) / crop.width()).coerceIn(0f, 1f), ((b.bottom - crop.top) / crop.height()).coerceIn(0f, 1f)
         )
         val fine = try {
-            EdgeSAM.openSession(piece).use { sam -> raw(sam, piece, cropPoints, cropBox) }
+            Sam2.openSession(piece).use { sam -> raw(sam, piece, cropPoints, cropBox) }
         } finally {
             if (piece !== shown) piece.recycle()
         }

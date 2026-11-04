@@ -18,7 +18,8 @@ import com.t8rin.imagetoolbox.core.domain.remote.DownloadManager
 import com.t8rin.imagetoolbox.feature.ai_tools.domain.AiToolsRepository
 import com.t8rin.imagetoolbox.feature.ai_tools.domain.model.NeuralModel
 import com.t8rin.neural_tools.bgremover.BgRemover
-import com.t8rin.neural_tools.bgremover.EdgeSAM
+import com.t8rin.neural_tools.bgremover.Sam2
+import com.t8rin.neural_tools.depth.DepthAnything
 import com.t8rin.neural_tools.inpaint.LaMaProcessor
 import com.t8rin.neural_tools.ocr.PaddleOCR
 import com.vipervision.editor.AiTool
@@ -76,7 +77,7 @@ object ModelPack {
         BgRemover.Type.ISNet, BgRemover.Type.MODNet, BgRemover.Type.YOLO
     )
 
-    private fun deleteUnused() {
+    private fun deleteUnused(context: Context) {
         for (type in unusedRemovers) {
             val remover = BgRemover.getRemover(type)
             if (remover.modelFile.exists()) {
@@ -90,6 +91,11 @@ object ModelPack {
             ViperLog.i("MODELS", "Deleting unused MobileSAM")
             com.t8rin.neural_tools.bgremover.MobileSAM.deleteModels()
         }
+        // EdgeSAM, replaced by SAM 2.1.
+        java.io.File(context.filesDir, "ai_models/edge_sam").takeIf { it.exists() }?.let {
+            ViperLog.i("MODELS", "Deleting unused EdgeSAM")
+            it.deleteRecursively()
+        }
     }
 
     /** Everything, in the order it's fetched (the editor's bubbles first, search last). */
@@ -102,8 +108,11 @@ object ModelPack {
             Item("LaMa (Blemish remover)", 205_294_245, { LaMaProcessor.isDownloaded.value }) { _, _, progress ->
                 LaMaProcessor.startDownload().followTool(progress)
             },
-            Item("EdgeSAM (Smart select)", 38_035_306, { EdgeSAM.isDownloaded() }) { _, _, progress ->
-                EdgeSAM.download(progress)
+            Item("Depth Anything V2 (Portrait blur)", DepthAnything.SIZE, { DepthAnything.isDownloaded() }) { _, _, progress ->
+                DepthAnything.download(progress)
+            },
+            Item("SAM 2.1 (Smart select)", Sam2.SIZE, { Sam2.isDownloaded() }) { _, _, progress ->
+                Sam2.download(progress)
             },
             Item("PaddleOCR (reads text, AI search)", 12_265_739, { PaddleOCR.isModelDownloaded(PaddleOCR.Model.English) }) { _, _, progress ->
                 PaddleOCR.startDownload(PaddleOCR.Model.English).followTool(progress)
@@ -167,7 +176,7 @@ object ModelPack {
      * is left. Run when the app starts, off the main thread.
      */
     fun refreshState(context: Context) {
-        runCatching { deleteUnused() }.onFailure { ViperLog.error("MODELS", "couldn't delete unused models", it) }
+        runCatching { deleteUnused(context) }.onFailure { ViperLog.error("MODELS", "couldn't delete unused models", it) }
         runCatching { Siglip.replaceTokenizer(context) }.onFailure { ViperLog.error("MODELS", "couldn't shrink the search vocabulary", it) }
         val (here, complete) = state(context)
         prefs(context).edit()
