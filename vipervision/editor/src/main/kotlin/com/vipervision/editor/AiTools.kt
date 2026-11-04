@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import com.t8rin.imagetoolbox.core.resources.icons.Fullscreen
 import android.graphics.Bitmap
 import kotlin.math.roundToInt
 import kotlin.math.min
@@ -113,6 +114,23 @@ enum class AiTool(val label: String, val description: String, val choices: List<
             )
         )
     ),
+    Upscale(
+        "AI upscale", "Makes the photo bigger with AI detail (for small or cropped photos).",
+        listOf(
+            AiChoice(
+                "x4-UltraSharpV2_Lite_fp16_op17.ort", "UltraSharp V2 Lite 4× (sharpest)",
+                "Four times the size with crisp edges and fine detail. Small download, takes a little while."
+            ),
+            AiChoice(
+                "RealESRGAN-x4v3.ort", "Real-ESRGAN 4× (quick)",
+                "Four times the size, fast and tiny. A little softer on fine detail."
+            ),
+            AiChoice(
+                "RealESRGAN_x2plus.ort", "Real-ESRGAN 2× (natural)",
+                "Twice the size with a natural look, for photos that only need a bit more."
+            )
+        )
+    ),
     RemoveBackground(
         "Auto background remover", "Cuts out the subject and makes the background transparent.",
         listOf(
@@ -137,6 +155,7 @@ enum class AiTool(val label: String, val description: String, val choices: List<
             Deblur -> EditorIcons.Sharpness
             JpegCleanup -> Icons.Outlined.Jpg
             RemoveBackground -> Icons.Rounded.Person
+            Upscale -> Icons.Rounded.Fullscreen
         }
 }
 

@@ -434,8 +434,17 @@ class EditorActivity : ComposeActivity() {
             }
             controller.busyMessage = "${tool.label}…"
             val input = controller.workingFile?.let(Uri::fromFile) ?: source
-            // The AI tools work on the photo as big as memory allows.
-            val maxSide = maxSafeSide(this@EditorActivity, input)
+            // The AI tools work on the photo as big as memory allows. Upscaling: small enough that
+            // the result is at most about 48 MP (a 4× of a full-size photo wouldn't fit).
+            val maxSide = if (tool == AiTool.Upscale) {
+                val factor = if ("x2" in choice.modelName) 2 else 4
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                runCatching { contentResolver.openInputStream(input)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } }
+                val w = bounds.outWidth.coerceAtLeast(1)
+                val h = bounds.outHeight.coerceAtLeast(1)
+                val fit = kotlin.math.sqrt(48_000_000.0 / (w.toDouble() * h * factor * factor)).coerceAtMost(1.0)
+                (max(w, h) * fit).toInt().coerceIn(64, maxSafeSide(this@EditorActivity, input))
+            } else maxSafeSide(this@EditorActivity, input)
             val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSide) }
             ViperLog.i("AI", "Input ${ViperLog.describe(full)} (memory cap ${maxSide}px), from ${if (input == source) "the original" else "the previous step"}")
             val output = ViperLog.step("AI", "running ${choice.title}") {

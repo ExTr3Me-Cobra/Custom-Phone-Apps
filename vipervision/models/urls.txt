@@ -15,3 +15,6 @@ https://huggingface.co/chongzhou/EdgeSAM/resolve/main/edge_sam_3x_decoder.onnx
 https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/paddleocr/paddleocr_v5_en.zip
 https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/resolve/main/onnx/vision_model_quantized.onnx
 https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/resolve/main/onnx/text_model_quantized.onnx
+https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/x4-UltraSharpV2_Lite_fp16_op17.ort
+https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN-x4v3.ort
+https://huggingface.co/T8RIN/imagetoolbox-models/resolve/main/onnx/enhance/upscale/RealESRGAN_x2plus.ort
