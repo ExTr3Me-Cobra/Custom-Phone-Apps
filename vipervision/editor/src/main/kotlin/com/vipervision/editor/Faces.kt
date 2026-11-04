@@ -136,9 +136,9 @@ data class RetouchSettings(val skin: Float, val eyes: Float, val teeth: Float, v
 class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces.Parts>) : StudioTool {
     override val stepName = "Face retouch"
 
-    var skin by mutableFloatStateOf(0.5f)
-    var eyes by mutableFloatStateOf(0.3f)
-    var teeth by mutableFloatStateOf(0.3f)
+    var skin by mutableFloatStateOf(0f)
+    var eyes by mutableFloatStateOf(0f)
+    var teeth by mutableFloatStateOf(0f)
     var lips by mutableFloatStateOf(0f)
     var showBefore by mutableStateOf(false)
     private var shown by mutableStateOf<Bitmap?>(null)

@@ -47,10 +47,10 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
     override val stepName = "Relight"
 
     var light by mutableStateOf(Offset(0.3f, 0.3f))
-    var strength by mutableFloatStateOf(0.6f)
+    var strength by mutableFloatStateOf(0f)
     var size by mutableFloatStateOf(0.5f)
-    var darken by mutableFloatStateOf(0.3f)
-    var warmth by mutableFloatStateOf(0.3f)
+    var darken by mutableFloatStateOf(0f)
+    var warmth by mutableFloatStateOf(0f)
     private var shown by mutableStateOf<Bitmap?>(null)
 
     private fun settings() = LightSettings(light.x, light.y, strength, size, darken, warmth)
