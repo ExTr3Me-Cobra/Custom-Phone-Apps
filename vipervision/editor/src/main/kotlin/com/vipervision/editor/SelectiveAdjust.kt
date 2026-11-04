@@ -31,7 +31,7 @@ import com.t8rin.neural_tools.bgremover.MobileSAM
 import com.t8rin.neural_tools.bgremover.Sam2
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,43 +39,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-/** Selective adjust's dials (each -1..1, 0 = unchanged). */
-data class LocalAdjust(val brightness: Float = 0f, val contrast: Float = 0f, val saturation: Float = 0f, val warmth: Float = 0f) {
-    val isIdentity get() = brightness == 0f && contrast == 0f && saturation == 0f && warmth == 0f
-
-    /** [c] with the dials applied. */
-    fun apply(c: Int): Int {
-        var r = c.red8.toFloat()
-        var g = c.green8.toFloat()
-        var b = c.blue8.toFloat()
-        r += warmth * 25f
-        b -= warmth * 25f
-        if (brightness != 0f) {
-            val e = 2f.pow(-brightness * 0.9f)
-            r = 255f * (r.coerceIn(0f, 255f) / 255f).pow(e)
-            g = 255f * (g.coerceIn(0f, 255f) / 255f).pow(e)
-            b = 255f * (b.coerceIn(0f, 255f) / 255f).pow(e)
-        }
-        if (contrast != 0f) {
-            val k = 1f + contrast * 0.8f
-            r = (r - 128f) * k + 128f
-            g = (g - 128f) * k + 128f
-            b = (b - 128f) * k + 128f
-        }
-        if (saturation != 0f) {
-            val grey = 0.299f * r + 0.587f * g + 0.114f * b
-            val k = 1f + saturation
-            r = grey + (r - grey) * k
-            g = grey + (g - grey) * k
-            b = grey + (b - grey) * k
-        }
-        return rgb(r, g, b)
-    }
-}
+/** The Adjust tab's dials that make sense for part of a photo (not Vignette). */
+private val SelectiveAdjustments = Adjustment.entries.filter { it != Adjustment.Vignette }
 
 /**
  * Selective adjust: tap things in the photo (SAM 2.1 finds the whole object, shown in red), then
- * change brightness, contrast, saturation and warmth of only those (or of everything else).
+ * use the Adjust tab's dials on only those (or of everything else).
  */
 class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Session) : StudioTool {
     override val stepName = "Selective adjust"
@@ -90,13 +59,10 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
     var showHighlight by mutableStateOf(true)
     var invert by mutableStateOf(false)
     var busy by mutableStateOf(false)
-    var brightness by mutableFloatStateOf(0f)
-    var contrast by mutableFloatStateOf(0f)
-    var saturation by mutableFloatStateOf(0f)
-    var warmth by mutableFloatStateOf(0f)
+    /** The same dials as the Adjust tab, for the selection only. */
+    var adjustments by mutableStateOf(Adjustments())
+    var picked by mutableStateOf(Adjustment.Brightness)
     private var shown by mutableStateOf<Bitmap?>(null)
-
-    private fun adjust() = LocalAdjust(brightness, contrast, saturation, warmth)
 
     /** A tap: unselects the object there, or selects the object there. */
     suspend fun tap(point: Offset) {
@@ -149,22 +115,41 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
         highlight = union.tint(0xFF3030, 0.5f)
     }
 
-    override suspend fun render(context: Context, full: Bitmap): Bitmap = render(full, selection, invert, adjust())
+    override suspend fun render(context: Context, full: Bitmap): Bitmap {
+        val mask = selection
+        val inv = invert
+        val w = full.width.toFloat()
+        val h = full.height.toFloat()
+        return render(context, full, adjustments) { x, y ->
+            val m = mask?.at((x + 0.5f) / w, (y + 0.5f) / h) ?: 0f
+            if (inv) 1f - m else m
+        }
+    }
 
-    private suspend fun render(image: Bitmap, mask: SoftMask?, invert: Boolean, a: LocalAdjust): Bitmap {
-        if (a.isIdentity || (mask == null && !invert)) return image.copy(Bitmap.Config.ARGB_8888, false)
-        val w = image.width.toFloat()
-        val h = image.height.toFloat()
-        return image.mapPixels { x, y, c ->
-            val m0 = mask?.at((x + 0.5f) / w, (y + 0.5f) / h) ?: 0f
-            val m = if (invert) 1f - m0 else m0
-            if (m <= 0.002f) c else {
-                val d = a.apply(c)
-                if (m >= 0.998f) d else rgb(
-                    c.red8 + (d.red8 - c.red8) * m, c.green8 + (d.green8 - c.green8) * m, c.blue8 + (d.blue8 - c.blue8) * m
-                )
+    /** [image] with [a] applied (the Adjust tab's own filters), kept only where [weight] says. */
+    private suspend fun render(context: Context, image: Bitmap, a: Adjustments, weight: (Int, Int) -> Float): Bitmap {
+        if (a.isIdentity) return image
+        val adjusted = withContext(Dispatchers.Default) { applyAdjustments(context, image, a) }
+        val w = image.width
+        val h = image.height
+        val px = IntArray(w * h)
+        val ax = IntArray(w * h)
+        image.getPixels(px, 0, w, 0, 0, w, h)
+        adjusted.getPixels(ax, 0, w, 0, 0, w, h)
+        forRows(h) { y ->
+            var i = y * w
+            for (x in 0 until w) {
+                val m = weight(x, y)
+                if (m >= 0.998f) px[i] = ax[i]
+                else if (m > 0.002f) {
+                    val c = px[i]
+                    val d = ax[i]
+                    px[i] = rgb(c.red8 + (d.red8 - c.red8) * m, c.green8 + (d.green8 - c.green8) * m, c.blue8 + (d.blue8 - c.blue8) * m)
+                }
+                i++
             }
         }
+        return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { setPixels(px, 0, w, 0, 0, w, h) }
     }
 
     override fun close() = sam.close()
@@ -172,11 +157,27 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
     @Composable
     override fun Screen(onCancel: () -> Unit, onApply: () -> Unit) {
         val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
         val small = remember { preview.scaledToFit(1080) }
         LaunchedEffect(Unit) {
-            snapshotFlow { Triple(selection, invert, adjust()) }.collectLatest { (mask, inv, a) ->
-                delay(40)
-                shown = withContext(Dispatchers.Default) { render(small, mask, inv, a) }
+            // The selection as a weight per preview pixel, remade only when it changes.
+            var weights = FloatArray(0)
+            var weightsFor: Pair<SoftMask?, Boolean>? = null
+            // Each change is shown as soon as the one before is done (none are thrown away half made).
+            snapshotFlow { Triple(selection, invert, adjustments) }.conflate().collect { (mask, inv, a) ->
+                shown = withContext(Dispatchers.Default) {
+                    if (weightsFor != (mask to inv)) {
+                        val w = small.width
+                        val h = small.height
+                        weights = FloatArray(w * h) { i ->
+                            val m = mask?.at(((i % w) + 0.5f) / w, ((i / w) + 0.5f) / h) ?: 0f
+                            if (inv) 1f - m else m
+                        }
+                        weightsFor = mask to inv
+                    }
+                    val ws = weights
+                    render(context, small, a) { x, y -> ws[y * small.width + x] }
+                }
             }
         }
         val tint = highlight
@@ -212,12 +213,31 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
                 Pill("Show red", selected = showHighlight) { showHighlight = !showHighlight }
                 if (objects.isNotEmpty()) Pill("Clear", selected = false) { clear() }
             }
-            // Moving a dial hides the red so the change can be seen.
-            fun hide() { showHighlight = false }
-            LabeledSlider("Brightness ${(brightness * 100).roundToInt()}", brightness, -1f..1f) { brightness = it; hide() }
-            LabeledSlider("Contrast ${(contrast * 100).roundToInt()}", contrast, -1f..1f) { contrast = it; hide() }
-            LabeledSlider("Saturation ${(saturation * 100).roundToInt()}", saturation, -1f..1f) { saturation = it; hide() }
-            LabeledSlider("Warmth ${(warmth * 100).roundToInt()}", warmth, -1f..1f) { warmth = it; hide() }
+            // The Adjust tab's bubbles and wheel; moving one hides the red so the change can be seen.
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                items(SelectiveAdjustments.size) { i ->
+                    val adjustment = SelectiveAdjustments[i]
+                    AdjustBubble(
+                        adjustment = adjustment,
+                        value = adjustments[adjustment],
+                        selected = adjustment == picked,
+                        onClick = {
+                            if (adjustment == picked && adjustments[adjustment] != 0) adjustments = adjustments.with(adjustment, 0)
+                            else picked = adjustment
+                        }
+                    )
+                }
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+            ValueWheel(
+                value = adjustments[picked],
+                onValueChange = {
+                    showHighlight = false
+                    adjustments = adjustments.with(picked, it)
+                },
+                onValueChangeFinished = {},
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
     }
 }

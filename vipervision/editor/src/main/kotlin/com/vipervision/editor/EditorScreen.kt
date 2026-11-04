@@ -1,5 +1,9 @@
 package com.vipervision.editor
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1176,18 +1180,18 @@ private val COMPACT_PANEL_HEIGHT = 152.dp
 private val BUBBLES_TOP = 6.dp
 
 
-/** The AI tools button: a slowly turning gradient with twinkling sparkles; a tap sends out a blue glow. */
+/** The AI tools button: a slowly turning gradient, its three stars twinkling and random sparkles around it; a tap sends out a blue glow. */
 @Composable
 private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "sparkle")
-    val time by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(6000, easing = androidx.compose.animation.core.LinearEasing)
-        ),
-        label = "time"
-    )
+    // A clock that never loops (so nothing jumps), in seconds.
+    var time by remember { mutableFloatStateOf(0f) }
+    val sparkles = remember { List(6) { SparkleState().apply { respawn(0f, first = true) } } }
+    LaunchedEffect(Unit) {
+        val start = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { now -> time = (now - start) / 1_000_000_000f }
+        }
+    }
     val pulse = remember { androidx.compose.animation.core.Animatable(1f) }
     val scope = rememberCoroutineScope()
     val glow = Color(0xFF5B8CFF)
@@ -1211,26 +1215,18 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
             }
             .drawWithContent {
                 drawContent()
-                // Sparkles: four-pointed stars twinkling in turn, drifting slowly round.
+                // Sparkles: each appears somewhere random, twinkles once (fading in and out, so
+                // none pops) and is replaced by a new one somewhere else.
                 val half = size.minDimension / 2f
-                for (s in Sparkles) {
-                    val local = ((time * s.speed + s.phase) % 1f + 1f) % 1f
-                    val twinkle = kotlin.math.sin(local * Math.PI).toFloat().let { it * it }
-                    if (twinkle < 0.02f) continue
-                    val angle = s.angle + time * 2f * Math.PI.toFloat() * 0.15f
-                    val c = Offset(center.x + kotlin.math.cos(angle) * half * s.distance, center.y + kotlin.math.sin(angle) * half * s.distance)
+                for (s in sparkles) {
+                    if (time >= s.born + s.life) s.respawn(time)
+                    val age = (time - s.born) / s.life
+                    if (age < 0f) continue
+                    val twinkle = kotlin.math.sin(age * Math.PI).toFloat().let { it * it }
+                    val c = Offset(center.x + kotlin.math.cos(s.angle) * half * s.distance, center.y + kotlin.math.sin(s.angle) * half * s.distance)
                     val r = s.size.dp.toPx() * (0.4f + 0.6f * twinkle)
-                    val w = r * 0.28f
-                    val star = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(c.x, c.y - r)
-                        quadraticTo(c.x + w * 0.3f, c.y - w * 0.3f, c.x + r, c.y)
-                        quadraticTo(c.x + w * 0.3f, c.y + w * 0.3f, c.x, c.y + r)
-                        quadraticTo(c.x - w * 0.3f, c.y + w * 0.3f, c.x - r, c.y)
-                        quadraticTo(c.x - w * 0.3f, c.y - w * 0.3f, c.x, c.y - r)
-                        close()
-                    }
                     drawCircle(Color.White.copy(alpha = 0.25f * twinkle), radius = r * 0.9f, center = c)
-                    drawPath(star, Color.White.copy(alpha = 0.95f * twinkle))
+                    drawPath(starPath(c, r), Color.White.copy(alpha = 0.95f * twinkle))
                 }
             },
         contentAlignment = Alignment.Center
@@ -1240,8 +1236,8 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                 .fillMaxSize()
                 .clip(CircleShape)
                 .drawBehind {
-                    // The gradient turns slowly.
-                    rotate(time * 360f) {
+                    // The gradient turns slowly (a full turn every 8 s; a turn looks the same, so it never jumps).
+                    rotate((time * 45f) % 360f) {
                         drawCircle(
                             Brush.linearGradient(
                                 listOf(Color(0xFF8E7CF0), Color(0xFF5B8CFF), Color(0xFF7FB2FF)),
@@ -1249,6 +1245,23 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                             ),
                             radius = size.minDimension
                         )
+                    }
+                    // The icon's three stars, each twinkling on its own (mixed waves of unrelated
+                    // speeds, so the pattern doesn't repeat).
+                    val u = size.minDimension / 24f
+                    val o = Offset((size.width - 24f * u) / 2f, (size.height - 24f * u) / 2f)
+                    fun wave(a: Float, b: Float, c: Float) =
+                        (0.5f + 0.25f * kotlin.math.sin(time * a) + 0.25f * kotlin.math.sin(time * b + c)).coerceIn(0f, 1f)
+                    val stars = listOf(
+                        Triple(Offset(9.5f, 14f), 6.2f, wave(1.3f, 2.17f, 0.4f)),
+                        Triple(Offset(17.5f, 6.5f), 3.2f, wave(1.9f, 3.11f, 2.1f)),
+                        Triple(Offset(17.5f, 17.5f), 3.2f, wave(1.6f, 2.71f, 4.3f))
+                    )
+                    for ((at, big, t) in stars) {
+                        val c = o + at * u
+                        val r = big * u * (0.78f + 0.3f * t)
+                        drawCircle(Color.White.copy(alpha = 0.18f + 0.3f * t), radius = r * 0.75f, center = c)
+                        drawPath(starPath(c, r), Color.White.copy(alpha = 0.8f + 0.2f * t))
                     }
                 }
                 .border(2.dp, if (selected) Color.White else Color.Transparent, CircleShape)
@@ -1258,22 +1271,39 @@ private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
                         pulse.animateTo(1f, androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                     }
                     onClick()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Rounded.AutoAwesome, "AI tools", tint = Color.White, modifier = Modifier.size(26.dp))
-        }
+                }
+                .semantics { contentDescription = "AI tools" }
+        )
     }
 }
 
-/** One sparkle on the AI button: where (angle, distance out of the radius), size, timing. */
-private class Sparkle(val angle: Float, val distance: Float, val size: Float, val phase: Float, val speed: Float)
+/** A four-pointed star of radius [r] at [c]. */
+private fun starPath(c: Offset, r: Float) = androidx.compose.ui.graphics.Path().apply {
+    val w = r * 0.2f
+    moveTo(c.x, c.y - r)
+    quadraticTo(c.x + w, c.y - w, c.x + r, c.y)
+    quadraticTo(c.x + w, c.y + w, c.x, c.y + r)
+    quadraticTo(c.x - w, c.y + w, c.x - r, c.y)
+    quadraticTo(c.x - w, c.y - w, c.x, c.y - r)
+    close()
+}
 
-private val Sparkles = listOf(
-    Sparkle(-0.9f, 1.05f, 5f, 0.0f, 2f),
-    Sparkle(0.6f, 1.12f, 4f, 0.35f, 3f),
-    Sparkle(2.3f, 1.0f, 4.5f, 0.7f, 2f),
-    Sparkle(3.6f, 1.1f, 3.5f, 0.15f, 3f),
-    Sparkle(-2.2f, 0.55f, 3f, 0.5f, 4f),
-    Sparkle(1.4f, 0.6f, 2.5f, 0.85f, 4f)
-)
+/** One sparkle round the AI button: where, how big, and when it twinkles. */
+private class SparkleState {
+    var angle = 0f
+    var distance = 1f
+    var size = 4f
+    var born = 0f
+    var life = 1f
+
+    fun respawn(now: Float, first: Boolean = false) {
+        val random = kotlin.random.Random
+        angle = random.nextFloat() * 2f * Math.PI.toFloat()
+        // Mostly just outside the edge, some over the button.
+        distance = if (random.nextFloat() < 0.7f) 0.95f + random.nextFloat() * 0.25f else 0.45f + random.nextFloat() * 0.3f
+        size = 2.5f + random.nextFloat() * 3f
+        life = 0.8f + random.nextFloat() * 1.2f
+        // A random pause before it shows (the first ones start spread out).
+        born = now + if (first) -random.nextFloat() * life else random.nextFloat() * 0.9f
+    }
+}

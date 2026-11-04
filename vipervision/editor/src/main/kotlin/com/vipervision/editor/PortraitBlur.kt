@@ -57,7 +57,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -579,8 +580,7 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
     // The preview follows the choices (a smaller copy, redone after each change).
     LaunchedEffect(session) {
         val small = withContext(Dispatchers.Default) { session.preview.scaledToFit(1080) }
-        snapshotFlow { session.settings() }.collectLatest { settings ->
-            delay(50)
+        snapshotFlow { session.settings() }.conflate().collect { settings ->
             session.shown = withContext(Dispatchers.Default) { PortraitBlur.apply(small, session.depth, session.matte, settings) }
         }
     }

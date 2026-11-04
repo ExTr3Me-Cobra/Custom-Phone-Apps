@@ -1033,6 +1033,13 @@ class DirectoryAdapter(
             }
 
             dirName.text = nameCount
+            // Viper Vision: the one-time "What's this?" on the Locked album.
+            org.fossify.gallery.helpers.LockedAlbumHint.bind(
+                activity, root, dirThumbnail,
+                show = !isPickIntent && org.fossify.gallery.helpers.LockedAlbum.isLocked(directory.path) &&
+                    !org.fossify.gallery.helpers.LockedAlbumHint.seen(activity),
+                accent = properPrimaryColor
+            )
 
             if (isListViewType || folderStyle == FOLDER_STYLE_ROUNDED_CORNERS) {
                 photoCnt.setTextColor(textColor)

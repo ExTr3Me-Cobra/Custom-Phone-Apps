@@ -17,7 +17,8 @@ import androidx.compose.ui.unit.dp
 import com.t8rin.neural_tools.depth.DepthAnything
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.withContext
 import kotlin.math.exp
 import kotlin.math.max
@@ -154,8 +155,7 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
     override fun Screen(onCancel: () -> Unit, onApply: () -> Unit) {
         val small = remember { preview.scaledToFit(1080) }
         LaunchedEffect(Unit) {
-            snapshotFlow { settings() }.collectLatest { s ->
-                delay(30)
+            snapshotFlow { settings() }.conflate().collect { s ->
                 shown = withContext(Dispatchers.Default) { render(small, s) }
             }
         }

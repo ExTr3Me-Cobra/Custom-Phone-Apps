@@ -23,7 +23,8 @@ import com.t8rin.neural_tools.viper.FaceParser
 import com.t8rin.neural_tools.viper.YuNet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
@@ -246,8 +247,7 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
     override fun Screen(onCancel: () -> Unit, onApply: () -> Unit) {
         val small = remember { preview.scaledToFit(1080) }
         LaunchedEffect(Unit) {
-            snapshotFlow { settings() }.collectLatest { s ->
-                delay(40)
+            snapshotFlow { settings() }.conflate().collect { s ->
                 shown = withContext(Dispatchers.Default) { render(small, s) }
             }
         }

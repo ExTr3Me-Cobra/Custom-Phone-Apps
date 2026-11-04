@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -100,13 +105,30 @@ internal fun StudioFrame(
                 )
                 IconButton(onClick = onApply) { Icon(Icons.Rounded.Done, "Apply", tint = accent) }
             }
+            // Pinch to zoom (and drag while zoomed); taps still land on the right spot.
+            var zoom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+            var pan by remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .clipToBounds()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, move, scale, _ ->
+                            zoom = (zoom * scale).coerceIn(1f, 8f)
+                            val limitX = size.width * (zoom - 1f) / 2f
+                            val limitY = size.height * (zoom - 1f) / 2f
+                            pan = if (zoom <= 1.001f) Offset.Zero
+                            else Offset((pan.x + move.x).coerceIn(-limitX, limitX), (pan.y + move.y).coerceIn(-limitY, limitY))
+                        }
+                    }
                     .then(
-                        if (onTap == null) Modifier else Modifier.pointerInput(photoWidth, photoHeight) {
-                            detectTapGestures { tap ->
+                        if (onTap == null) Modifier.pointerInput(Unit) {
+                            detectTapGestures(onDoubleTap = { zoom = 1f; pan = Offset.Zero })
+                        } else Modifier.pointerInput(photoWidth, photoHeight) {
+                            detectTapGestures(onDoubleTap = { zoom = 1f; pan = Offset.Zero }) { screen ->
+                                val c = Offset(size.width / 2f, size.height / 2f)
+                                val tap = (screen - c - pan) / zoom + c
                                 val rect = fittedImageRect(size.width.toFloat(), size.height.toFloat(), photoWidth, photoHeight)
                                 if (rect.contains(tap)) onTap(Offset((tap.x - rect.left) / rect.width, (tap.y - rect.top) / rect.height))
                             }
@@ -114,6 +136,17 @@ internal fun StudioFrame(
                     ),
                 contentAlignment = Alignment.Center
             ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = zoom
+                            scaleY = zoom
+                            translationX = pan.x
+                            translationY = pan.y
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                 if (shown != null) {
                     Image(
                         bitmap = remember(shown) { shown.asImageBitmap() },
@@ -131,6 +164,7 @@ internal fun StudioFrame(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(Color.Black.copy(alpha = 0.65f)).padding(20.dp)
                     ) { CircularProgressIndicator(color = accent) }
+                }
                 }
                 photoExtra()
             }
