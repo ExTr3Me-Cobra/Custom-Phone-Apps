@@ -919,7 +919,8 @@ class DirectoryAdapter(
             // Viper Vision: the bottom-right circle selects the folder (it replaces the top check).
             root.findViewById<ImageView>(R.id.vv_dir_select)?.let { box ->
                 dirCheck.beGone()
-                box.beVisibleIf(!isPickIntent)
+                // Not on the Locked album (it can't be selected).
+                box.beVisibleIf(!isPickIntent && !org.fossify.gallery.helpers.LockedAlbum.isLocked(directory.path))
                 if (isSelected) {
                     box.setBackgroundResource(R.drawable.circle_background)
                     box.background?.applyColorFilter(properPrimaryColor)
@@ -969,7 +970,22 @@ class DirectoryAdapter(
                 }
             }
 
-            if (lockedFolderPaths.contains(directory.path)) {
+            if (org.fossify.gallery.helpers.LockedAlbum.isLocked(directory.path)) {
+                // Viper Vision: the Locked album never shows what's in it: black with a lock.
+                Glide.with(activity).clear(dirThumbnail)
+                dirThumbnail.setImageDrawable(null)
+                dirLock.beVisible()
+                val corners = when {
+                    isListViewType -> ROUNDED_CORNERS_SMALL
+                    folderStyle == FOLDER_STYLE_SQUARE -> ROUNDED_CORNERS_FOLDER
+                    else -> ROUNDED_CORNERS_BIG
+                }
+                dirLock.background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.BLACK)
+                    cornerRadius = root.resources.getDimension(org.fossify.gallery.extensions.cornerRadiusRes(corners))
+                }
+                dirLock.applyColorFilter(android.graphics.Color.WHITE)
+            } else if (lockedFolderPaths.contains(directory.path)) {
                 dirLock.beVisible()
                 dirLock.background = ColorDrawable(root.context.getProperBackgroundColor())
                 dirLock.applyColorFilter(root.context.getProperBackgroundColor().getContrastColor())
