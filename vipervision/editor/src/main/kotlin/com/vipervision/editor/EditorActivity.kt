@@ -174,6 +174,8 @@ class EditorActivity : ComposeActivity() {
                     samsungAvailable = SamsungHandoff.enabled(this@EditorActivity) &&
                             (samsungEditor != null || SamsungHandoff.isSamsung),
                     onSamsungTool = { tool -> scope.sendToSamsung(source, tool) },
+                    onStartPortraitBlur = { scope.startPortraitBlur() },
+                    onApplyPortraitBlur = { scope.applyPortraitBlur(source) },
                     onApplyCutOut = { scope.applyCutOut() },
                     onCancelCutOut = ::closeCutOut,
                     onNeedSamDownload = { pendingSamDownload = true },
@@ -672,6 +674,54 @@ class EditorActivity : ComposeActivity() {
             Toast.makeText(this@EditorActivity, "$label failed: ${it.message}", Toast.LENGTH_LONG).show()
         }
         if (session.generative) withContext(Dispatchers.IO) { aiRunner.release() }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /**
+     * Opens Portrait blur: finds the subject on the photo as edited so far with the background
+     * remover (BiRefNet if downloaded, else the built-in U2NetP).
+     */
+    private fun CoroutineScope.startPortraitBlur() = launch {
+        if (controller.isBusy || controller.portraitBlur != null) return@launch
+        val preview = controller.workingPreview ?: return@launch
+        controller.isBusy = true
+        controller.busyMessage = "Finding the subject…"
+        runCatching {
+            val choices = AiTool.RemoveBackground.choices
+            val choice = choices.firstOrNull { !it.isBundled && aiRunner.isReady(it) } ?: choices.first { it.isBundled }
+            if (choice.isBundled) aiRunner.download(choice) {}
+            val subject = withContext(Dispatchers.Default) { aiRunner.run(choice, preview) { _, _ -> } }
+            ViperLog.i("BLUR", "Subject found with ${choice.title}: ${ViperLog.transparency(subject)}")
+            PortraitBlurSession(preview, subject)
+        }.onSuccess { controller.portraitBlur = it }.onFailure {
+            ViperLog.error("EDITOR", "startPortraitBlur failed", it)
+            Toast.makeText(this@EditorActivity, "Couldn't find the subject: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        withContext(Dispatchers.IO) { aiRunner.release() }
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /** Portrait blur's Apply, on the full-size photo. */
+    private fun CoroutineScope.applyPortraitBlur(source: Uri) = launch {
+        val session = controller.portraitBlur ?: return@launch
+        if (controller.isBusy) return@launch
+        controller.isBusy = true
+        controller.busyMessage = "Blurring the background…"
+        runCatching {
+            val input = controller.workingFile?.let(Uri::fromFile) ?: source
+            val full = withContext(Dispatchers.IO) { decodeImage(this@EditorActivity, input, maxSafeSide(this@EditorActivity, input)) }
+            val output = withContext(Dispatchers.Default) { PortraitBlur.apply(full, session.subject, session.strength) }
+            controller.busyMessage = "Finishing…"
+            storeResult(output)
+        }.onSuccess { result ->
+            controller.addPixelStep(controller.state.pixelSteps + PixelStep.PortraitBlur(), result)
+            controller.portraitBlur = null
+        }.onFailure {
+            ViperLog.error("EDITOR", "applyPortraitBlur failed", it)
+            Toast.makeText(this@EditorActivity, "Portrait blur failed: ${it.message}", Toast.LENGTH_LONG).show()
+        }
         controller.busyMessage = null
         controller.isBusy = false
     }

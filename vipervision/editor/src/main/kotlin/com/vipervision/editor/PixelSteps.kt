@@ -40,6 +40,9 @@ sealed interface PixelStep {
     /** The Draw tool's (or Markup layers') result. */
     data class Drawing(val id: Long = System.nanoTime()) : PixelStep
 
+    /** Portrait blur's result. */
+    data class PortraitBlur(val id: Long = System.nanoTime()) : PixelStep
+
     /** A model from "All AI models"; [alpha] when its result has transparency. */
     data class AiModel(val modelName: String, val alpha: Boolean, val id: Long = System.nanoTime()) : PixelStep
 }

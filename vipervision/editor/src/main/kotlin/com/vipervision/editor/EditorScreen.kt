@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import com.t8rin.imagetoolbox.core.resources.icons.BlurCircular
 import kotlinx.coroutines.launch
 import android.widget.Toast
 import android.graphics.Bitmap
@@ -97,6 +98,8 @@ internal fun EditorScreen(
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
+    onStartPortraitBlur: () -> Unit,
+    onApplyPortraitBlur: () -> Unit,
     onApplyCutOut: () -> Unit,
     onCancelCutOut: () -> Unit,
     onNeedSamDownload: () -> Unit,
@@ -181,6 +184,12 @@ internal fun EditorScreen(
 
     controller.draw?.let { session ->
         DrawScreen(session = session, onCancel = onCancelDraw, onApply = onApplyDraw)
+        if (controller.isBusy) BusyOverlay(controller.busyMessage)
+        return
+    }
+
+    controller.portraitBlur?.let { session ->
+        PortraitBlurScreen(session = session, onCancel = { controller.portraitBlur = null }, onApply = onApplyPortraitBlur)
         if (controller.isBusy) BusyOverlay(controller.busyMessage)
         return
     }
@@ -449,7 +458,7 @@ internal fun EditorScreen(
             } else {
                 when (controller.tab) {
                     EditorTab.Adjust -> AdjustPanel(controller)
-                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool)
+                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartPortraitBlur)
                     EditorTab.Transform -> TransformPanel(controller, onStartCropStudio)
                     EditorTab.Decorate -> DecoratePanel(controller, onStartDraw, onStartMarkup)
                 }
@@ -641,7 +650,8 @@ private fun AiPanel(
     onStartObjectEraser: () -> Unit,
     onStartCutOut: () -> Unit,
     samsungAvailable: Boolean,
-    onSamsungTool: (SamsungTool) -> Unit
+    onSamsungTool: (SamsungTool) -> Unit,
+    onStartPortraitBlur: () -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -698,6 +708,18 @@ private fun AiPanel(
                     selected = false,
                     enabled = !controller.isBusy,
                     onClick = onStartObjectEraser
+                )
+            }
+            // Portrait blur: the background behind the subject blurred (the background remover's cut-out).
+            item {
+                AiBubble(
+                    icon = Icons.Rounded.BlurCircular,
+                    label = "Portrait blur",
+                    download = null,
+                    applied = controller.state.pixelSteps.any { it is PixelStep.PortraitBlur },
+                    selected = false,
+                    enabled = !controller.isBusy,
+                    onClick = onStartPortraitBlur
                 )
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).

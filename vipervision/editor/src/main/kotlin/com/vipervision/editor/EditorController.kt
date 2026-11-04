@@ -242,6 +242,9 @@ class EditorController {
     /** Set while the user is painting over something to heal or erase. */
     var paint by mutableStateOf<PaintSession?>(null)
 
+    /** Set while Portrait blur is open. */
+    var portraitBlur by mutableStateOf<PortraitBlurSession?>(null)
+
     /** Set while the Cut out tool is open. */
     var cutOut by mutableStateOf<CutOutSession?>(null)
 
