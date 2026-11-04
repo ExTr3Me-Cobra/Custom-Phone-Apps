@@ -529,7 +529,8 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
 
     private var viperSetupDialog: androidx.appcompat.app.AlertDialog? = null
     private val APP_INFO_OPENED = "vv_setup_app_info_opened"
-    private val BATTERY_ASKED = "vv_setup_battery_asked"
+    private val NOTIFICATIONS_ASKED = "vv_setup_notifications_asked"
+    private val NOTIFICATIONS_REQUEST = 4711
     private val TOOLBAR_CHECK_PENDING = "vv_toolbar_check_pending"
     private val TOOLBAR_CHECK_RESULT = "vv_toolbar_check_result"
     private val TOOLBAR_CHECK_SHOTS = "vv_toolbar_check_shots"
@@ -552,13 +553,21 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         // Every phone needs the accessibility service (camera shortcut, screenshot toolbar) and,
         // on Android 11+, All files access; Samsung phones also the screenshot toolbar step.
         val needsAllFiles = isRPlus() && !android.os.Environment.isExternalStorageManager()
-        val steps = 2 + (if (isSamsung) 1 else 0) + if (isRPlus()) 1 else 0
-        val batteryStep = if (isSamsung) 3 else 2
+        // Every required step on this phone, in order (for "Set up Viper Vision (n of m)"). Each is
+        // checked again every time this screen shows, so one turned off later is asked for again.
+        val stepList = listOfNotNull(
+            "access", "toolbar".takeIf { isSamsung }, "battery",
+            "notifications".takeIf { android.os.Build.VERSION.SDK_INT >= 33 }, "files".takeIf { isRPlus() }
+        )
+        val steps = stepList.size
+        fun stepOf(key: String) = stepList.indexOf(key) + 1
         val prefs = getSharedPreferences("Prefs", MODE_PRIVATE)
         // Unrestricted battery: otherwise Android may stop the accessibility service in the
-        // background. Asked once; after that it's in Diagnostics → Phone check.
-        val needsBattery = !prefs.getBoolean(BATTERY_ASKED, false) &&
-            getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == false
+        // background. Required, like the rest.
+        val needsBattery = getSystemService(android.os.PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == false
+        // Notifications: AI model downloads and AI search show their progress in one.
+        val needsNotifications = android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
         val service = "$packageName/com.vipervision.editor.CameraThumbnailService"
         val serviceOn = android.provider.Settings.Secure.getString(
             contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -576,12 +585,12 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         if (!needsAllFiles) deleteTestScreenshots(prefs)
         when {
             !serviceOn -> builder
-                .setTitle(getString(R.string.vv_setup_title, 1, steps))
+                .setTitle(getString(R.string.vv_setup_title, stepOf("access"), steps))
                 .setMessage(R.string.vv_setup_access_message)
                 .setView(accessibilitySetupButtons(prefs))
 
             !serviceRunning && sinceStart >= 4000 -> builder
-                .setTitle(getString(R.string.vv_setup_title, 1, steps))
+                .setTitle(getString(R.string.vv_setup_title, stepOf("access"), steps))
                 .setMessage(R.string.vv_setup_access_not_running)
                 .setView(accessibilitySetupButtons(prefs))
 
@@ -589,26 +598,42 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
                 // The screenshot toolbar (the editor's ScreenshotToolbar) checks the next screenshot.
                 prefs.edit().putBoolean(TOOLBAR_CHECK_PENDING, true).apply()
                 builder
-                    .setTitle(getString(R.string.vv_setup_title, 2, steps))
+                    .setTitle(getString(R.string.vv_setup_title, stepOf("toolbar"), steps))
                     .setMessage(R.string.vv_setup_toolbar_message)
                     .setView(toolbarCheckView(prefs))
             }
 
             needsBattery -> builder
-                .setTitle(getString(R.string.vv_setup_title, batteryStep, steps))
+                .setTitle(getString(R.string.vv_setup_title, stepOf("battery"), steps))
                 .setMessage(R.string.vv_setup_battery_message)
                 .setPositiveButton(R.string.vv_setup_battery_open) { _, _ ->
-                    prefs.edit().putBoolean(BATTERY_ASKED, true).apply()
                     val ask = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName"))
                     runCatching { startActivity(ask) }.onFailure {
                         runCatching { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
                     }
                 }
 
+            needsNotifications -> builder
+                .setTitle(getString(R.string.vv_setup_title, stepOf("notifications"), steps))
+                .setMessage(R.string.vv_setup_notifications_message)
+                .setPositiveButton(R.string.vv_setup_battery_open) { _, _ ->
+                    // Android's own prompt the first time (and while it still offers it), else
+                    // the app's notification settings.
+                    val asked = prefs.getBoolean(NOTIFICATIONS_ASKED, false)
+                    if (!asked || shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)) {
+                        prefs.edit().putBoolean(NOTIFICATIONS_ASKED, true).apply()
+                        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), NOTIFICATIONS_REQUEST)
+                    } else {
+                        runCatching {
+                            startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+                        }
+                    }
+                }
+
             // Saving over originals, rotating, deleting, moving and hidden albums without Android
             // asking each time. Only "All files" counts (checked here each time).
             needsAllFiles -> builder
-                .setTitle(if (steps > 1) getString(R.string.vv_setup_title, steps, steps) else getString(R.string.vv_setup_title_single))
+                .setTitle(if (steps > 1) getString(R.string.vv_setup_title, stepOf("files"), steps) else getString(R.string.vv_setup_title_single))
                 .setMessage(R.string.vv_setup_files_message)
                 .setPositiveButton(R.string.vv_setup_files_open) { _, _ -> launchGrantAllFilesIntent() }
 
