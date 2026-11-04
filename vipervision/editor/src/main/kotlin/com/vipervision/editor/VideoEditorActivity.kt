@@ -5,6 +5,7 @@ import com.t8rin.imagetoolbox.core.resources.icons.RotateRight
 import com.t8rin.imagetoolbox.core.resources.icons.CropSmall
 import com.t8rin.imagetoolbox.core.resources.icons.Speed
 import com.t8rin.imagetoolbox.core.resources.icons.MotionMode
+import com.t8rin.imagetoolbox.core.resources.icons.MusicAdd
 import com.t8rin.neural_tools.viper.Rife
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clipToBounds
@@ -301,7 +302,7 @@ class VideoEditorActivity : ComponentActivity() {
         }
         if (!adjustments.isIdentity) video += VideoAdjustEffect { adjustments }
         val effects = if (video.isEmpty()) Effects.EMPTY else Effects(emptyList(), video)
-        val builder = EditedMediaItem.Builder(item).setEffects(effects)
+        val builder = EditedMediaItem.Builder(item).setEffects(effects).setRemoveAudio(state.muted)
         if (state.speed != 1f) {
             // Times here start at the trimmed start.
             val speed = state.speed
@@ -405,6 +406,9 @@ class VideoEditState {
     var speedStart by mutableLongStateOf(0L)
     var speedEnd by mutableLongStateOf(0L)
 
+    /** Sound: removed from the saved video. */
+    var muted by mutableStateOf(false)
+
     /** Stabilize: 0 off, 1–3 low to high (done when saving, see VideoPost). */
     var stabilize by mutableIntStateOf(0)
 
@@ -427,11 +431,11 @@ class VideoEditState {
 
     val changed: Boolean
         get() = !adjustments.isIdentity || trimStart > 0 || (durationMs > 0 && trimEnd < durationMs) ||
-            speed != 1f || turns % 4 != 0 || cropRatio != null || stabilize > 0
+            speed != 1f || turns % 4 != 0 || cropRatio != null || stabilize > 0 || muted
 }
 
 /** The video editor's tools besides the dials. */
-enum class VideoTool(val label: String) { Trim("Trim"), Speed("Speed"), Crop("Crop"), Rotate("Rotate"), Stabilize("Stabilize") }
+enum class VideoTool(val label: String) { Trim("Trim"), Speed("Speed"), Crop("Crop"), Rotate("Rotate"), Stabilize("Stabilize"), Sound("Sound") }
 
 /** Speeds offered. */
 private val Speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f)
@@ -685,6 +689,7 @@ private fun VideoEditorScreen(
                     VideoTool.Crop -> Icons.Rounded.CropSmall
                     VideoTool.Rotate -> Icons.Rounded.RotateRight
                     VideoTool.Stabilize -> Icons.Outlined.MotionMode
+                    VideoTool.Sound -> Icons.Rounded.MusicAdd
                 }
                 Box(
                     Modifier
@@ -738,6 +743,16 @@ private fun VideoEditorScreen(
                             if (state.stabilize == 0) "Steadies shaky video" else "Steadied when you save (a little zoomed in)",
                             color = Color.Gray, fontSize = 12.sp
                         )
+                    }
+                    VideoTool.Sound -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ChoicePill("Keep sound", !state.muted) {
+                            state.muted = false
+                            player.volume = 1f
+                        }
+                        ChoicePill("Remove sound", state.muted) {
+                            state.muted = true
+                            player.volume = 0f
+                        }
                     }
                     VideoTool.Rotate -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         ChoicePill("↺  Left", false) { state.turns = (state.turns + 3) % 4 }

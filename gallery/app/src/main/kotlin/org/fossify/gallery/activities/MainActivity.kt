@@ -1866,10 +1866,10 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
             allDirs = mDirs,
             currentPathPrefix = mCurrentPathPrefix
         ).clone() as ArrayList<Directory>
-        // Viper Vision: the Locked album, first on the albums page (not when picking for another app).
+        // Viper Vision: the Locked album, always last on the albums page (not when picking for another app).
         if (mCurrentPathPrefix.isEmpty() && !isPickIntent(intent) && !isGetAnyContentIntent(intent)) {
             dirsToShow.removeAll { org.fossify.gallery.helpers.LockedAlbum.isLocked(it.path) }
-            dirsToShow.add(0, org.fossify.gallery.helpers.LockedAlbum.directory(getString(R.string.vv_locked_album)))
+            dirsToShow.add(org.fossify.gallery.helpers.LockedAlbum.directory(getString(R.string.vv_locked_album)))
         }
 
         if (currAdapter == null || forceRecreate) {

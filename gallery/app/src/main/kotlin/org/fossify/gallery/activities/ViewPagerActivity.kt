@@ -351,6 +351,10 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
                 findItem(R.id.menu_copy_to_clipboard).isVisible = currentMedium.isImage()
                 findItem(R.id.menu_copy_to).isVisible = visibleBottomActions and BOTTOM_ACTION_COPY == 0
                 findItem(R.id.menu_move_to).isVisible = visibleBottomActions and BOTTOM_ACTION_MOVE == 0
+                // Viper Vision: the Locked album.
+                val inLocked = org.fossify.gallery.helpers.LockedAlbum.isLocked(currentMedium.parentPath)
+                findItem(R.id.vv_menu_lock).isVisible = !inLocked && !currentMedium.getIsInRecycleBin()
+                findItem(R.id.vv_menu_unlock).isVisible = inLocked
                 findItem(R.id.menu_save_as).isVisible = rotationDegrees != 0
                 findItem(R.id.menu_print).isVisible = currentMedium.isImage() || currentMedium.isRaw()
                 findItem(R.id.menu_resize).isVisible = visibleBottomActions and BOTTOM_ACTION_RESIZE == 0 && currentMedium.isImage()
@@ -414,6 +418,18 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
                 R.id.menu_slideshow -> initSlideshow()
                 R.id.menu_copy_to -> checkMediaManagementAndCopy(true)
                 R.id.menu_move_to -> moveFileTo()
+                R.id.vv_menu_lock, R.id.vv_menu_unlock -> {
+                    val into = menuItem.itemId == R.id.vv_menu_lock
+                    val move = if (into) org.fossify.gallery.helpers.LockedAlbum::moveIn else org.fossify.gallery.helpers.LockedAlbum::moveOut
+                    move(this, listOf(getCurrentPath())) { moved ->
+                        Toast.makeText(
+                            this,
+                            getString(if (into) R.string.vv_moved_to_locked else R.string.vv_moved_out_of_locked, moved),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        refreshViewPager()
+                    }
+                }
                 R.id.menu_open_with -> openPath(getCurrentPath(), true)
                 R.id.menu_hide -> confirmHideTwice("this item") { toggleFileVisibility(true) }
                 R.id.menu_unhide -> toggleFileVisibility(false)

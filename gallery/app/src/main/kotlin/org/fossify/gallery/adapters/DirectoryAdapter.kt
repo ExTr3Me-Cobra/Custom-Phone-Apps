@@ -200,6 +200,8 @@ class DirectoryAdapter(
             findItem(R.id.cab_change_order).isVisible = false
 
             findItem(R.id.cab_create_shortcut).isVisible = isOneItemSelected
+            // Viper Vision: every photo and video of the picked albums into the Locked album.
+            findItem(R.id.vv_cab_move_locked).isVisible = selectedPaths.none { it == FAVORITES || it == RECYCLE_BIN }
 
             checkHideBtnVisibility(this, selectedPaths)
             checkPinBtnVisibility(this, selectedPaths)
@@ -232,6 +234,17 @@ class DirectoryAdapter(
             R.id.cab_create_shortcut -> tryCreateShortcut()
             R.id.cab_delete -> askConfirmDelete()
             R.id.vv_cab_merge -> askMerge()
+            R.id.vv_cab_move_locked -> {
+                val exts = setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp", "dng", "avif", "mp4", "mov", "3gp", "mkv", "webm", "avi", "m4v")
+                val files = getSelectedPaths().flatMap { dir ->
+                    java.io.File(dir).listFiles { f -> f.isFile && !f.name.startsWith(".") && f.extension.lowercase() in exts }.orEmpty().map { it.absolutePath }
+                }
+                org.fossify.gallery.helpers.LockedAlbum.moveIn(activity, files) { moved ->
+                    android.widget.Toast.makeText(activity, activity.getString(R.string.vv_moved_to_locked, moved), android.widget.Toast.LENGTH_SHORT).show()
+                    finishActMode()
+                    listener?.refreshItems()
+                }
+            }
             R.id.cab_select_photo -> tryChangeAlbumCover(false)
             R.id.cab_use_default -> tryChangeAlbumCover(true)
         }
