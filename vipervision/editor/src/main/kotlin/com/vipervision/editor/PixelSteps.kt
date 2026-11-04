@@ -116,9 +116,9 @@ fun Geometry.toSourceStrokes(
 }
 
 /**
- * Where a new polygon corner [p] goes: between the two neighbouring corners it's closest to (the
- * side whose detour through [p] is shortest), so the outline doesn't cross itself however the
- * corners are tapped. [sx]/[sy] turn the points' units into the same scale both ways.
+ * Where a new polygon corner [p] goes: after the last one tapped (tracing around something), unless
+ * that makes the outline cross itself; then into the side whose detour through [p] is shortest
+ * without crossing, so tapping out of order doesn't fold the shape. [sx]/[sy] turn the points' units into the same scale both ways.
  */
 fun insertCorner(corners: MutableList<Offset>, p: Offset, sx: Float = 1f, sy: Float = 1f, order: MutableList<Int>? = null) {
     fun put(index: Int) {
@@ -135,6 +135,25 @@ fun insertCorner(corners: MutableList<Offset>, p: Offset, sx: Float = 1f, sy: Fl
     }
     fun d(a: Offset, b: Offset) = Offset((a.x - b.x) * sx, (a.y - b.y) * sy).getDistance()
     val n = corners.size
+    // Tracing around something: the new corner follows the last one tapped (the side from the
+    // last back to the first). Only if that would make the outline cross itself does it go into
+    // another side instead.
+    fun crossesAt(i: Int): Boolean {
+        val a = corners[i]
+        val b = corners[(i + 1) % n]
+        for (j in 0 until n) {
+            if (j == i) continue
+            val c = corners[j]
+            val e = corners[(j + 1) % n]
+            if (j != (i - 1 + n) % n && segmentsCross(a, p, c, e)) return true
+            if (j != (i + 1) % n && segmentsCross(p, b, c, e)) return true
+        }
+        return false
+    }
+    if (!crossesAt(n - 1)) {
+        put(n)
+        return
+    }
     // Each side the new corner could go into: its detour, and whether the two new sides would
     // cross any other side (a folded outline, which fills patchily).
     var best = -1
