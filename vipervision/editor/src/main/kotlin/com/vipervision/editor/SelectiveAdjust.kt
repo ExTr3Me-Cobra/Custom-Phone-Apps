@@ -60,7 +60,16 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
     var invert by mutableStateOf(false)
     var busy by mutableStateOf(false)
     /** The same dials as the Adjust tab, for the selection only. */
-    var adjustments by mutableStateOf(Adjustments())
+    var inside by mutableStateOf(Adjustments())
+    /** Everything else's own dials (separate from the selection's). */
+    var outside by mutableStateOf(Adjustments())
+
+    /** The dials being changed: the selection's, or everything else's. */
+    var adjustments: Adjustments
+        get() = if (invert) outside else inside
+        set(value) {
+            if (invert) outside = value else inside = value
+        }
     var picked by mutableStateOf(Adjustment.Brightness)
     private var shown by mutableStateOf<Bitmap?>(null)
 
@@ -117,34 +126,39 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
 
     override suspend fun render(context: Context, full: Bitmap): Bitmap {
         val mask = selection
-        val inv = invert
         val w = full.width.toFloat()
         val h = full.height.toFloat()
-        return render(context, full, adjustments) { x, y ->
-            val m = mask?.at((x + 0.5f) / w, (y + 0.5f) / h) ?: 0f
-            if (inv) 1f - m else m
-        }
+        return render(context, full, inside, outside) { x, y -> mask?.at((x + 0.5f) / w, (y + 0.5f) / h) ?: 0f }
     }
 
-    /** [image] with [a] applied (the Adjust tab's own filters), kept only where [weight] says. */
-    private suspend fun render(context: Context, image: Bitmap, a: Adjustments, weight: (Int, Int) -> Float): Bitmap {
-        if (a.isIdentity) return image
-        val adjusted = withContext(Dispatchers.Default) { applyAdjustments(context, image, a) }
+    /**
+     * [image] with [inA] (the Adjust tab's own filters) where the selection is and [outA]
+     * everywhere else; [weight] is how much each pixel is selection.
+     */
+    private suspend fun render(context: Context, image: Bitmap, inA: Adjustments, outA: Adjustments, weight: (Int, Int) -> Float): Bitmap {
+        if (inA.isIdentity && outA.isIdentity) return image
         val w = image.width
         val h = image.height
         val px = IntArray(w * h)
-        val ax = IntArray(w * h)
         image.getPixels(px, 0, w, 0, 0, w, h)
-        adjusted.getPixels(ax, 0, w, 0, 0, w, h)
+        suspend fun adjusted(a: Adjustments): IntArray? {
+            if (a.isIdentity) return null
+            val b = withContext(Dispatchers.Default) { applyAdjustments(context, image, a) }
+            return IntArray(w * h).also { b.getPixels(it, 0, w, 0, 0, w, h) }
+        }
+        val ins = adjusted(inA)
+        val outs = adjusted(outA)
         forRows(h) { y ->
             var i = y * w
             for (x in 0 until w) {
                 val m = weight(x, y)
-                if (m >= 0.998f) px[i] = ax[i]
-                else if (m > 0.002f) {
-                    val c = px[i]
-                    val d = ax[i]
-                    px[i] = rgb(c.red8 + (d.red8 - c.red8) * m, c.green8 + (d.green8 - c.green8) * m, c.blue8 + (d.blue8 - c.blue8) * m)
+                val c = px[i]
+                val a = ins?.get(i) ?: c
+                val o = outs?.get(i) ?: c
+                px[i] = when {
+                    m >= 0.998f -> a
+                    m <= 0.002f -> o
+                    else -> rgb(o.red8 + (a.red8 - o.red8) * m, o.green8 + (a.green8 - o.green8) * m, o.blue8 + (a.blue8 - o.blue8) * m)
                 }
                 i++
             }
@@ -162,21 +176,20 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
         LaunchedEffect(Unit) {
             // The selection as a weight per preview pixel, remade only when it changes.
             var weights = FloatArray(0)
-            var weightsFor: Pair<SoftMask?, Boolean>? = null
+            var weightsFor: SoftMask? = null
+            var made = false
             // Each change is shown as soon as the one before is done (none are thrown away half made).
-            snapshotFlow { Triple(selection, invert, adjustments) }.conflate().collect { (mask, inv, a) ->
+            snapshotFlow { Triple(selection, inside, outside) }.conflate().collect { (mask, inA, outA) ->
                 shown = withContext(Dispatchers.Default) {
-                    if (weightsFor != (mask to inv)) {
+                    if (!made || weightsFor !== mask) {
                         val w = small.width
                         val h = small.height
-                        weights = FloatArray(w * h) { i ->
-                            val m = mask?.at(((i % w) + 0.5f) / w, ((i / w) + 0.5f) / h) ?: 0f
-                            if (inv) 1f - m else m
-                        }
-                        weightsFor = mask to inv
+                        weights = FloatArray(w * h) { i -> mask?.at(((i % w) + 0.5f) / w, ((i / w) + 0.5f) / h) ?: 0f }
+                        weightsFor = mask
+                        made = true
                     }
                     val ws = weights
-                    render(context, small, a) { x, y -> ws[y * small.width + x] }
+                    render(context, small, inA, outA) { x, y -> ws[y * small.width + x] }
                 }
             }
         }
