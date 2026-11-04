@@ -1,5 +1,11 @@
 package com.vipervision.editor
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
 import com.t8rin.imagetoolbox.core.resources.icons.BlurCircular
 import kotlinx.coroutines.launch
 import android.widget.Toast
@@ -1074,18 +1080,9 @@ private fun BottomTabs(controller: EditorController) {
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // AI tools, styled like the sparkle button in Samsung's editor.
-        Box(
-            Modifier
-                .size(52.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(0xFF8E7CF0), Color(0xFF5B8CFF))))
-                .border(2.dp, if (controller.tab == EditorTab.Ai) Color.White else Color.Transparent, CircleShape)
-                .clickable { controller.tab = EditorTab.Ai },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Rounded.AutoAwesome, "AI tools", tint = Color.White, modifier = Modifier.size(26.dp))
-        }
+        // AI tools, styled like the sparkle button in Samsung's editor (always sparkling; a glowing
+        // pulse when tapped).
+        AiSparkleButton(selected = controller.tab == EditorTab.Ai) { controller.tab = EditorTab.Ai }
         TabIcon(EditorIcons.CropRotate, "Rotate and crop", controller.tab == EditorTab.Transform) {
             controller.tab = EditorTab.Transform
         }
@@ -1177,3 +1174,106 @@ private val PANEL_HEIGHT = 184.dp
 /** The shorter panel of the four tabs, and the gap above their bubbles. */
 private val COMPACT_PANEL_HEIGHT = 152.dp
 private val BUBBLES_TOP = 6.dp
+
+
+/** The AI tools button: a slowly turning gradient with twinkling sparkles; a tap sends out a blue glow. */
+@Composable
+private fun AiSparkleButton(selected: Boolean, onClick: () -> Unit) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "sparkle")
+    val time by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(6000, easing = androidx.compose.animation.core.LinearEasing)
+        ),
+        label = "time"
+    )
+    val pulse = remember { androidx.compose.animation.core.Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    val glow = Color(0xFF5B8CFF)
+    Box(
+        Modifier
+            .size(52.dp)
+            .drawBehind {
+                // The tap's pulse: a soft glow and a ring growing out and fading.
+                val p = pulse.value
+                if (p < 1f) {
+                    val r = size.minDimension / 2f * (1f + 0.95f * p)
+                    drawCircle(
+                        Brush.radialGradient(
+                            listOf(glow.copy(alpha = 0.55f * (1f - p)), glow.copy(alpha = 0f)),
+                            center = center, radius = r
+                        ),
+                        radius = r
+                    )
+                    drawCircle(glow.copy(alpha = 0.9f * (1f - p)), radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx() * (1f - p) + 0.5f))
+                }
+            }
+            .drawWithContent {
+                drawContent()
+                // Sparkles: four-pointed stars twinkling in turn, drifting slowly round.
+                val half = size.minDimension / 2f
+                for (s in Sparkles) {
+                    val local = ((time * s.speed + s.phase) % 1f + 1f) % 1f
+                    val twinkle = kotlin.math.sin(local * Math.PI).toFloat().let { it * it }
+                    if (twinkle < 0.02f) continue
+                    val angle = s.angle + time * 2f * Math.PI.toFloat() * 0.15f
+                    val c = Offset(center.x + kotlin.math.cos(angle) * half * s.distance, center.y + kotlin.math.sin(angle) * half * s.distance)
+                    val r = s.size.dp.toPx() * (0.4f + 0.6f * twinkle)
+                    val w = r * 0.28f
+                    val star = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(c.x, c.y - r)
+                        quadraticTo(c.x + w * 0.3f, c.y - w * 0.3f, c.x + r, c.y)
+                        quadraticTo(c.x + w * 0.3f, c.y + w * 0.3f, c.x, c.y + r)
+                        quadraticTo(c.x - w * 0.3f, c.y + w * 0.3f, c.x - r, c.y)
+                        quadraticTo(c.x - w * 0.3f, c.y - w * 0.3f, c.x, c.y - r)
+                        close()
+                    }
+                    drawCircle(Color.White.copy(alpha = 0.25f * twinkle), radius = r * 0.9f, center = c)
+                    drawPath(star, Color.White.copy(alpha = 0.95f * twinkle))
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .drawBehind {
+                    // The gradient turns slowly.
+                    rotate(time * 360f) {
+                        drawCircle(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF8E7CF0), Color(0xFF5B8CFF), Color(0xFF7FB2FF)),
+                                start = Offset(0f, 0f), end = Offset(size.width, size.height)
+                            ),
+                            radius = size.minDimension
+                        )
+                    }
+                }
+                .border(2.dp, if (selected) Color.White else Color.Transparent, CircleShape)
+                .clickable {
+                    scope.launch {
+                        pulse.snapTo(0f)
+                        pulse.animateTo(1f, androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                    }
+                    onClick()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.AutoAwesome, "AI tools", tint = Color.White, modifier = Modifier.size(26.dp))
+        }
+    }
+}
+
+/** One sparkle on the AI button: where (angle, distance out of the radius), size, timing. */
+private class Sparkle(val angle: Float, val distance: Float, val size: Float, val phase: Float, val speed: Float)
+
+private val Sparkles = listOf(
+    Sparkle(-0.9f, 1.05f, 5f, 0.0f, 2f),
+    Sparkle(0.6f, 1.12f, 4f, 0.35f, 3f),
+    Sparkle(2.3f, 1.0f, 4.5f, 0.7f, 2f),
+    Sparkle(3.6f, 1.1f, 3.5f, 0.15f, 3f),
+    Sparkle(-2.2f, 0.55f, 3f, 0.5f, 4f),
+    Sparkle(1.4f, 0.6f, 2.5f, 0.85f, 4f)
+)
