@@ -259,6 +259,7 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
             finish()
             return
         }
+        org.fossify.gallery.helpers.LockedAlbum.guard(this, org.fossify.gallery.helpers.LockedAlbum.isLocked(mPath.substringBeforeLast('/')))
 
         initBottomActions()
         if (reloadAfterEditor) {

@@ -170,6 +170,7 @@ open class VideoPlayerActivity : BaseViewerActivity(), SeekBar.OnSeekBarChangeLi
 
     override fun onResume() {
         super.onResume()
+        org.fossify.gallery.helpers.LockedAlbum.guard(this, org.fossify.gallery.helpers.LockedAlbum.isLocked(mUri?.path?.substringBeforeLast('/')))
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
         if (config.blackBackground) {

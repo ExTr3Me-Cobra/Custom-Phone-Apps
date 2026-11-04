@@ -8,6 +8,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.CancellationSignal
 import android.os.Environment
+import android.view.View
 import android.widget.Toast
 import org.fossify.gallery.models.Directory
 import java.io.File
@@ -57,20 +58,115 @@ object LockedAlbum {
         )
     }
 
-    /** Asks for the fingerprint, face or screen lock, then runs [onUnlocked]. */
-    fun unlock(activity: Activity, onUnlocked: () -> Unit) {
+    /** Set after unlocking; cleared as soon as the app is fully out of view (see [guard]). */
+    @Volatile
+    private var unlocked = false
+    private var prompting = false
+    /** The unlock was cancelled: every Locked album screen closes without asking again. */
+    private var declined = false
+    private var watching = false
+    private var started = 0
+    private const val COVER = "vv_locked_cover"
+
+    /**
+     * For a screen showing the Locked album (or something in it, [isLocked]): hidden from the
+     * recent-apps view, and covered until unlocked again whenever the app has been left
+     * (home, another app, screen off). Cancelling the unlock backs out of the screen.
+     * Call from onResume.
+     */
+    fun guard(activity: Activity, isLocked: Boolean) {
+        if (!isLocked) return
+        watch(activity.application)
+        hideFromRecents(activity)
+        if (unlocked) {
+            uncover(activity)
+            return
+        }
+        cover(activity)
+        if (declined) {
+            activity.finish()
+            return
+        }
+        if (prompting) return
+        prompting = true
+        unlock(activity, onCancel = {
+            prompting = false
+            declined = true
+            activity.finish()
+        }) {
+            prompting = false
+            uncover(activity)
+        }
+    }
+
+    /** Re-locks once no screen of the app is showing. */
+    private fun watch(app: android.app.Application) {
+        if (watching) return
+        watching = true
+        // The screen calling guard is already started.
+        started = 1
+        app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(a: Activity) { started++ }
+            override fun onActivityStopped(a: Activity) {
+                started = (started - 1).coerceAtLeast(0)
+                if (started == 0 && !a.isChangingConfigurations) unlocked = false
+            }
+            override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {}
+            override fun onActivityResumed(a: Activity) {}
+            override fun onActivityPaused(a: Activity) {}
+            override fun onActivitySaveInstanceState(a: Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: Activity) {}
+        })
+    }
+
+    /** The recent-apps view shows nothing of this screen (Android 13+ still allows screenshots). */
+    private fun hideFromRecents(activity: Activity) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity.setRecentsScreenshotEnabled(false)
+        } else {
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    private fun cover(activity: Activity) {
+        val root = activity.window.decorView as? android.view.ViewGroup ?: return
+        if (root.findViewWithTag<View>(COVER) != null) return
+        root.addView(View(activity).apply {
+            tag = COVER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            isClickable = true
+            elevation = 1000f
+        }, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun uncover(activity: Activity) {
+        val root = activity.window.decorView as? android.view.ViewGroup ?: return
+        root.findViewWithTag<View>(COVER)?.let { root.removeView(it) }
+    }
+
+    /** Asks for the fingerprint, face or screen lock, then runs [onUnlocked] ([onCancel] if not). */
+    fun unlock(activity: Activity, onCancel: () -> Unit = {}, onUnlocked: () -> Unit) {
+        declined = false
         val keyguard = activity.getSystemService(KeyguardManager::class.java)
         if (keyguard?.isDeviceSecure != true) {
             Toast.makeText(activity, "Set a screen lock (Settings → Lock screen) to protect the Locked album", Toast.LENGTH_LONG).show()
+            unlocked = true
             onUnlocked()
             return
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            unlocked = true
             onUnlocked()
             return
         }
         val callback = object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) = onUnlocked()
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                unlocked = true
+                onUnlocked()
+            }
+
+            // Cancelled, or too many tries.
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) = onCancel()
         }
         val builder = BiometricPrompt.Builder(activity)
             .setTitle("Locked album")

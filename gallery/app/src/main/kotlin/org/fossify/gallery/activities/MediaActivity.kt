@@ -202,6 +202,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
     override fun onResume() {
         super.onResume()
+        org.fossify.gallery.helpers.LockedAlbum.guard(this, org.fossify.gallery.helpers.LockedAlbum.isLocked(mPath))
         updateMenuColors()
         if (mStoredAnimateGifs != config.animateGifs) {
             getMediaAdapter()?.updateAnimateGifs(config.animateGifs)
