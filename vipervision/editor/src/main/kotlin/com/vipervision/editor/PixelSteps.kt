@@ -116,87 +116,14 @@ fun Geometry.toSourceStrokes(
 }
 
 /**
- * Where a new polygon corner [p] goes: after the last one tapped (tracing around something), unless
- * that makes the outline cross itself; then into the side whose detour through [p] is shortest
- * without crossing, so tapping out of order doesn't fold the shape. [sx]/[sy] turn the points' units into the same scale both ways.
+ * Adds polygon corner [p] after the one tapped last (the shape closes from it back to the first),
+ * so the outline follows the order the corners are tapped in, as when tracing around something.
+ * [order] remembers it for Undo. ([sx]/[sy] are kept for callers; unused.)
  */
+@Suppress("UNUSED_PARAMETER")
 fun insertCorner(corners: MutableList<Offset>, p: Offset, sx: Float = 1f, sy: Float = 1f, order: MutableList<Int>? = null) {
-    fun put(index: Int) {
-        corners.add(index, p)
-        // Newest last; later corners moved up by one.
-        order?.let { o ->
-            for (k in o.indices) if (o[k] >= index) o[k] = o[k] + 1
-            o.add(index)
-        }
-    }
-    if (corners.size < 3) {
-        put(corners.size)
-        return
-    }
-    fun d(a: Offset, b: Offset) = Offset((a.x - b.x) * sx, (a.y - b.y) * sy).getDistance()
-    val n = corners.size
-    // Tracing around something: the new corner follows the last one tapped (the side from the
-    // last back to the first). Only if that would make the outline cross itself does it go into
-    // another side instead.
-    fun crossesAt(i: Int): Boolean {
-        val a = corners[i]
-        val b = corners[(i + 1) % n]
-        for (j in 0 until n) {
-            if (j == i) continue
-            val c = corners[j]
-            val e = corners[(j + 1) % n]
-            if (j != (i - 1 + n) % n && segmentsCross(a, p, c, e)) return true
-            if (j != (i + 1) % n && segmentsCross(p, b, c, e)) return true
-        }
-        return false
-    }
-    if (!crossesAt(n - 1)) {
-        put(n)
-        return
-    }
-    // Each side the new corner could go into: its detour, and whether the two new sides would
-    // cross any other side (a folded outline, which fills patchily).
-    var best = -1
-    var bestCost = Float.MAX_VALUE
-    var fallback = 0
-    var fallbackCost = Float.MAX_VALUE
-    for (i in 0 until n) {
-        val a = corners[i]
-        val b = corners[(i + 1) % n]
-        val cost = d(a, p) + d(p, b) - d(a, b)
-        if (cost < fallbackCost) {
-            fallbackCost = cost
-            fallback = i
-        }
-        if (cost >= bestCost) continue
-        var crosses = false
-        for (j in 0 until n) {
-            if (j == i) continue
-            val c = corners[j]
-            val e = corners[(j + 1) % n]
-            // Sides that share a corner with the new ones touch there, which doesn't count.
-            val sharesA = j == (i - 1 + n) % n
-            val sharesB = j == (i + 1) % n
-            if (!sharesA && segmentsCross(a, p, c, e)) crosses = true
-            if (!sharesB && segmentsCross(p, b, c, e)) crosses = true
-            if (crosses) break
-        }
-        if (!crosses) {
-            bestCost = cost
-            best = i
-        }
-    }
-    put((if (best >= 0) best else fallback) + 1)
-}
-
-/** Whether segments [a]-[b] and [c]-[d] cross (touching at an end doesn't count). */
-private fun segmentsCross(a: Offset, b: Offset, c: Offset, d: Offset): Boolean {
-    fun side(p: Offset, q: Offset, r: Offset) = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
-    val d1 = side(c, d, a)
-    val d2 = side(c, d, b)
-    val d3 = side(a, b, c)
-    val d4 = side(a, b, d)
-    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+    corners.add(p)
+    order?.add(corners.lastIndex)
 }
 
 /** Takes away the corner added last (see [insertCorner]'s order); false if none. */

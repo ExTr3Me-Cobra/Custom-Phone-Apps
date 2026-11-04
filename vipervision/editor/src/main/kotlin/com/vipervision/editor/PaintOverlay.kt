@@ -209,7 +209,8 @@ internal fun PaintOverlay(
         session.shownWidthPx = image.width
         fun toScreen(p: Offset) = Offset(image.left + p.x * image.width, image.top + p.y * image.height)
 
-        val live = current.takeIf { it.isNotEmpty() }?.let { ScreenStroke(it.distinct(), radiusPx / zoom.scale, session.excludeMode) }
+        // (Not while placing polygon corners: no brush dot under the finger then.)
+        val live = current.takeIf { it.isNotEmpty() && session.shape != BrushShape.Polygon }?.let { ScreenStroke(it.distinct(), radiusPx / zoom.scale, session.excludeMode) }
         // The polygon being made: its corners and the lines between them.
         val corners = session.polygon.toList()
         if (corners.isNotEmpty()) {
