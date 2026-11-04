@@ -1,5 +1,9 @@
 package com.vipervision.editor
 
+import androidx.compose.foundation.layout.requiredSize
+import com.t8rin.imagetoolbox.core.resources.icons.RotateRight
+import com.t8rin.imagetoolbox.core.resources.icons.CropSmall
+import com.t8rin.imagetoolbox.core.resources.icons.Speed
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -65,6 +69,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -234,8 +239,45 @@ class VideoEditorActivity : ComponentActivity() {
             .build()
         val item = MediaItem.Builder().setUri(source).setClippingConfiguration(clipping).build()
         val adjustments = state.adjustments
-        val effects = if (adjustments.isIdentity) Effects.EMPTY else Effects(emptyList(), listOf(VideoAdjustEffect { adjustments }))
-        val edited = EditedMediaItem.Builder(item).setEffects(effects).build()
+        val video = mutableListOf<androidx.media3.common.Effect>()
+        // Crop (on the upright picture, before turning), then rotate, then the dials.
+        state.cropRatio?.let { ratio ->
+            val turned = state.turns % 2 == 1
+            val kept = if (turned) 1f / ratio else ratio
+            val aspect = state.aspect
+            video += if (aspect > kept) {
+                val w = kept / aspect
+                androidx.media3.effect.Crop(-w, w, -1f, 1f)
+            } else {
+                val h = aspect / kept
+                androidx.media3.effect.Crop(-1f, 1f, -h, h)
+            }
+        }
+        if (state.turns % 4 != 0) {
+            // Media3 turns anticlockwise.
+            video += androidx.media3.effect.ScaleAndRotateTransformation.Builder()
+                .setRotationDegrees(360f - 90f * (state.turns % 4)).build()
+        }
+        if (!adjustments.isIdentity) video += VideoAdjustEffect { adjustments }
+        val effects = if (video.isEmpty()) Effects.EMPTY else Effects(emptyList(), video)
+        val builder = EditedMediaItem.Builder(item).setEffects(effects)
+        if (state.speed != 1f) {
+            // Times here start at the trimmed start.
+            val speed = state.speed
+            val whole = state.speedWhole
+            val from = ((state.speedStart - state.trimStart).coerceAtLeast(0)) * 1000
+            val to = ((state.speedEnd - state.trimStart).coerceAtLeast(0)) * 1000
+            builder.setSpeed(object : androidx.media3.common.audio.SpeedProvider {
+                override fun getSpeed(timeUs: Long): Float = if (whole || timeUs in from until to) speed else 1f
+                override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = when {
+                    whole -> androidx.media3.common.C.TIME_UNSET
+                    timeUs < from -> from
+                    timeUs < to -> to
+                    else -> androidx.media3.common.C.TIME_UNSET
+                }
+            })
+        }
+        val edited = builder.build()
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(listOf(edited)).build())
             // The dials are made for normal (SDR) video, so HDR video is converted to SDR.
             .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
@@ -313,8 +355,44 @@ class VideoEditState {
     /** 0..1 while saving. */
     var exportProgress by mutableStateOf<Float?>(null)
 
-    val changed: Boolean get() = !adjustments.isIdentity || trimStart > 0 || (durationMs > 0 && trimEnd < durationMs)
+    /** The tool below the video while no dial is picked. */
+    var tool by mutableStateOf(VideoTool.Trim)
+
+    /** Speed: how fast (1 = normal), for the whole video or only [speedStart]..[speedEnd]. */
+    var speed by mutableFloatStateOf(1f)
+    var speedWhole by mutableStateOf(true)
+    var speedStart by mutableLongStateOf(0L)
+    var speedEnd by mutableLongStateOf(0L)
+
+    /** Rotate: quarter turns clockwise. */
+    var turns by mutableIntStateOf(0)
+
+    /** Crop: the shape kept (width / height as shown), centred; null keeps the whole picture. */
+    var cropRatio by mutableStateOf<Float?>(null)
+
+    /** The speed at [ms] of the source video. */
+    fun speedAt(ms: Long): Float = when {
+        speed == 1f -> 1f
+        speedWhole -> speed
+        ms in speedStart until speedEnd -> speed
+        else -> 1f
+    }
+
+    val changed: Boolean
+        get() = !adjustments.isIdentity || trimStart > 0 || (durationMs > 0 && trimEnd < durationMs) ||
+            speed != 1f || turns % 4 != 0 || cropRatio != null
 }
+
+/** The video editor's tools besides the dials. */
+enum class VideoTool(val label: String) { Trim("Trim"), Speed("Speed"), Crop("Crop"), Rotate("Rotate") }
+
+/** Speeds offered. */
+private val Speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f)
+
+/** Crop shapes offered (width / height); null = the whole picture. */
+private val CropRatios: List<Pair<String, Float?>> = listOf(
+    "Original" to null, "1:1" to 1f, "4:5" to 0.8f, "9:16" to 9f / 16f, "16:9" to 16f / 9f, "4:3" to 4f / 3f, "3:4" to 0.75f
+)
 
 private const val MIN_TRIM_MS = 500L
 private const val STRIP_FRAMES = 10
@@ -369,6 +447,9 @@ private fun VideoEditorScreen(
             if (state.playing && state.trimEnd > 0 && position >= state.trimEnd) {
                 player.seekTo(state.trimStart)
             }
+            // Speed: played at the chosen speed (only inside the section, if that's picked).
+            val speed = state.speedAt(position)
+            if (player.playbackParameters.speed != speed) player.setPlaybackSpeed(speed)
             delay(30)
         }
     }
@@ -468,9 +549,12 @@ private fun VideoEditorScreen(
                 },
             contentAlignment = Alignment.Center
         ) {
-            val fitsWidth = maxWidth / maxHeight < state.aspect
-            val videoWidth = if (fitsWidth) maxWidth else maxHeight * state.aspect
-            val videoHeight = if (fitsWidth) maxWidth / state.aspect else maxHeight
+            // Shown turned (Rotate) with the part Crop keeps framed.
+            val turned = state.turns % 2 == 1
+            val shownAspect = if (turned) 1f / state.aspect else state.aspect
+            val fitsWidth = maxWidth / maxHeight < shownAspect
+            val videoWidth = if (fitsWidth) maxWidth else maxHeight * shownAspect
+            val videoHeight = if (fitsWidth) maxWidth / shownAspect else maxHeight
             Box(
                 Modifier
                     .size(videoWidth, videoHeight)
@@ -479,19 +563,41 @@ private fun VideoEditorScreen(
                         scaleY = state.zoom
                         translationX = state.pan.x
                         translationY = state.pan.y
-                    }
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                AndroidView(
-                    factory = { TextureView(it).also(player::setVideoTextureView) },
-                    modifier = Modifier.fillMaxSize()
-                )
-                val preview = state.pausedPreview
-                if (!state.playing && preview != null && state.pausedPreviewMs == state.positionMs) {
-                    Image(
-                        preview.asImageBitmap(), null,
-                        contentScale = ContentScale.FillBounds,
+                Box(
+                    Modifier
+                        .requiredSize(if (turned) videoHeight else videoWidth, if (turned) videoWidth else videoHeight)
+                        .graphicsLayer { rotationZ = 90f * (state.turns % 4) }
+                ) {
+                    AndroidView(
+                        factory = { TextureView(it).also(player::setVideoTextureView) },
                         modifier = Modifier.fillMaxSize()
                     )
+                    val preview = state.pausedPreview
+                    if (!state.playing && preview != null && state.pausedPreviewMs == state.positionMs) {
+                        Image(
+                            preview.asImageBitmap(), null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                state.cropRatio?.let { ratio ->
+                    Canvas(Modifier.fillMaxSize()) {
+                        val w: Float
+                        val h: Float
+                        if (size.width / size.height > ratio) { h = size.height; w = h * ratio } else { w = size.width; h = w / ratio }
+                        val left = (size.width - w) / 2f
+                        val top = (size.height - h) / 2f
+                        val dim = Color.Black.copy(alpha = 0.6f)
+                        drawRect(dim, Offset.Zero, Size(size.width, top))
+                        drawRect(dim, Offset(0f, top + h), Size(size.width, size.height - top - h))
+                        drawRect(dim, Offset(0f, top), Size(left, h))
+                        drawRect(dim, Offset(left + w, top), Size(size.width - left - w, h))
+                        drawRect(Color.White, Offset(left, top), Size(w, h), style = Stroke(2.dp.toPx()))
+                    }
                 }
             }
             if (!state.playing) PlayBadge()
@@ -509,7 +615,7 @@ private fun VideoEditorScreen(
 
         // Trim first, then the Adjust dials.
         Text(
-            state.selected?.label ?: "Trim",
+            state.selected?.label ?: state.tool.label,
             color = Color.White,
             fontSize = 15.sp,
             modifier = Modifier
@@ -524,17 +630,26 @@ private fun VideoEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 14.dp)
         ) {
-            item {
-                val selected = state.selected == null
+            items(VideoTool.entries) { tool ->
+                val selected = state.selected == null && state.tool == tool
+                val icon = when (tool) {
+                    VideoTool.Trim -> Icons.Rounded.Scissors
+                    VideoTool.Speed -> Icons.Rounded.Speed
+                    VideoTool.Crop -> Icons.Rounded.CropSmall
+                    VideoTool.Rotate -> Icons.Rounded.RotateRight
+                }
                 Box(
                     Modifier
                         .size(64.dp)
                         .clip(CircleShape)
                         .background(if (selected) Color.White else BubbleGrey)
-                        .clickable { state.selected = null },
+                        .clickable {
+                            state.selected = null
+                            state.tool = tool
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Rounded.Scissors, "Trim", tint = if (selected) Color.Black else Color.White, modifier = Modifier.size(26.dp))
+                    Icon(icon, tool.label, tint = if (selected) Color.Black else Color.White, modifier = Modifier.size(26.dp))
                 }
             }
             items(Adjustment.entries) { adjustment ->
@@ -557,12 +672,23 @@ private fun VideoEditorScreen(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(84.dp),
+                .height(if (state.selected == null && state.tool == VideoTool.Speed) 132.dp else 84.dp),
             contentAlignment = Alignment.Center
         ) {
             val selected = state.selected
             if (selected == null) {
-                TrimBar(state, player, scrubber)
+                when (state.tool) {
+                    VideoTool.Trim -> TrimBar(state, player, scrubber)
+                    VideoTool.Speed -> SpeedPanel(state, player, scrubber)
+                    VideoTool.Crop -> ChoiceRow(CropRatios.map { it.first }, CropRatios.indexOfFirst { it.second == state.cropRatio }) {
+                        state.cropRatio = CropRatios[it].second
+                    }
+                    VideoTool.Rotate -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ChoicePill("↺  Left", false) { state.turns = (state.turns + 3) % 4 }
+                        Text("${(state.turns % 4) * 90}°", color = Color.White, fontSize = 15.sp)
+                        ChoicePill("Right  ↻", false) { state.turns = (state.turns + 1) % 4 }
+                    }
+                }
             } else {
                 ValueWheel(
                     value = state.adjustments[selected],
@@ -608,8 +734,85 @@ private fun VideoEditorScreen(
  * your finger for frame-accurate moves; it zooms back out when you let go. The part that's kept
  * is framed in the accent colour.
  */
+/** Speed: how fast, for the whole video or a section of it (picked like Trim). */
 @Composable
-private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber) {
+private fun SpeedPanel(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoicePill("Whole video", state.speedWhole) { state.speedWhole = true }
+            ChoicePill("Section", !state.speedWhole) {
+                state.speedWhole = false
+                // First time: the middle third of what's kept.
+                if (state.speedEnd <= state.speedStart || state.speedEnd > state.trimEnd || state.speedStart < state.trimStart) {
+                    val third = (state.trimEnd - state.trimStart) / 3
+                    state.speedStart = state.trimStart + third
+                    state.speedEnd = state.trimEnd - third
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        ChoiceRow(Speeds.map { if (it % 1f == 0f) "${it.toInt()}×" else "$it×" }, Speeds.indexOf(state.speed)) { state.speed = Speeds[it] }
+        if (!state.speedWhole) {
+            Spacer(Modifier.height(4.dp))
+            RangeBar(
+                state, player, scrubber,
+                start = state.speedStart, end = state.speedEnd,
+                onStart = { state.speedStart = it }, onEnd = { state.speedEnd = it },
+                lower = state.trimStart, upper = state.trimEnd
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChoiceRow(labels: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 14.dp)) {
+        items(labels.size) { i -> ChoicePill(labels[i], i == selected) { onPick(i) } }
+    }
+}
+
+@Composable
+private fun ChoicePill(text: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text,
+        color = if (selected) Color.Black else Color.White,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) Accent else BubbleGrey)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
+private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber) = RangeBar(
+    state, player, scrubber,
+    start = state.trimStart, end = state.trimEnd,
+    onStart = { state.trimStart = it }, onEnd = { state.trimEnd = it },
+    lower = 0L, upper = state.durationMs.coerceAtLeast(1)
+)
+
+/**
+ * The trim bar's look and handling for any part of the video: [start]..[end] between [lower] and
+ * [upper] (Trim: the whole video; Speed's Section: the trimmed part).
+ */
+@Composable
+private fun RangeBar(
+    state: VideoEditState,
+    player: ExoPlayer,
+    scrubber: Scrubber,
+    start: Long,
+    end: Long,
+    onStart: (Long) -> Unit,
+    onEnd: (Long) -> Unit,
+    lower: Long,
+    upper: Long
+) {
+    val startNow by androidx.compose.runtime.rememberUpdatedState(start)
+    val endNow by androidx.compose.runtime.rememberUpdatedState(end)
+    val setStart by androidx.compose.runtime.rememberUpdatedState(onStart)
+    val setEnd by androidx.compose.runtime.rememberUpdatedState(onEnd)
     val haptics = LocalHapticFeedback.current
     val duration = state.durationMs.coerceAtLeast(1)
     val window = state.timelineWindow ?: 0L..duration
@@ -648,7 +851,7 @@ private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber
             Canvas(
                 Modifier
                     .matchParentSize()
-                    .pointerInput(duration) {
+                    .pointerInput(duration, lower, upper) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
                             val width = size.width.toFloat()
@@ -656,8 +859,8 @@ private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber
                                 (range.first + (x / width).coerceIn(0f, 1f) * (range.last - range.first)).toLong().coerceIn(0, duration)
                             fun xOf(ms: Long): Float = ms.toFloat() / duration * width
                             val reach = 24.dp.toPx()
-                            val toStart = abs(down.position.x - xOf(state.trimStart))
-                            val toEnd = abs(down.position.x - xOf(state.trimEnd))
+                            val toStart = abs(down.position.x - xOf(startNow))
+                            val toEnd = abs(down.position.x - xOf(endNow))
                             // -1 start handle, 1 end handle, 0 playhead
                             val target = when {
                                 toStart <= reach && toStart <= toEnd -> -1
@@ -666,13 +869,13 @@ private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber
                             }
                             fun moveTo(ms: Long) {
                                 when (target) {
-                                    -1 -> state.trimStart = ms.coerceAtMost(state.trimEnd - MIN_TRIM_MS).coerceAtLeast(0)
-                                    1 -> state.trimEnd = ms.coerceAtLeast(state.trimStart + MIN_TRIM_MS).coerceAtMost(duration)
+                                    -1 -> setStart(ms.coerceAtMost(endNow - MIN_TRIM_MS).coerceAtLeast(lower))
+                                    1 -> setEnd(ms.coerceAtLeast(startNow + MIN_TRIM_MS).coerceAtMost(upper))
                                 }
                                 scrubber.seekTo(
                                     when (target) {
-                                        -1 -> state.trimStart
-                                        1 -> state.trimEnd
+                                        -1 -> startNow
+                                        1 -> endNow
                                         else -> ms.coerceIn(state.trimStart, state.trimEnd)
                                     }
                                 )
@@ -757,8 +960,8 @@ private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber
             ) {
                 val span = (window.last - window.first).coerceAtLeast(1).toFloat()
                 fun x(ms: Long) = ((ms - window.first) / span * size.width).coerceIn(-size.width, 2 * size.width)
-                val startX = x(state.trimStart)
-                val endX = x(state.trimEnd)
+                val startX = x(start)
+                val endX = x(end)
                 val dim = Color.Black.copy(alpha = 0.65f)
                 val accent = trimAccent
                 clipRect {
@@ -785,15 +988,15 @@ private fun TrimBar(state: VideoEditState, player: ExoPlayer, scrubber: Scrubber
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth()) {
             val zoomed = state.timelineWindow
-            Text(formatTime(zoomed?.first ?: state.trimStart), color = if (zoomed != null) Accent else Color.Gray, fontSize = 12.sp)
+            Text(formatTime(zoomed?.first ?: start), color = if (zoomed != null) Accent else Color.Gray, fontSize = 12.sp)
             Text(
-                if (zoomed != null) "Zoomed · ${formatTime(state.positionMs)}" else "Length ${formatTime(state.trimEnd - state.trimStart)}",
+                if (zoomed != null) "Zoomed · ${formatTime(state.positionMs)}" else "Length ${formatTime(end - start)}",
                 color = Color.White,
                 fontSize = 12.sp,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
-            Text(formatTime(zoomed?.last ?: state.trimEnd), color = if (zoomed != null) Accent else Color.Gray, fontSize = 12.sp)
+            Text(formatTime(zoomed?.last ?: end), color = if (zoomed != null) Accent else Color.Gray, fontSize = 12.sp)
         }
     }
 }
