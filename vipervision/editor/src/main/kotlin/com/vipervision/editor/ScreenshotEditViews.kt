@@ -52,7 +52,34 @@ class ShotCropView(context: Context, private val bitmap: Bitmap) : View(context)
 
     fun reset() {
         crop = RectF(0f, 0f, 1f, 1f)
+        ratio?.let { fitRatio(it) }
         invalidate()
+    }
+
+    /** The frame's shape kept (width / height of the result), or null for any shape. */
+    var ratio: Float? = null
+        set(value) {
+            field = value
+            value?.let { fitRatio(it) }
+            invalidate()
+        }
+
+    /** Height (as a fraction) of a frame [w] wide (as a fraction) in the kept shape [r]. */
+    private fun heightFor(w: Float, r: Float) = w * bitmap.width / (r * bitmap.height)
+
+    /** The biggest frame of shape [r] around the current frame's middle. */
+    private fun fitRatio(r: Float) {
+        val cx = crop.centerX()
+        val cy = crop.centerY()
+        var w = 1f
+        var h = heightFor(w, r)
+        if (h > 1f) {
+            w /= h
+            h = 1f
+        }
+        val left = (cx - w / 2).coerceIn(0f, 1f - w)
+        val top = (cy - h / 2).coerceIn(0f, 1f - h)
+        crop = RectF(left, top, left + w, top + h)
     }
 
     fun cropped(): Bitmap {
@@ -155,6 +182,30 @@ class ShotCropView(context: Context, private val bitmap: Bitmap) : View(context)
             if (handle and RIGHT != 0) c.right = (c.right + dx).coerceIn(c.left + MIN, 1f)
             if (handle and TOP != 0) c.top = (c.top + dy).coerceIn(0f, c.bottom - MIN)
             if (handle and BOTTOM != 0) c.bottom = (c.bottom + dy).coerceIn(c.top + MIN, 1f)
+            val r = ratio
+            if (r != null) {
+                // Keep the shape: a corner keeps its opposite corner still; a side keeps the
+                // middle of the other direction.
+                val horizontal = handle and (LEFT or RIGHT) != 0
+                val vertical = handle and (TOP or BOTTOM) != 0
+                if (horizontal) {
+                    val h = heightFor(c.width(), r)
+                    if (vertical) {
+                        if (handle and TOP != 0) c.top = c.bottom - h else c.bottom = c.top + h
+                    } else {
+                        val cy = crop.centerY()
+                        c.top = cy - h / 2
+                        c.bottom = cy + h / 2
+                    }
+                } else {
+                    val w = c.height() * r * bitmap.height / bitmap.width
+                    val cx = crop.centerX()
+                    c.left = cx - w / 2
+                    c.right = cx + w / 2
+                }
+                // A frame that would go past the screenshot doesn't move.
+                if (c.left < -0.0001f || c.top < -0.0001f || c.right > 1.0001f || c.bottom > 1.0001f || c.width() < MIN || c.height() < MIN) return
+            }
         }
         crop = c
     }

@@ -182,6 +182,12 @@ class EditorActivity : ComposeActivity() {
                     onApplyPortraitBlur = { scope.applyPortraitBlur(source) },
                     onStartStudio = { kind -> scope.startStudio(kind, source) },
                     onApplyStudio = { scope.applyStudio(source) },
+                    onTryAll = { tool -> scope.tryAll(tool) },
+                    onKeepTrial = { choice ->
+                        val tool = controller.trial?.tool
+                        controller.trial = null
+                        if (tool != null) scope.runAi(source, tool, choice)
+                    },
                     onApplyCutOut = { scope.applyCutOut() },
                     onCancelCutOut = ::closeCutOut,
                     onNeedSamDownload = { pendingSamDownload = true },
@@ -473,6 +479,38 @@ class EditorActivity : ComposeActivity() {
         }
         withContext(Dispatchers.IO) { aiRunner.release() }
         ViperLog.i("AI", "Models released. ${ViperLog.memory()}")
+        controller.busyMessage = null
+        controller.isBusy = false
+    }
+
+    /** Try all: every model of [tool] on a screen-sized copy of the photo, to compare (see AiTrial). */
+    private fun CoroutineScope.tryAll(tool: AiTool) = launch {
+        if (controller.isBusy) return@launch
+        val preview = controller.workingPreview ?: return@launch
+        controller.isBusy = true
+        runCatching {
+            // Upscaling makes the copy 2–4× bigger, so it starts smaller.
+            val small = withContext(Dispatchers.Default) { preview.scaledToFit(if (tool == AiTool.Upscale) 540 else 1080) }
+            val results = ArrayList<Pair<AiChoice, Bitmap>>()
+            tool.choices.forEachIndexed { i, choice ->
+                val n = "${i + 1} of ${tool.choices.size}"
+                runCatching {
+                    if (!aiRunner.isReady(choice) || choice.isBundled) {
+                        controller.busyMessage = "Downloading ${choice.title} ($n)…"
+                        aiRunner.download(choice) { controller.busyMessage = "Downloading ${choice.title} ($n)… ${(it * 100).toInt()}%" }
+                    }
+                    controller.busyMessage = "Trying ${choice.title} ($n)…"
+                    val out = withContext(Dispatchers.Default) { aiRunner.run(choice, small) { _, _ -> } }
+                    results += choice to out
+                }.onFailure { ViperLog.error("AI", "Try all: ${choice.title} failed", it) }
+                withContext(Dispatchers.IO) { aiRunner.release() }
+            }
+            check(results.isNotEmpty()) { "none of the models worked" }
+            AiTrial(tool, small, results)
+        }.onSuccess { controller.trial = it }.onFailure {
+            ViperLog.error("EDITOR", "tryAll failed", it)
+            Toast.makeText(this@EditorActivity, "Try all failed: ${it.message}", Toast.LENGTH_LONG).show()
+        }
         controller.busyMessage = null
         controller.isBusy = false
     }

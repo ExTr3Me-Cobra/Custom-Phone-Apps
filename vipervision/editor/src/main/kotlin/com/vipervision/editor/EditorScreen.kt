@@ -102,6 +102,8 @@ internal fun EditorScreen(
     onApplyPortraitBlur: () -> Unit,
     onStartStudio: (StudioKind) -> Unit,
     onApplyStudio: () -> Unit,
+    onTryAll: (AiTool) -> Unit,
+    onKeepTrial: (AiChoice) -> Unit,
     onApplyCutOut: () -> Unit,
     onCancelCutOut: () -> Unit,
     onNeedSamDownload: () -> Unit,
@@ -186,6 +188,12 @@ internal fun EditorScreen(
 
     controller.draw?.let { session ->
         DrawScreen(session = session, onCancel = onCancelDraw, onApply = onApplyDraw)
+        if (controller.isBusy) BusyOverlay(controller.busyMessage)
+        return
+    }
+
+    controller.trial?.let { trial ->
+        AiTrialScreen(trial, onCancel = { controller.trial = null }, onKeep = onKeepTrial)
         if (controller.isBusy) BusyOverlay(controller.busyMessage)
         return
     }
@@ -466,7 +474,7 @@ internal fun EditorScreen(
             } else {
                 when (controller.tab) {
                     EditorTab.Adjust -> AdjustPanel(controller)
-                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartPortraitBlur, onStartStudio)
+                    EditorTab.Ai -> AiPanel(controller, aiReady, onRunAi, lamaReady, onStartObjectEraser, onStartCutOut, samsungAvailable, onSamsungTool, onStartPortraitBlur, onStartStudio, onTryAll)
                     EditorTab.Transform -> TransformPanel(controller, onStartCropStudio)
                     EditorTab.Decorate -> DecoratePanel(controller, onStartDraw, onStartMarkup)
                 }
@@ -660,7 +668,8 @@ private fun AiPanel(
     samsungAvailable: Boolean,
     onSamsungTool: (SamsungTool) -> Unit,
     onStartPortraitBlur: () -> Unit,
-    onStartStudio: (StudioKind) -> Unit
+    onStartStudio: (StudioKind) -> Unit,
+    onTryAll: (AiTool) -> Unit
 ) {
     var selected by remember { mutableStateOf<AiTool?>(null) }
     var choosing by remember { mutableStateOf<AiTool?>(null) }
@@ -773,6 +782,10 @@ private fun AiPanel(
                 choosing = null
                 onRunAi(tool, choice)
             },
+            onTryAll = {
+                choosing = null
+                onTryAll(tool)
+            },
             onDismiss = { choosing = null }
         )
     }
@@ -785,6 +798,7 @@ private fun AiChoiceSheet(
     tool: AiTool,
     ready: (AiChoice) -> Boolean,
     onPick: (AiChoice) -> Unit,
+    onTryAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
     androidx.compose.material3.ModalBottomSheet(
@@ -800,6 +814,25 @@ private fun AiChoiceSheet(
         ) {
             Text(tool.label, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             Text(tool.description, color = Color.Gray, fontSize = 14.sp)
+            if (tool.choices.size > 1) {
+                val missing = tool.choices.filterNot(ready)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Accent)
+                        .clickable(onClick = onTryAll)
+                        .padding(14.dp)
+                ) {
+                    Text("Try all ${tool.choices.size}", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Runs every model, then compare them and keep the best" +
+                            if (missing.isEmpty()) "" else " (downloads ${missing.sumOf { it.downloadSizeMb }} MB first)",
+                        color = Color.Black.copy(alpha = 0.75f), fontSize = 13.sp
+                    )
+                }
+            }
             tool.choices.forEach { choice ->
                 val here = ready(choice)
                 Column(

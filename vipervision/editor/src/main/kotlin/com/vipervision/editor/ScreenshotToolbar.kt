@@ -587,12 +587,36 @@ class ScreenshotToolbar(private val service: AccessibilityService) {
         val view = ShotCropView(service, picture)
         stage.removeAllViews()
         stage.addView(view)
-        val reset = pill("Reset crop", false) { view.reset() }
+        // Shapes (width:height); Free lets the frame be any shape.
+        val shapes = listOf<Pair<String, Float?>>(
+            "Free" to null, "Reset" to null, "1:1" to 1f, "4:5" to 0.8f, "9:16" to 9f / 16f, "16:9" to 16f / 9f, "4:3" to 4f / 3f, "3:4" to 0.75f
+        )
+        val row = LinearLayout(service).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        var chosen = 0
+        fun fill() {
+            row.removeAllViews()
+            shapes.forEachIndexed { i, (label, ratio) ->
+                val p = pill(label, i == chosen) {
+                    if (label == "Reset") {
+                        chosen = 0
+                        view.ratio = null
+                        view.reset()
+                    } else {
+                        chosen = i
+                        view.ratio = ratio
+                    }
+                    fill()
+                }
+                row.addView(p, LinearLayout.LayoutParams(dp(if (label.length > 4) 64 else 56), dp(40)).apply { marginEnd = dp(6) })
+            }
+        }
+        fill()
+        val scroller = android.widget.HorizontalScrollView(service).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
         controls.removeAllViews()
-        controls.addView(toolBar(LinearLayout(service).apply {
-            gravity = Gravity.CENTER
-            addView(reset, LinearLayout.LayoutParams(dp(140), dp(44)))
-        }) {
+        controls.addView(toolBar(scroller) {
             if (view.isChanged) edited = view.cropped()
             showPreview()
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))

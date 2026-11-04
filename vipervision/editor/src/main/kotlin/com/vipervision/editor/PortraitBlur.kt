@@ -151,7 +151,12 @@ object PortraitBlur {
         image.getPixels(pixels, 0, w, 0, 0, w, h)
         // About 0.4% to 4% of the photo's long side at most.
         val maxRadius = max(w, h) * (0.004f + 0.036f * settings.strength.coerceIn(0f, 1f))
-        val field = field(w, h, depth, if (settings.keepSubject) matte else null, settings)
+        val subject = if (settings.keepSubject) matte else null
+        // Around a kept subject the depth map is soft (the background right next to it reads
+        // nearly as near as the subject), so the background's depth is carried in up to and
+        // under the subject's edge.
+        val depthUsed = subject?.let { backgroundDepth(depth, it) } ?: depth
+        val field = field(w, h, depthUsed, subject, settings)
         // Blur sizes, halving down to about a pixel and a half.
         val radii = ArrayList<Float>()
         var r = maxRadius
@@ -163,10 +168,58 @@ object PortraitBlur {
             val gamma = if (settings.type == BlurType.Lens) 2.2f + 3f * settings.highlights.coerceIn(0f, 1f) else 2.2f
             val toLight = FloatArray(256) { (it / 255f).pow(gamma) }
             val levels = ArrayList<Level>(radii.size)
-            for (radius in radii) levels += level(pixels, w, h, field, maxRadius, radius, settings, toLight, gamma)
+            for (radius in radii) levels += level(pixels, w, h, field, maxRadius, radius, settings, toLight, gamma, subject)
             compose(pixels, w, h, field, maxRadius, radii, levels)
         }
         return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { setPixels(pixels, 0, w, 0, 0, w, h) }
+    }
+
+    /**
+     * [depth] with the subject (and a band around it) filled in from the background next to it,
+     * spreading inwards ring by ring.
+     */
+    private fun backgroundDepth(depth: DepthAnything.Depth, matte: Matte): DepthAnything.Depth {
+        val w = depth.width
+        val h = depth.height
+        val band = max(2, (max(w, h) * 0.025f).roundToInt())
+        // Unknown: the subject, grown by the band.
+        val subject = BooleanArray(w * h) { matte.at(((it % w) + 0.5f) / w, ((it / w) + 0.5f) / h) >= 0.2f }
+        val unknown = BooleanArray(w * h)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!subject[y * w + x]) continue
+            for (dy in -band..band) for (dx in -band..band) {
+                if (dx * dx + dy * dy > band * band) continue
+                val xx = x + dx
+                val yy = y + dy
+                if (xx in 0 until w && yy in 0 until h) unknown[yy * w + xx] = true
+            }
+        }
+        val values = depth.values.copyOf()
+        var left = unknown.count { it }
+        if (left == 0 || left == w * h) return depth
+        val next = BooleanArray(w * h)
+        while (left > 0) {
+            var changed = 0
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = y * w + x
+                if (!unknown[i]) continue
+                var sum = 0f
+                var n = 0
+                if (x > 0 && !unknown[i - 1]) { sum += values[i - 1]; n++ }
+                if (x < w - 1 && !unknown[i + 1]) { sum += values[i + 1]; n++ }
+                if (y > 0 && !unknown[i - w]) { sum += values[i - w]; n++ }
+                if (y < h - 1 && !unknown[i + w]) { sum += values[i + w]; n++ }
+                if (n > 0) {
+                    values[i] = sum / n
+                    next[i] = true
+                    changed++
+                }
+            }
+            if (changed == 0) break
+            for (i in next.indices) if (next[i]) { unknown[i] = false; next[i] = false }
+            left -= changed
+        }
+        return DepthAnything.Depth(w, h, values)
     }
 
     /** A grey picture of [depth] (near is light), for seeing what the AI thinks is near. */
@@ -240,7 +293,7 @@ object PortraitBlur {
      */
     private suspend fun level(
         pixels: IntArray, w: Int, h: Int, field: ByteArray, maxRadius: Float,
-        radius: Float, s: BlurSettings, toLight: FloatArray, gamma: Float
+        radius: Float, s: BlurSettings, toLight: FloatArray, gamma: Float, subject: Matte?
     ): Level {
         val step = max(2, (radius / KERNEL).roundToInt())
         val sw = ceil(w / step.toFloat()).toInt()
@@ -261,9 +314,11 @@ object PortraitBlur {
                 for (y in y0 until y1) {
                     var i = y * w + x0
                     for (x in x0 until x1) {
-                        val own = (field[i].toInt() and 255) / 255f * maxRadius
-                        // Sharp pixels hardly count, so they don't spread into the blur around them.
-                        val k = (own / needed).coerceIn(MIN_WEIGHT, 1f)
+                        // With a kept subject: everything but the subject counts fully, the subject
+                        // not at all (so it can't smear into the blur around it). Otherwise sharp
+                        // pixels hardly count, for the same reason.
+                        val k = if (subject != null) (1f - subject.at((x + 0.5f) / w, (y + 0.5f) / h)).let { it * it }.coerceAtLeast(1e-4f)
+                        else ((field[i].toInt() and 255) / 255f * maxRadius / needed).coerceIn(MIN_WEIGHT, 1f)
                         val p = pixels[i]
                         r += k * toLight[p shr 16 and 255]
                         g += k * toLight[p shr 8 and 255]
