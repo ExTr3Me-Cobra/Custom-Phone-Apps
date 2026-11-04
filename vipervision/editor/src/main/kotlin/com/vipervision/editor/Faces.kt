@@ -130,7 +130,7 @@ private fun blur(src: FloatArray, w: Int, h: Int, r: Int): FloatArray {
 }
 
 /** Face retouch's sliders (0..1). */
-data class RetouchSettings(val skin: Float, val eyes: Float, val teeth: Float, val lips: Float, val beard: Float = 0f)
+data class RetouchSettings(val skin: Float, val eyes: Float, val teeth: Float, val lips: Float, val beard: Float = 0f, val complexion: Float = 0f)
 
 /** Face retouch: smooth skin (keeping its texture), brighter eyes, whiter teeth, richer lips. */
 class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces.Parts>) : StudioTool {
@@ -142,10 +142,12 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
     var lips by mutableFloatStateOf(0f)
     /** -1 (lighter, softer) .. 1 (fuller, darker). */
     var beard by mutableFloatStateOf(0f)
+    /** -1 (paler, less red) .. 1 (rosier). */
+    var complexion by mutableFloatStateOf(0f)
     var showBefore by mutableStateOf(false)
     private var shown by mutableStateOf<Bitmap?>(null)
 
-    private fun settings() = RetouchSettings(skin, eyes, teeth, lips, beard)
+    private fun settings() = RetouchSettings(skin, eyes, teeth, lips, beard, complexion)
 
     override suspend fun render(context: Context, full: Bitmap): Bitmap = render(full, settings())
 
@@ -209,6 +211,32 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             }
         }
         if (s.beard != 0f) facialHair(p, image, top, w, h, faceSize, r, g, b, s.beard, ::mask)
+        if (s.complexion != 0f) {
+            // The face's skin (face, nose, ears; facial hair half as much), fading gently into
+            // the neck so there's no line where the face ends.
+            val (hair, _) = findHair(p, image, top, w, h, faceSize, r, g, b, ::mask)
+            val grownHair = blur(hair, w, h, max(1, (faceSize * 0.008f).roundToInt()))
+            val skin = mask(1, 10, 7, 8)
+            val neck = mask(14)
+            val area = FloatArray(w * h) { skin[it] * (1f - 0.5f * (grownHair[it] * 2.5f).coerceAtMost(1f)) + 0.6f * neck[it] }
+            val m = blur(area, w, h, max(1, (faceSize * 0.03f).roundToInt()))
+            val c = s.complexion
+            for (i in m.indices) {
+                if (m[i] <= 0.001f) continue
+                val red = r[i] - (g[i] + b[i]) / 2f
+                val k = m[i]
+                if (c > 0f) {
+                    r[i] += 8f * c * k
+                    g[i] -= 3f * c * k
+                    b[i] -= 1f * c * k
+                } else {
+                    val t = -c * k
+                    r[i] += (-red * 0.3f + 6f) * t
+                    g[i] += (red * 0.03f + 6f) * t
+                    b[i] += (red * 0.03f + 6f) * t
+                }
+            }
+        }
         if (s.eyes > 0f) {
             val m = blur(mask(4, 5), w, h, max(1, feather / 2))
             val rad = max(1, (faceSize * 0.01f).roundToInt())
@@ -409,6 +437,14 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             LabeledSlider("Eyes ${(eyes * 100).roundToInt()}%", eyes, 0f..1f) { eyes = it }
             LabeledSlider("Teeth ${(teeth * 100).roundToInt()}%", teeth, 0f..1f) { teeth = it }
             LabeledSlider("Lips ${(lips * 100).roundToInt()}%", lips, 0f..1f) { lips = it }
+            LabeledSlider(
+                when {
+                    complexion > 0f -> "Rosier ${(complexion * 100).roundToInt()}"
+                    complexion < 0f -> "Paler ${(-complexion * 100).roundToInt()}"
+                    else -> "Complexion"
+                },
+                complexion, -1f..1f
+            ) { complexion = it }
             LabeledSlider(
                 when {
                     beard > 0f -> "Beard fuller ${(beard * 100).roundToInt()}"
