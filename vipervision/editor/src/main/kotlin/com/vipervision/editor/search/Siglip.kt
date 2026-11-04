@@ -35,7 +35,7 @@ object Siglip {
         ModelFile("$MIRROR/siglip2__vocab.bin", "vocab.bin", 3_472_160)
     )
 
-    private const val MIRROR = "https://github.com/ExTr3Me-Cobra/Phone-App-Test/releases/download/vipervision-ai-models"
+    private const val MIRROR = "https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/vipervision-ai-models"
 
     const val DIMENSION = 768
     private const val IMAGE_SIZE = 256

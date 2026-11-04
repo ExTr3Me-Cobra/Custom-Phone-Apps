@@ -335,4 +335,4 @@ internal fun mirrorUrl(url: String): String? {
     return MIRROR_BASE + path.replace("/", "__")
 }
 
-private const val MIRROR_BASE = "https://github.com/ExTr3Me-Cobra/Phone-App-Test/releases/download/vipervision-ai-models/"
+private const val MIRROR_BASE = "https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/vipervision-ai-models/"

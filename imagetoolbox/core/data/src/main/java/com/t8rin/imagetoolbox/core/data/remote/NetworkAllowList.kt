@@ -12,10 +12,16 @@ import io.ktor.http.Url
 internal object NetworkAllowList {
 
     private val prefixes = listOf(
+        // The app's own copy (the repository was renamed; the old name forwards to the new one).
+        "https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/vipervision-ai-models/",
         "https://github.com/ExTr3Me-Cobra/Phone-App-Test/releases/download/vipervision-ai-models/",
+        // The models' original pages, if the copy is ever missing.
         "https://huggingface.co/T8RIN/imagetoolbox-models/resolve/",
         "https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/resolve/",
-        "https://huggingface.co/chongzhou/EdgeSAM/resolve/",
+        "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/",
+        "https://huggingface.co/cstr/sam2.1-hiera-tiny-ONNX/resolve/",
+        "https://huggingface.co/opencv/face_detection_yunet/resolve/",
+        "https://huggingface.co/edgetools/rife/resolve/",
         "https://github.com/facefusion/facefusion-assets/releases/download/"
     )
 

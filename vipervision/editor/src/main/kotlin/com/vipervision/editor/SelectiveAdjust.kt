@@ -208,9 +208,9 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Pill("Show red", selected = showHighlight) { showHighlight = !showHighlight }
                 Pill("Selection", selected = !invert) { invert = false }
                 Pill("Everything else", selected = invert) { invert = true }
-                Pill("Show red", selected = showHighlight) { showHighlight = !showHighlight }
                 if (objects.isNotEmpty()) Pill("Clear", selected = false) { clear() }
             }
             // The Adjust tab's bubbles and wheel; moving one hides the red so the change can be seen.
