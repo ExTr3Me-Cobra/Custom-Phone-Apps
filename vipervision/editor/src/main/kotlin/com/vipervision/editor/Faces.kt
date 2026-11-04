@@ -192,18 +192,19 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
                 val grown = blur(hair, w, h, max(1, (faceSize * 0.008f).roundToInt()))
                 for (i in hard.indices) hard[i] *= (1f - (grown[i] * 2.5f).coerceAtMost(1f))
             }
+            // Only the blotchy middle sizes are smoothed: the face's shape and shading (bigger)
+            // and its fine texture (smaller) stay, so it doesn't look waxy.
             val m = blur(hard, w, h, feather)
-            val large = max(2, (faceSize * 0.03f).roundToInt())
+            val mid = max(2, (faceSize * 0.018f).roundToInt())
             val fine = max(1, (faceSize * 0.004f).roundToInt())
-            val weight = blur(hard, w, h, large)
+            val weight = blur(hard, w, h, mid)
             for (plane in listOf(r, g, b)) {
                 // Skin's own colours only (no hair or background mixed in).
-                val base = blur(FloatArray(w * h) { plane[it] * hard[it] }, w, h, large)
+                val middle = blur(FloatArray(w * h) { plane[it] * hard[it] }, w, h, mid)
                 val small = blur(plane, w, h, fine)
                 for (i in plane.indices) {
                     if (m[i] <= 0.001f || weight[i] < 0.05f) continue
-                    val target = base[i] / weight[i] + (plane[i] - small[i]) * 0.45f
-                    plane[i] += (target - plane[i]) * s.skin * m[i]
+                    plane[i] -= (small[i] - middle[i] / weight[i]) * 0.9f * s.skin * m[i]
                 }
             }
         }
@@ -272,19 +273,37 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
         val mouthY = (p.face.mouthLeft.y + p.face.mouthRight.y) / 2f * image.height - top
         val startY = noseY + (mouthY - noseY) * 0.3f
         val ramp = max(2f, faceSize * 0.08f)
-        val skin = mask(intArrayOf(1, 14))
-        // Where facial hair can be: skin below the nose, fading in.
-        val region = FloatArray(w * h) { i -> skin[i] * (((i / w) - startY) / ramp).coerceIn(0f, 1f) }
-        val lum = FloatArray(w * h) { 0.299f * r[it] + 0.587f * g[it] + 0.114f * b[it] }
-        val wide = max(3, (faceSize * 0.06f).roundToInt())
-        // The skin's own brightness around each pixel (from all the face's skin).
-        val skinW = blur(skin, w, h, wide)
-        val skinL = blur(FloatArray(w * h) { lum[it] * skin[it] }, w, h, wide)
-        val hair = FloatArray(w * h) { i ->
-            if (region[i] <= 0f || skinW[i] < 0.05f) 0f
-            else (((skinL[i] / skinW[i]) - lum[i] - 8f) / 35f).coerceIn(0f, 1f) * region[i]
+        fun px(f: Float) = max(1, (faceSize * f).roundToInt())
+        // The face's own skin (not the neck, where shadows look like hair), kept back from its
+        // edge (the jaw's outline isn't hair either), from just under the nose down.
+        val face = mask(intArrayOf(1))
+        val inside = blur(face, w, h, px(0.0125f))
+        val region = FloatArray(w * h) { i ->
+            if (inside[i] < 0.98f) 0f else (((i / w) - startY) / ramp).coerceIn(0f, 1f)
         }
-        return blur(hair, w, h, max(1, (faceSize * 0.004f).roundToInt())) to region
+        val lum = FloatArray(w * h) { 0.299f * r[it] + 0.587f * g[it] + 0.114f * b[it] }
+        val wide = px(0.06f)
+        // Darker than the bare skin around it (worked out again without the hair found so far).
+        var hair = FloatArray(w * h)
+        repeat(3) {
+            val bare = FloatArray(w * h) { face[it] * (1f - (hair[it] * 2f).coerceAtMost(1f)) }
+            val bw = blur(bare, w, h, wide)
+            val bl = blur(FloatArray(w * h) { lum[it] * bare[it] }, w, h, wide)
+            hair = FloatArray(w * h) { i ->
+                if (region[i] <= 0f || bw[i] < 0.05f) 0f
+                else (((bl[i] / bw[i]) - lum[i] - 3f) / 18f).coerceIn(0f, 1f) * region[i]
+            }
+        }
+        // And hair-like: fine texture around it (smooth shadows aren't hair) ...
+        val fine = px(0.006f)
+        val mean = blur(lum, w, h, fine)
+        val square = blur(FloatArray(w * h) { lum[it] * lum[it] }, w, h, fine)
+        val texture = blur(FloatArray(w * h) { ((kotlin.math.sqrt(max(0f, square[it] - mean[it] * mean[it])) - 2f) / 6f).coerceIn(0f, 1f) }, w, h, px(0.02f))
+        for (i in hair.indices) hair[i] *= (texture[i] * 1.5f).coerceAtMost(1f)
+        // ... and in a patch, not a thin line.
+        val density = blur(hair, w, h, px(0.015f))
+        for (i in hair.indices) hair[i] *= (density[i] * 3f).coerceAtMost(1f)
+        return blur(hair, w, h, px(0.006f)) to region
     }
 
     /** Facial hair: fuller darkens it and fills its gaps with its colour; lighter blends it toward the skin. */
@@ -304,9 +323,9 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
                 val hc = blur(FloatArray(w * h) { plane[it] * soft[it] }, w, h, near)
                 for (i in plane.indices) {
                     if (region[i] <= 0f) continue
-                    var v = plane[i] * (1f - 0.35f * amount * soft[i])
+                    var v = plane[i] * (1f - 0.15f * amount * soft[i])
                     if (hw[i] > 0.05f) {
-                        val fill = 0.6f * amount * region[i] * (1f - soft[i]) * (hw[i] * 2f).coerceAtMost(1f)
+                        val fill = 0.45f * amount * region[i] * (1f - soft[i]) * (hw[i] * 2f).coerceAtMost(1f)
                         v += (hc[i] / hw[i] - v) * fill
                     }
                     plane[i] = v
@@ -358,7 +377,7 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             val grey = 1f - (sat[i] / tSat).coerceIn(0f, 1f)
             val k = (strength * hair[i] * (0.55f + 0.45f * grey)).coerceAtMost(1f)
             var l = 0.299f * r[i] + 0.587f * g[i] + 0.114f * b[i]
-            if (amount > 0f) l += (tl - l) * 0.6f * grey
+            if (amount > 0f) l += (tl - l) * 0.3f * grey
             val f = l / tl
             r[i] += (tr * f - r[i]) * k
             g[i] += (tg * f - g[i]) * k
