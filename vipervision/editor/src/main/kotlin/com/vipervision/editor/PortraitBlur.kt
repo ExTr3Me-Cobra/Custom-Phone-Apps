@@ -577,6 +577,7 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
     val context = LocalContext.current
     val accent = remember { appAccentColor(context) }
     BackHandler(onBack = onCancel)
+    var holding by remember { mutableStateOf(false) }
     // The preview follows the choices (a smaller copy, redone after each change).
     LaunchedEffect(session) {
         val small = withContext(Dispatchers.Default) { session.preview.scaledToFit(1080) }
@@ -604,6 +605,8 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    // Hold to see the photo before Portrait blur.
+                    .holdToCompare { holding = it }
                     .pointerInput(session) {
                         detectTapGestures { tap ->
                             val rect = fittedImageRect(size.width.toFloat(), size.height.toFloat(), session.preview.width, session.preview.height)
@@ -614,7 +617,11 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
                     },
                 contentAlignment = Alignment.Center
             ) {
-                val shown = if (session.showDepth) session.depthPicture else session.shown
+                val shown = when {
+                    holding -> session.preview
+                    session.showDepth -> session.depthPicture
+                    else -> session.shown
+                }
                 if (shown != null) {
                     Image(
                         bitmap = remember(shown) { shown.asImageBitmap() },
@@ -623,7 +630,7 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
                         modifier = Modifier.fillMaxSize()
                     )
                     // Where it's focused.
-                    Canvas(Modifier.fillMaxSize()) {
+                    if (!holding) Canvas(Modifier.fillMaxSize()) {
                         val rect = fittedImageRect(size.width, size.height, session.preview.width, session.preview.height)
                         val c = Offset(rect.left + session.focus.x * rect.width, rect.top + session.focus.y * rect.height)
                         val r = 22.dp.toPx()

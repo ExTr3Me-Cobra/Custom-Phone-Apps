@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
  */
 class AiTrial(val tool: AiTool, val original: Bitmap, val results: List<Pair<AiChoice, Bitmap>>) {
     /** -1 = the original. */
-    var shown by mutableIntStateOf(if (results.isEmpty()) -1 else 0)
+    var shown by mutableIntStateOf(0)
 }
 
 @Composable
@@ -29,21 +29,20 @@ internal fun AiTrialScreen(trial: AiTrial, onCancel: () -> Unit, onKeep: (AiChoi
     StudioFrame(
         title = trial.tool.label,
         shown = picture,
+        original = trial.original,
         photoWidth = picture.width,
         photoHeight = picture.height,
         onCancel = onCancel,
         onApply = { if (index >= 0) onKeep(trial.results[index].first) else onCancel() }
     ) {
         StudioHint(
-            if (index < 0) "The photo before. Pick a model to compare."
-            else "${trial.results[index].first.title}: ${trial.results[index].first.about}"
+            "${trial.results[index].first.title}: ${trial.results[index].first.about}"
         )
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("Before", selected = index < 0) { trial.shown = -1 }
             trial.results.forEachIndexed { i, (choice, _) ->
                 Pill(choice.title, selected = index == i) { trial.shown = i }
             }
         }
-        StudioHint("Tap ✓ to keep the one shown (it's then made at full size).")
+        StudioHint("Hold the photo to see the original. Tap ✓ to keep the one shown (it's then made at full size).")
     }
 }

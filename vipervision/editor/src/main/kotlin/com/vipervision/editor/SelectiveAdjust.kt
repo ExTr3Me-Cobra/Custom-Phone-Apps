@@ -198,6 +198,7 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
         StudioFrame(
             title = "Selective adjust",
             shown = shown,
+            original = small,
             photoWidth = preview.width,
             photoHeight = preview.height,
             onCancel = onCancel,

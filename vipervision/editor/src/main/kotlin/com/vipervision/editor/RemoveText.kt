@@ -97,6 +97,7 @@ class RemoveTextTool(private val preview: Bitmap, boxes: List<List<Offset>>) : S
         StudioFrame(
             title = "Remove text",
             shown = preview,
+            original = preview,
             photoWidth = preview.width,
             photoHeight = preview.height,
             onCancel = onCancel,

@@ -144,7 +144,6 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
     var beard by mutableFloatStateOf(0f)
     /** -1 (paler, less red) .. 1 (rosier). */
     var complexion by mutableFloatStateOf(0f)
-    var showBefore by mutableStateOf(false)
     private var shown by mutableStateOf<Bitmap?>(null)
 
     private fun settings() = RetouchSettings(skin, eyes, teeth, lips, beard, complexion)
@@ -423,16 +422,14 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
         }
         StudioFrame(
             title = "Face retouch",
-            shown = if (showBefore) small else shown,
+            shown = shown,
+            original = small,
             photoWidth = preview.width,
             photoHeight = preview.height,
             onCancel = onCancel,
             onApply = onApply
         ) {
             StudioHint("${parts.size} face${if (parts.size == 1) "" else "s"} found.")
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill("Before", selected = showBefore) { showBefore = !showBefore }
-            }
             LabeledSlider("Skin ${(skin * 100).roundToInt()}%", skin, 0f..1f) { skin = it }
             LabeledSlider("Eyes ${(eyes * 100).roundToInt()}%", eyes, 0f..1f) { eyes = it }
             LabeledSlider("Teeth ${(teeth * 100).roundToInt()}%", teeth, 0f..1f) { teeth = it }

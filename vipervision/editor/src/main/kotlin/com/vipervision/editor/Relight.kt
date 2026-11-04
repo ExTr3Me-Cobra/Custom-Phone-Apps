@@ -162,6 +162,7 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         StudioFrame(
             title = "Relight",
             shown = shown,
+            original = small,
             photoWidth = preview.width,
             photoHeight = preview.height,
             onCancel = onCancel,

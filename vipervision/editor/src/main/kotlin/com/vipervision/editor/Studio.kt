@@ -7,6 +7,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -77,6 +79,8 @@ interface StudioTool {
 internal fun StudioFrame(
     title: String,
     shown: Bitmap?,
+    /** Shown instead of [shown] while the photo is held (null: nothing to compare with). */
+    original: Bitmap? = null,
     photoWidth: Int,
     photoHeight: Int,
     onCancel: () -> Unit,
@@ -108,11 +112,14 @@ internal fun StudioFrame(
             // Pinch to zoom (and drag while zoomed); taps still land on the right spot.
             var zoom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
             var pan by remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+            var holding by remember { androidx.compose.runtime.mutableStateOf(false) }
+            val picture = if (holding && original != null) original else shown
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .clipToBounds()
+                    .then(if (original != null) Modifier.holdToCompare { holding = it } else Modifier)
                     .pointerInput(Unit) {
                         detectTransformGestures { _, move, scale, _ ->
                             zoom = (zoom * scale).coerceIn(1f, 8f)
@@ -147,14 +154,14 @@ internal fun StudioFrame(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                if (shown != null) {
+                if (picture != null) {
                     Image(
-                        bitmap = remember(shown) { shown.asImageBitmap() },
+                        bitmap = remember(picture) { picture.asImageBitmap() },
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
                     )
-                    if (overlay != null) {
+                    if (overlay != null && !holding) {
                         Canvas(Modifier.fillMaxSize()) {
                             overlay(fittedImageRect(size.width, size.height, photoWidth, photoHeight))
                         }
@@ -167,10 +174,60 @@ internal fun StudioFrame(
                 }
                 }
                 photoExtra()
+                if (holding && original != null) OriginalLabel()
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), content = controls)
         }
     }
+}
+
+/**
+ * Hold still on the photo for a moment to see [original] (as in the editor itself) until the
+ * finger lifts; the hold doesn't count as a tap. Moving or pinching isn't a hold.
+ */
+internal fun Modifier.holdToCompare(onHold: (Boolean) -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(
+            requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
+        )
+        val notHeld = withTimeoutOrNull(HOLD_TO_COMPARE_MS) {
+            while (true) {
+                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (event.changes.none { it.pressed }) return@withTimeoutOrNull true
+                val moved = event.changes.any { (it.position - down.position).getDistance() > viewConfiguration.touchSlop }
+                if (event.changes.count { it.pressed } > 1 || moved) return@withTimeoutOrNull true
+            }
+            @Suppress("UNREACHABLE_CODE") true
+        }
+        if (notHeld != null) return@awaitEachGesture
+        onHold(true)
+        try {
+            do {
+                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                event.changes.forEach { it.consume() }
+            } while (event.changes.any { it.pressed })
+        } finally {
+            onHold(false)
+        }
+    }
+}
+
+internal const val HOLD_TO_COMPARE_MS = 220L
+
+/** The "Original" label shown while holding to compare. */
+@Composable
+internal fun BoxScope.OriginalLabel() {
+    Text(
+        "Original",
+        color = Color.White,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 12.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.6f))
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    )
 }
 
 /** A hint line under the photo. */
