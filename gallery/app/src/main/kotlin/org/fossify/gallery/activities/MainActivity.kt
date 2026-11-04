@@ -1435,6 +1435,17 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
     }
 
     private fun itemClicked(path: String) {
+        // Viper Vision: the Locked album opens after the fingerprint, face or screen lock.
+        if (org.fossify.gallery.helpers.LockedAlbum.isLocked(path)) {
+            org.fossify.gallery.helpers.LockedAlbum.unlock(this) {
+                Intent(this, MediaActivity::class.java).apply {
+                    putExtra(SKIP_AUTHENTICATION, true)
+                    putExtra(DIRECTORY, path)
+                    handleMediaIntent(this)
+                }
+            }
+            return
+        }
         handleLockedFolderOpening(path) { success ->
             if (success) {
                 Intent(this, MediaActivity::class.java).apply {
@@ -1855,6 +1866,11 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
             allDirs = mDirs,
             currentPathPrefix = mCurrentPathPrefix
         ).clone() as ArrayList<Directory>
+        // Viper Vision: the Locked album, first on the albums page (not when picking for another app).
+        if (mCurrentPathPrefix.isEmpty() && !isPickIntent(intent) && !isGetAnyContentIntent(intent)) {
+            dirsToShow.removeAll { org.fossify.gallery.helpers.LockedAlbum.isLocked(it.path) }
+            dirsToShow.add(0, org.fossify.gallery.helpers.LockedAlbum.directory(getString(R.string.vv_locked_album)))
+        }
 
         if (currAdapter == null || forceRecreate) {
             mDirsIgnoringSearch = dirs

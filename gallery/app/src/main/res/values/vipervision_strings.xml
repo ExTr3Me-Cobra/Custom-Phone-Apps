@@ -53,4 +53,9 @@
     <string name="vv_camera_shortcut_toggle">Camera thumbnail opens Viper Vision</string>
     <string name="vv_screenshot_toolbar">Screenshot toolbar after each screenshot</string>
     <string name="vv_screenshot_toolbar_how">It also needs Viper Vision\'s accessibility service on (the next screen). On Samsung, Samsung\'s own screenshot toolbar must be off; on other phones, tap the phone\'s own toolbar to open Viper Vision\'s</string>
+    <string name="vv_locked_album">Locked</string>
+    <string name="vv_move_to_locked">Move to Locked album</string>
+    <string name="vv_move_out_of_locked">Move out of Locked album</string>
+    <string name="vv_moved_to_locked">%d moved to the Locked album</string>
+    <string name="vv_moved_out_of_locked">%d moved out of the Locked album</string>
 </resources>

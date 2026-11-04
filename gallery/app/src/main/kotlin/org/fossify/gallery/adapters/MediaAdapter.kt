@@ -220,6 +220,10 @@ class MediaAdapter(
             findItem(R.id.cab_confirm_selection).isVisible = isAGetIntent && allowMultiplePicks && selectedKeys.isNotEmpty()
             findItem(R.id.cab_restore_recycle_bin_files).isVisible = selectedPaths.all { it.startsWith(activity.recycleBinPath) }
             findItem(R.id.cab_create_shortcut).isVisible = false
+            // Viper Vision: the Locked album.
+            val inLocked = org.fossify.gallery.helpers.LockedAlbum.isLocked(path)
+            findItem(R.id.vv_cab_lock).isVisible = !isInRecycleBin && !inLocked && !isAGetIntent
+            findItem(R.id.vv_cab_unlock).isVisible = inLocked
             // Viper Vision: Studio tools for the selected photos.
             val images = selectedItems.count { it.isImage() }
             findItem(R.id.vv_cab_compare).isVisible = images == 2 && !isInRecycleBin
@@ -254,6 +258,20 @@ class MediaAdapter(
             R.id.cab_rotate_one_eighty -> rotateSelection(180)
             R.id.cab_copy_to -> checkMediaManagementAndCopy(true)
             R.id.vv_cab_copy_to_clipboard -> copySelectionToClipboard()
+            R.id.vv_cab_lock, R.id.vv_cab_unlock -> {
+                val paths = getSelectedItems().map { it.path }
+                val into = id == R.id.vv_cab_lock
+                val move = if (into) org.fossify.gallery.helpers.LockedAlbum::moveIn else org.fossify.gallery.helpers.LockedAlbum::moveOut
+                move(activity, paths) { moved ->
+                    android.widget.Toast.makeText(
+                        activity,
+                        activity.getString(if (into) R.string.vv_moved_to_locked else R.string.vv_moved_out_of_locked, moved),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    finishActMode()
+                    listener?.refreshItems()
+                }
+            }
             R.id.cab_move_to -> moveFilesTo()
             R.id.cab_create_shortcut -> createShortcut()
             R.id.cab_select_all -> selectAll()

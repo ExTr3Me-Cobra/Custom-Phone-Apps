@@ -239,7 +239,9 @@ class DirectoryAdapter(
 
     override fun getSelectableItemCount() = dirs.size
 
-    override fun getIsItemSelectable(position: Int) = true
+    // Viper Vision: the Locked album can't be renamed, hidden, deleted and so on from here.
+    override fun getIsItemSelectable(position: Int) =
+        dirs.getOrNull(position)?.let { !org.fossify.gallery.helpers.LockedAlbum.isLocked(it.path) } ?: true
 
     override fun getItemSelectionKey(position: Int) = dirs.getOrNull(position)?.path?.hashCode()
 
