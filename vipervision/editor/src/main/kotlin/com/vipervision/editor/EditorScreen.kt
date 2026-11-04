@@ -706,16 +706,12 @@ private fun AiPanel(
                 }
             )
         }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp)
-        ) {
-            // The two background removers first (Auto, then Manual), then the Blemish remover (Object eraser) and the
-            // other AI tools.
-            item { aiToolBubble(AiTool.RemoveBackground) }
-            // Manual background remover (Cut out): Image Toolbox's full background remover, with Smart select (paint roughly,
-            // SAM 2.1 finds the edge), all its models and erase/restore brushes.
-            item {
+        // Every bubble by a lasting name (for the order the user arranges them in).
+        val bubbles = buildList<Pair<String, @Composable () -> Unit>> {
+            // The two background removers first (Auto, then Manual), then the Blemish remover and the other AI tools.
+            add("ai:${AiTool.RemoveBackground.name}" to { aiToolBubble(AiTool.RemoveBackground) })
+            // Manual background remover (Cut out): Image Toolbox's full background remover, with Smart select.
+            add("cutout" to {
                 AiBubble(
                     icon = Icons.Rounded.Scissors,
                     label = "Manual background remover",
@@ -725,9 +721,9 @@ private fun AiPanel(
                     enabled = !controller.isBusy,
                     onClick = onStartCutOut
                 )
-            }
+            })
             // Object eraser: paint over something and the LaMa AI model fills in what was behind it.
-            item {
+            add("blemish" to {
                 AiBubble(
                     icon = Icons.Rounded.Eraser,
                     label = "Blemish remover",
@@ -737,9 +733,9 @@ private fun AiPanel(
                     enabled = !controller.isBusy,
                     onClick = onStartObjectEraser
                 )
-            }
+            })
             // Portrait blur: blur by distance from the focus (Depth Anything), the subject kept crisp.
-            item {
+            add("portrait" to {
                 AiBubble(
                     icon = Icons.Rounded.BlurCircular,
                     label = "Portrait blur",
@@ -749,39 +745,47 @@ private fun AiPanel(
                     enabled = !controller.isBusy,
                     onClick = onStartPortraitBlur
                 )
-            }
+            })
             // Selective adjust, Remove text, Relight, Face retouch and Red eye (see StudioKind).
-            items(StudioKind.entries) { kind ->
-                AiBubble(
-                    icon = kind.icon,
-                    label = kind.label,
-                    download = if (remember(controller.studio, controller.state.pixelSteps) { kind.ready() }) null else "${kind.downloadMb} MB",
-                    applied = controller.state.pixelSteps.any { it is PixelStep.Tool && it.name == kind.label },
-                    selected = false,
-                    enabled = !controller.isBusy,
-                    onClick = { onStartStudio(kind) }
-                )
+            StudioKind.entries.forEach { kind ->
+                add("studio:${kind.name}" to {
+                    AiBubble(
+                        icon = kind.icon,
+                        label = kind.label,
+                        download = if (remember(controller.studio, controller.state.pixelSteps) { kind.ready() }) null else "${kind.downloadMb} MB",
+                        applied = controller.state.pixelSteps.any { it is PixelStep.Tool && it.name == kind.label },
+                        selected = false,
+                        enabled = !controller.isBusy,
+                        onClick = { onStartStudio(kind) }
+                    )
+                })
             }
             // Samsung's own Galaxy AI tools, with the photo as edited so far (see SamsungHandoff).
             if (samsungAvailable) {
-                items(SamsungTool.entries) { tool ->
-                    AiBubble(
-                        icon = when (tool) {
-                            SamsungTool.Eraser -> Icons.Rounded.Eraser
-                            SamsungTool.Move -> EditorIcons.Move
-                            SamsungTool.Create -> Icons.Rounded.Draw
-                        },
-                        label = tool.label,
-                        download = null,
-                        applied = controller.state.pixelSteps.any { it is PixelStep.Samsung && it.tool == tool },
-                        selected = false,
-                        enabled = !controller.isBusy,
-                        onClick = { onSamsungTool(tool) }
-                    )
+                SamsungTool.entries.forEach { tool ->
+                    add("samsung:${tool.name}" to {
+                        AiBubble(
+                            icon = when (tool) {
+                                SamsungTool.Eraser -> Icons.Rounded.Eraser
+                                SamsungTool.Move -> EditorIcons.Move
+                                SamsungTool.Create -> Icons.Rounded.Draw
+                            },
+                            label = tool.label,
+                            download = null,
+                            applied = controller.state.pixelSteps.any { it is PixelStep.Samsung && it.tool == tool },
+                            selected = false,
+                            enabled = !controller.isBusy,
+                            onClick = { onSamsungTool(tool) }
+                        )
+                    })
                 }
             }
-            items(AiTool.entries.filter { it != AiTool.RemoveBackground }) { tool -> aiToolBubble(tool) }
+            AiTool.entries.filter { it != AiTool.RemoveBackground }.forEach { tool ->
+                add("ai:${tool.name}" to { aiToolBubble(tool) })
+            }
         }
+        // Hold a bubble to pick it up and drag it somewhere else.
+        ReorderableBubbleRow(prefKey = "vv_ai_bubble_order", bubbles = bubbles)
     }
 
     choosing?.let { tool ->
