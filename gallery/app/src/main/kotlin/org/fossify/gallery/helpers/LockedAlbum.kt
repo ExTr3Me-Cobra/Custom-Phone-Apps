@@ -119,13 +119,13 @@ object LockedAlbum {
         })
     }
 
-    /** The recent-apps view shows nothing of this screen (Android 13+ still allows screenshots). */
+    /**
+     * No screenshots or screen recordings of this screen, and nothing of it in the recent-apps
+     * view (Android's secure flag; screenshots come out blocked or black).
+     */
     private fun hideFromRecents(activity: Activity) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            activity.setRecentsScreenshotEnabled(false)
-        } else {
-            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        }
+        activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) activity.setRecentsScreenshotEnabled(false)
     }
 
     private fun cover(activity: Activity) {
