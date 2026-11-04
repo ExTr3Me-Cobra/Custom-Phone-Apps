@@ -84,8 +84,9 @@ internal fun ReorderableBubbleRow(
             val i = order.indexOf(key)
             val x = side + i * slot + offset - scroll.value
             val step = when {
-                x < edge -> -12f
-                x + itemWidth > rowWidth - edge -> 12f
+                rowWidth <= 0f -> 0f
+                x < edge * 0.5f && scroll.value > 0 -> -10f
+                x + itemWidth > rowWidth - edge * 0.5f && scroll.value < scroll.maxValue -> 10f
                 else -> 0f
             }
             if (step != 0f) {
@@ -104,6 +105,8 @@ internal fun ReorderableBubbleRow(
     ) {
         for (key in order) {
             val content = byKey[key] ?: continue
+            // Keyed, so a bubble keeps its own state (and the hold on it) as it moves along.
+            androidx.compose.runtime.key(key) {
             val lifted = dragging == key
             Box(
                 Modifier
@@ -133,21 +136,26 @@ internal fun ReorderableBubbleRow(
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             dragging = key
                             offset = 0f
-                            while (true) {
-                                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) {
+                            try {
+                                while (true) {
+                                    val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) {
+                                        change.consume()
+                                        break
+                                    }
+                                    moveBy(change.positionChange().x)
                                     change.consume()
-                                    break
                                 }
-                                moveBy(change.positionChange().x)
-                                change.consume()
+                            } finally {
+                                // However the hold ends, the bubble drops into its place.
+                                dragging = null
+                                offset = 0f
+                                prefs.edit().putString(prefKey, order.joinToString(",")).apply()
                             }
-                            dragging = null
-                            offset = 0f
-                            prefs.edit().putString(prefKey, order.joinToString(",")).apply()
                         }
                     }
             ) { content() }
+            }
         }
     }
 }

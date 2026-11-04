@@ -184,6 +184,14 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
 
         if (s.skin > 0f) {
             val hard = mask(1, 10, 14)
+            // Obvious facial hair (enough of the lower face) isn't skin: it's left as it is and
+            // its colour isn't mixed into the skin around it.
+            val (hair, region) = findHair(p, image, top, w, h, faceSize, r, g, b, ::mask)
+            val regionSum = region.sum()
+            if (regionSum > 0f && hair.sum() / regionSum > 0.08f) {
+                val grown = blur(hair, w, h, max(1, (faceSize * 0.008f).roundToInt()))
+                for (i in hard.indices) hard[i] *= (1f - (grown[i] * 2.5f).coerceAtMost(1f))
+            }
             val m = blur(hard, w, h, feather)
             val large = max(2, (faceSize * 0.03f).roundToInt())
             val fine = max(1, (faceSize * 0.004f).roundToInt())
@@ -199,7 +207,7 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
                 }
             }
         }
-        if (s.beard != 0f) facialHair(p, image, left, top, w, h, faceSize, r, g, b, s.beard, ::mask)
+        if (s.beard != 0f) facialHair(p, image, top, w, h, faceSize, r, g, b, s.beard, ::mask)
         if (s.eyes > 0f) {
             val m = blur(mask(4, 5), w, h, max(1, feather / 2))
             val rad = max(1, (faceSize * 0.01f).roundToInt())
@@ -251,10 +259,15 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
      * neck), the pixels clearly darker than the skin around them are the hair. Fuller darkens them
      * and fills the gaps between them with their colour; lighter blends them toward the skin.
      */
-    private fun facialHair(
-        p: Faces.Parts, image: Bitmap, left: Int, top: Int, w: Int, h: Int, faceSize: Float,
-        r: FloatArray, g: FloatArray, b: FloatArray, amount: Float, mask: (IntArray) -> FloatArray
-    ) {
+    /**
+     * Where the facial hair is (0..1 per crop pixel): in the lower face (from just under the nose
+     * down, the face model's skin and neck), the pixels clearly darker than the skin around them.
+     * Also the region it was looked for in.
+     */
+    private fun findHair(
+        p: Faces.Parts, image: Bitmap, top: Int, w: Int, h: Int, faceSize: Float,
+        r: FloatArray, g: FloatArray, b: FloatArray, mask: (IntArray) -> FloatArray
+    ): Pair<FloatArray, FloatArray> {
         val noseY = p.face.nose.y * image.height - top
         val mouthY = (p.face.mouthLeft.y + p.face.mouthRight.y) / 2f * image.height - top
         val startY = noseY + (mouthY - noseY) * 0.3f
@@ -271,7 +284,17 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             if (region[i] <= 0f || skinW[i] < 0.05f) 0f
             else (((skinL[i] / skinW[i]) - lum[i] - 8f) / 35f).coerceIn(0f, 1f) * region[i]
         }
-        val soft = blur(hair, w, h, max(1, (faceSize * 0.004f).roundToInt()))
+        return blur(hair, w, h, max(1, (faceSize * 0.004f).roundToInt())) to region
+    }
+
+    /** Facial hair: fuller darkens it and fills its gaps with its colour; lighter blends it toward the skin. */
+    private fun facialHair(
+        p: Faces.Parts, image: Bitmap, top: Int, w: Int, h: Int, faceSize: Float,
+        r: FloatArray, g: FloatArray, b: FloatArray, amount: Float, mask: (IntArray) -> FloatArray
+    ) {
+        val (soft, region) = findHair(p, image, top, w, h, faceSize, r, g, b, mask)
+        val skin = mask(intArrayOf(1, 14))
+        val wide = max(3, (faceSize * 0.06f).roundToInt())
         evenColour(r, g, b, soft, amount)
         if (amount > 0f) {
             // The hair's colour nearby, to fill the gaps with.
