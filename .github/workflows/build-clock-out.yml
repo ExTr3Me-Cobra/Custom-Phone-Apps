@@ -33,6 +33,15 @@ jobs:
           path: signing/clockout.keystore
           key: clockout-signing-key-v1
 
+      # The permanent key: the repository secret CLOCKOUT_KEYSTORE, which nothing can delete. It replaces any cached key.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.CLOCKOUT_KEYSTORE }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > signing/clockout.keystore; echo "Using the CLOCKOUT_KEYSTORE secret."; fi
+
+
       - name: Make the signing key (first build only)
         run: |
           mkdir -p signing
