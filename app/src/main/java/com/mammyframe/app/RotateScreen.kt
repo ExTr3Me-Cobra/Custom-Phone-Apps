@@ -122,7 +122,7 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onBack).padding(12.dp)
                 ) { GlyphIcon(Glyph.BACK, Rose, Modifier.fillMaxSize()) }
-                Text("AI Rotate", fontFamily = Script, fontSize = 44.sp, color = Rose, modifier = Modifier.padding(start = 4.dp))
+                Text("Ai Rotate", fontFamily = Script, fontSize = 44.sp, color = Rose, modifier = Modifier.padding(start = 4.dp))
             }
 
             LazyVerticalGrid(

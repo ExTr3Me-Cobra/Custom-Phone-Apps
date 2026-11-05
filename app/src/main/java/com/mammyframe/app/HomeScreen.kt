@@ -129,7 +129,7 @@ fun HomeScreen(
                     SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
                     SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
                     SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
-                    SettingCard("AI rotate", aiText, Modifier.fillMaxWidth(), onOpenAiRotate)
+                    SettingCard("Ai Rotate", aiText, Modifier.fillMaxWidth(), onOpenAiRotate)
                 }
             }
             val devOff: @Composable () -> Unit = {
@@ -180,7 +180,7 @@ fun HomeScreen(
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                                 SettingCard("Transitions", transitionText, Modifier.width(260.dp)) { onDialog(HomeDialog.TRANSITIONS) }
-                                SettingCard("AI rotate", aiText, Modifier.width(260.dp), onOpenAiRotate)
+                                SettingCard("Ai Rotate", aiText, Modifier.width(260.dp), onOpenAiRotate)
                             }
                         }
                     } else {
