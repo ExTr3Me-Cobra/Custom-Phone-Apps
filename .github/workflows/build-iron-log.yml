@@ -63,10 +63,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Every build must be signed with the same key, or Android refuses to install it as an
-      # update ("App not installed"). The key is kept in the default branch's build cache by the
-      # "Signing keys" workflow there (every branch can read it, and it's refreshed every 3 days).
-      # A build never makes a key.
-      - name: Signing key
+      # update ("App not installed"). The key is the repository secret LOADOUT_KEYSTORE (base64 of the
+      # keystore), which nothing can delete; until it's added, the default branch's build cache (kept by
+      # the "Signing keys" workflow there). A build never makes a key.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.LOADOUT_KEYSTORE }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > signing/loadout.keystore; echo "Using the LOADOUT_KEYSTORE secret."; fi
+      - name: Signing key from the cache (only without the secret)
+        if: ${{ hashFiles('signing/loadout.keystore') == '' }}
         uses: actions/cache/restore@v4
         with:
           path: signing/loadout.keystore

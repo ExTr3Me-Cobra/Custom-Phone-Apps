@@ -8,9 +8,10 @@ Loadout (package `com.ironlog.app`): Kotlin + Jetpack Compose. No local SDK; CI 
   `https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/loadout-N/Loadout.apk` and check it returns 302.
 - When a job finishes (a build published, research done, anything the owner is waiting on), send a push notification
   with the outcome and the APK link if there is one.
-- Signing: builds read the key from the default branch's build cache (`loadout-signing-key-v2`, made and kept alive
-  every 3 days by `.github/workflows/signing-keys.yml` on the default branch). Builds never make a key. Never put the
-  keystore in the repo or anywhere public.
+- Signing: builds use the repository secret `LOADOUT_KEYSTORE` (base64 keystore, alias `ironlog`, password `android`;
+  SHA-256 starts 91:23:9C:28), falling back to the default branch's cache (`loadout-signing-key-v2`, kept alive by
+  `signing-keys.yml` there; other sessions have deleted it twice). Builds never make a key. Never put the keystore in the
+  repo or anywhere public.
 - No AI model IDs anywhere in the repo. No pull requests unless asked.
 - Never compare our data with Strength Level, for any reason, not even as a reference point or sanity check.
   Exception, the owner's choice: the separate personal-use section (`tools/personal/`, marked `PERSONAL-USE`) may use
