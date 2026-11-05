@@ -1,0 +1,15 @@
+name: Delete the old Viper Vision branch name
+# One-off: the branch was renamed to claude/viper-vision-app. Removed right after.
+on:
+  push:
+    paths:
+      - '.github/workflows/delete-old-branch-tmp.yml'
+permissions:
+  contents: write
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/ccr-2710307e-1wxw9v"
