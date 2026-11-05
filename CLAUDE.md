@@ -1,6 +1,7 @@
 # Working notes for Claude
 
-Loadout (package `com.ironlog.app`): Kotlin + Jetpack Compose. No local SDK; CI builds every push to
+Loadout (package `com.ironlog.app`, kept from its first name, Iron Log: changing it would make a different app; the workflow
+file `build-iron-log.yml` and key alias `ironlog` stay too, as renaming them would reset build numbers or need a new key): Kotlin + Jetpack Compose. No local SDK; CI builds every push to
 `claude/loadout-app` and publishes release `loadout-N` with `Loadout.apk`.
 
 ## Standing rules

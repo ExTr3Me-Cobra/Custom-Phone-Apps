@@ -9,12 +9,12 @@ permissions:
 
 # One build at a time, so every build signs with the same saved key.
 concurrency:
-  group: iron-log-build
+  group: loadout-build
   cancel-in-progress: false
 
 jobs:
   # One-off cleanup, only when the pushed commit's message contains [delete-old-releases]: removes every earlier
-  # Loadout / Iron Log release, its tag, old APK build artifacts, earlier runs of this workflow and build caches
+  # Loadout release, its tag, old APK build artifacts, earlier runs of this workflow and build caches
   # on this branch (except the signing key, so updates still install over the current app). Other apps' releases,
   # tags and caches are not touched.
   cleanup:
@@ -29,11 +29,11 @@ jobs:
     steps:
       # IDs are listed in full before anything is deleted, so deleting doesn't shift the pages being read. A delete
       # that fails is logged and skipped, so it can't stop the build.
-      - name: Delete old Loadout and Iron Log releases and tags
+      - name: Delete old Loadout releases and tags
         run: |
-          ids=$(gh api --paginate "repos/$REPO/releases?per_page=100" --jq '.[] | select(.tag_name | test("^(loadout|iron-log)-")) | .id' || true)
+          ids=$(gh api --paginate "repos/$REPO/releases?per_page=100" --jq '.[] | select(.tag_name | test("^loadout-")) | .id' || true)
           for id in $ids; do gh api -X DELETE "repos/$REPO/releases/$id" && echo "deleted release $id" || echo "could not delete release $id"; done
-          for prefix in loadout- iron-log-; do
+          for prefix in loadout-; do
             refs=$(gh api --paginate "repos/$REPO/git/matching-refs/tags/$prefix" --jq '.[].ref' || true)
             for ref in $refs; do gh api -X DELETE "repos/$REPO/git/refs/${ref#refs/}" && echo "deleted $ref" || echo "could not delete $ref"; done
           done

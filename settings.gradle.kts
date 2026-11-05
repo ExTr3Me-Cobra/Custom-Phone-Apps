@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "IronLog"
+rootProject.name = "Loadout"
 include(":app")
