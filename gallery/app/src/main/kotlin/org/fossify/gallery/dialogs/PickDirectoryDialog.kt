@@ -220,7 +220,10 @@ class PickDirectoryDialog(
             allDirectories = newDirs.clone() as ArrayList<Directory>
         }
 
-        val distinctDirs = newDirs.filter { showFavoritesBin || (!it.isRecycleBin() && !it.areFavorites()) }.distinctBy { it.path.getDistinctPath() }
+        // Viper Vision: when picking where to copy or move to, the album it's in now isn't offered.
+        val distinctDirs = newDirs.filter { showFavoritesBin || (!it.isRecycleBin() && !it.areFavorites()) }
+            .filterNot { isPickingCopyMoveDestination && sourcePath.isNotEmpty() && it.path.trimEnd('/') == sourcePath.trimEnd('/') }
+            .distinctBy { it.path.getDistinctPath() }
             .toMutableList() as ArrayList<Directory>
         val sortedDirs = activity.getSortedDirectories(distinctDirs)
         val dirs = activity.getDirsToShow(sortedDirs, allDirectories, currentPathPrefix).clone() as ArrayList<Directory>

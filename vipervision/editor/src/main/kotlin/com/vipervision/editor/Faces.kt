@@ -430,26 +430,16 @@ class FaceRetouchTool(private val preview: Bitmap, private val parts: List<Faces
             onApply = onApply
         ) {
             StudioHint("${parts.size} face${if (parts.size == 1) "" else "s"} found.")
-            LabeledSlider("Skin ${(skin * 100).roundToInt()}%", skin, 0f..1f) { skin = it }
-            LabeledSlider("Eyes ${(eyes * 100).roundToInt()}%", eyes, 0f..1f) { eyes = it }
-            LabeledSlider("Teeth ${(teeth * 100).roundToInt()}%", teeth, 0f..1f) { teeth = it }
-            LabeledSlider("Lips ${(lips * 100).roundToInt()}%", lips, 0f..1f) { lips = it }
-            LabeledSlider(
-                when {
-                    complexion > 0f -> "Rosier ${(complexion * 100).roundToInt()}"
-                    complexion < 0f -> "Paler ${(-complexion * 100).roundToInt()}"
-                    else -> "Complexion"
-                },
-                complexion, -1f..1f
-            ) { complexion = it }
-            LabeledSlider(
-                when {
-                    beard > 0f -> "Beard fuller ${(beard * 100).roundToInt()}"
-                    beard < 0f -> "Beard lighter ${(-beard * 100).roundToInt()}"
-                    else -> "Facial hair"
-                },
-                beard, -1f..1f
-            ) { beard = it }
+            DialPanel(listOf(
+                Dial("Skin", StudioKind.FaceRetouch.icon, (skin * 100).roundToInt()) { skin = it / 100f },
+                Dial("Eyes", StudioKind.RedEye.icon, (eyes * 100).roundToInt()) { eyes = it / 100f },
+                Dial("Teeth", Adjustment.Highlights.icon, (teeth * 100).roundToInt()) { teeth = it / 100f },
+                Dial("Lips", Adjustment.Saturation.icon, (lips * 100).roundToInt()) { lips = it / 100f },
+                // Left paler, right rosier.
+                Dial("Complexion", Adjustment.Tint.icon, (complexion * 100).roundToInt(), twoSided = true) { complexion = it / 100f },
+                // Left lighter, right fuller.
+                Dial("Facial hair", Adjustment.Sharpness.icon, (beard * 100).roundToInt(), twoSided = true) { beard = it / 100f }
+            ))
         }
     }
 }

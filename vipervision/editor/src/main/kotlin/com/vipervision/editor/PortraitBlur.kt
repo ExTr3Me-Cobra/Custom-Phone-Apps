@@ -663,18 +663,20 @@ internal fun PortraitBlurScreen(session: PortraitBlurSession, onCancel: () -> Un
                     Pill("Depth map", selected = session.showDepth) { session.showDepth = !session.showDepth }
                 }
                 Spacer(Modifier.height(6.dp))
-                LabeledSlider("Blur ${(session.strength * 100).roundToInt()}%", session.strength, 0f..1f) { session.strength = it }
-                LabeledSlider("Focus ${if (session.focusDepth >= 0.5f) "near" else "far"}", session.focusDepth, 0f..1f) {
-                    // Picking a distance by hand: the subject no longer decides.
-                    session.keepSubject = false
-                    session.focusDepth = it
-                }
-                LabeledSlider("Depth ${(session.depthOfField * 100).roundToInt()}%", session.depthOfField, 0f..1f) { session.depthOfField = it }
-                when (session.type) {
-                    BlurType.Lens -> LabeledSlider("Bokeh ${(session.highlights * 100).roundToInt()}%", session.highlights, 0f..1f) { session.highlights = it }
-                    BlurType.Motion -> LabeledSlider("Angle ${session.angle.roundToInt()}°", session.angle, 0f..180f) { session.angle = it }
-                    else -> Unit
-                }
+                DialPanel(buildList {
+                    add(Dial("Blur", Adjustment.Vignette.icon, (session.strength * 100).roundToInt()) { session.strength = it / 100f })
+                    // Picking a distance by hand: the subject no longer decides. 0 far, 100 near.
+                    add(Dial("Focus", Adjustment.Contrast.icon, (session.focusDepth * 100).roundToInt()) {
+                        session.keepSubject = false
+                        session.focusDepth = it / 100f
+                    })
+                    add(Dial("Depth", Adjustment.Shadows.icon, (session.depthOfField * 100).roundToInt()) { session.depthOfField = it / 100f })
+                    when (session.type) {
+                        BlurType.Lens -> add(Dial("Bokeh", Adjustment.Highlights.icon, (session.highlights * 100).roundToInt()) { session.highlights = it / 100f })
+                        BlurType.Motion -> add(Dial("Angle", Adjustment.Brightness.icon, (session.angle / 1.8f).roundToInt()) { session.angle = it * 1.8f })
+                        else -> Unit
+                    }
+                })
             }
         }
     }

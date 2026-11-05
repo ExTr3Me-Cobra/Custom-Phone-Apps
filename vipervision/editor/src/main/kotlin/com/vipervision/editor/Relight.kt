@@ -441,17 +441,17 @@ class RelightTool(
             }
         ) {
             StudioHint("Tap the photo to move the light. Remove light evens out the photo's own lighting first.")
-            LabeledSlider("Light ${(strength * 100).roundToInt()}%", strength, 0f..1f) { strength = it }
-            if (faces.isNotEmpty()) {
-                LabeledSlider("Face shadow ${(faceShadow * 100).roundToInt()}%", faceShadow, 0f..1f) { faceShadow = it }
-            }
-            LabeledSlider("Remove light ${(removeLight * 100).roundToInt()}%", removeLight, 0f..1f) {
-                removeLight = it
-                removeTouched = true
-            }
-            LabeledSlider("Reach ${(size * 100).roundToInt()}%", size, 0f..1f) { size = it }
-            LabeledSlider("Darken ${(darken * 100).roundToInt()}%", darken, 0f..1f) { darken = it }
-            LabeledSlider(if (warmth >= 0) "Warm ${(warmth * 100).roundToInt()}" else "Cool ${(-warmth * 100).roundToInt()}", warmth, -1f..1f) { warmth = it }
+            DialPanel(buildList {
+                add(Dial("Light", StudioKind.Relight.icon, (strength * 100).roundToInt()) { strength = it / 100f })
+                if (faces.isNotEmpty()) add(Dial("Face shadow", StudioKind.FaceRetouch.icon, (faceShadow * 100).roundToInt()) { faceShadow = it / 100f })
+                add(Dial("Remove light", Adjustment.Shadows.icon, (removeLight * 100).roundToInt()) {
+                    removeLight = it / 100f
+                    removeTouched = true
+                })
+                add(Dial("Reach", Adjustment.Vignette.icon, (this@RelightTool.size * 100).roundToInt()) { this@RelightTool.size = it / 100f })
+                add(Dial("Darken", Adjustment.Exposure.icon, (darken * 100).roundToInt()) { darken = it / 100f })
+                add(Dial("Warmth", Adjustment.Warmth.icon, (warmth * 100).roundToInt(), twoSided = true) { warmth = it / 100f })
+            })
         }
     }
 
