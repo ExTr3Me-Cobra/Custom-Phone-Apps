@@ -91,7 +91,13 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Logo(titleSize)
+                val context = LocalContext.current
+                Logo(titleSize) {
+                    if (!settings.developer) {
+                        onChange(settings.copy(developer = true))
+                        android.widget.Toast.makeText(context, "Developer settings on", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 PlayButton(onPlay)
                 Spacer(Modifier.height(28.dp))
@@ -106,7 +112,9 @@ fun HomeScreen(
                     else "Off"
                 val transitionText = "${settings.transition.label}\n${secondsText(settings.photoSeconds)} each"
 
-                if (wide) {
+                if (!settings.developer) {
+                    SettingCard("Photos folder", folderText, Modifier.width(if (wide) 260.dp else 320.dp), onChooseFolder)
+                } else if (wide) {
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         SettingCard("Photos folder", folderText, Modifier.width(220.dp), onChooseFolder)
                         SettingCard("Schedule", scheduleText, Modifier.width(220.dp)) { onDialog(HomeDialog.SCHEDULE) }
@@ -117,6 +125,12 @@ fun HomeScreen(
                         SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
                         SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
                         SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
+                    }
+                }
+                if (settings.developer) {
+                    Spacer(Modifier.height(18.dp))
+                    OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
+                        Text("Turn off developer settings", fontSize = 16.sp)
                     }
                 }
             }
@@ -131,8 +145,22 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Logo(size: androidx.compose.ui.unit.TextUnit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun Logo(size: androidx.compose.ui.unit.TextUnit, onSecretTaps: () -> Unit) {
+    // Ten quick taps on the name (each within 0.7 s of the last) open the developer settings.
+    var taps by remember { mutableStateOf(0) }
+    var lastTap by remember { mutableStateOf(0L) }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+            indication = null,
+        ) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            taps = if (now - lastTap < 700) taps + 1 else 1
+            lastTap = now
+            if (taps >= 10) { taps = 0; onSecretTaps() }
+        }
+    ) {
         Text(
             "Mammy Frame",
             style = TextStyle(

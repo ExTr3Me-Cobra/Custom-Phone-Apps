@@ -29,6 +29,8 @@ data class Settings(
     val transitionMs: Int = 1500,
     val photoSeconds: Int = 10,
     val gentleZoom: Boolean = true,
+    /** Shows the hidden Schedule and Transitions settings (tap the name 10 times quickly). */
+    val developer: Boolean = false,
 )
 
 object Prefs {
@@ -48,6 +50,7 @@ object Prefs {
             transitionMs = p.getInt("transitionMs", d.transitionMs),
             photoSeconds = p.getInt("photoSeconds", d.photoSeconds),
             gentleZoom = p.getBoolean("gentleZoom", d.gentleZoom),
+            developer = p.getBoolean("developer", d.developer),
         )
     }
 
@@ -62,6 +65,7 @@ object Prefs {
             .putInt("transitionMs", s.transitionMs)
             .putInt("photoSeconds", s.photoSeconds)
             .putBoolean("gentleZoom", s.gentleZoom)
+            .putBoolean("developer", s.developer)
             .apply()
     }
 }

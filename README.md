@@ -6,13 +6,16 @@ A very simple digital photo frame for an Android tablet.
 - **Mammy Frame** name in a script font, with a big **Play** button.
 - **Photos folder**: tap to pick the folder the photos come from (its subfolders are included).
   It shows how many photos it found.
-- **Schedule**: turn it on and pick a start time and an end time.
+- **Developer settings** (hidden): tap the **Mammy Frame** name 10 times quickly to show the
+  Schedule and Transitions settings below. Tap **Turn off developer settings** to hide them
+  again. Hiding them doesn't change them; the schedule keeps running.
+- **Schedule** (developer settings): turn it on and pick a start time and an end time.
   - At the start time the slideshow starts by itself.
   - At the end time the screen goes solid black (and as dim as it goes) until the next start time.
   - Tapping the black screen brings up the home screen. If nobody starts a slideshow, it goes
     black again after 1 minute without being touched.
   - Works overnight too (for example 8 PM to 2 AM).
-- **Transitions**: Fade, Fade through black, Slide, Slide up, Zoom in, None, or a Mix of all;
+- **Transitions** (developer settings): Fade, Fade through black, Slide, Slide up, Zoom in, None, or a Mix of all;
   how long the transition takes; how long each photo shows (5 seconds to 10 minutes); and an
   optional gentle slow zoom on each photo.
 
@@ -26,7 +29,7 @@ A very simple digital photo frame for an Android tablet.
 ## Install
 1. Open the latest **mammy-frame-N** release on the Releases page and tap **MammyFrame.apk**.
 2. Open it and allow installing from your browser if asked.
-3. Open Mammy Frame, tap **Photos folder** and choose the folder, then set the **Schedule**.
+3. Open Mammy Frame, tap **Photos folder** and choose the folder, then tap the name 10 times quickly and set the **Schedule**.
 4. In the Schedule box, tap **Allow** on the two notes if they appear ("Display over other apps"
    and "Alarms & reminders"). These let the frame switch on by itself at the start time even if
    the app was closed or the tablet restarted.
