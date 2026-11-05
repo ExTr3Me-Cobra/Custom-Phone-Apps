@@ -1,0 +1,25 @@
+name: Export signing key (encrypted)
+# One-off: uploads this branch's cached signing key encrypted to .github/transfer-cert.pem (only the session holding its
+# private key can open it), kept 1 day. Removed right after.
+on: push
+permissions:
+  contents: read
+jobs:
+  vipervision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: signing/vipervision.keystore
+          key: vipervision-signing-key-v1
+          fail-on-cache-miss: true
+      - run: |
+          keytool -list -v -keystore signing/vipervision.keystore -storepass android | grep SHA256
+          openssl cms -encrypt -binary -aes256 -in signing/vipervision.keystore -outform DER -out vipervision.keystore.cms .github/transfer-cert.pem
+          rm signing/vipervision.keystore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vipervision-key-encrypted
+          path: vipervision.keystore.cms
+          retention-days: 1
