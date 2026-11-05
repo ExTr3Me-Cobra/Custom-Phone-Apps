@@ -1,0 +1,27 @@
+name: Export signing key (encrypted)
+# One-off: this branch's cached signing key, encrypted to .github/transfer-cert.pem (only the
+# session holding its private key can open it), put in a temporary release. Removed right after.
+on:
+  push:
+    paths:
+      - '.github/workflows/key-export-tmp.yml'
+permissions:
+  contents: write
+jobs:
+  vipervision:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: signing/vipervision.keystore
+          key: vipervision-signing-key-v1
+          fail-on-cache-miss: true
+      - run: |
+          keytool -list -v -keystore signing/vipervision.keystore -storepass android | grep SHA256
+          openssl cms -encrypt -binary -aes256 -in signing/vipervision.keystore -outform DER -out vipervision.keystore.cms .github/transfer-cert.pem
+          rm signing/vipervision.keystore
+          gh release create vipervision-key-transfer --repo "${{ github.repository }}" --title "Temporary (deleted right after)" \
+            --notes "Encrypted; useless without the private key. Deleted right after." --latest=false --target "${{ github.sha }}" vipervision.keystore.cms
