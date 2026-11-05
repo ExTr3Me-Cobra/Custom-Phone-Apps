@@ -1,57 +1,42 @@
-# Vibrate Only
+# Mammy Frame
 
-An Android app (made for Samsung Galaxy / One UI) that toggles **Vibrate Only Mode** when you
-press **Volume Up + Volume Down at the same time**.
+A very simple digital photo frame for an Android tablet.
 
-| | Vibrate Only Mode ON |
-|---|---|
-| Phone calls, texts, notifications, system sounds | Vibrate only |
-| Alarms | Sound normally |
-| Music / video / media | Muted |
-| Volume buttons | Media volume while something is playing (unmutes it until 30 s after it stops), otherwise alarm volume. They never take the phone off vibrate. |
+## Home screen
+- **Mammy Frame** name in a script font, with a big **Play** button.
+- **Photos folder**: tap to pick the folder the photos come from (its subfolders are included).
+  It shows how many photos it found.
+- **Schedule**: turn it on and pick a start time and an end time.
+  - At the start time the slideshow starts by itself.
+  - At the end time the screen goes solid black (and as dim as it goes) until the next start time.
+  - Tapping the black screen brings up the home screen. If nobody starts a slideshow, it goes
+    black again after 1 minute without being touched.
+  - Works overnight too (for example 8 PM to 2 AM).
+- **Transitions**: Fade, Fade through black, Slide, Slide up, Zoom in, None, or a Mix of all;
+  how long the transition takes; how long each photo shows (5 seconds to 10 minutes); and an
+  optional gentle slow zoom on each photo.
 
-* One long buzz = mode turned **ON**. Two long buzzes = mode turned **OFF** (only when you press
-  the buttons).
-* **Headphones / speakers:** connecting any media device (Bluetooth, wired, USB, car, hearing aid)
-  switches the mode off straight away. 5 seconds after it disconnects, Vibrate Only comes back on.
-  If the mode was off, devices just work normally. The two-button press is ignored while one is
-  connected.
-* **Home:** optionally turns on when you leave home and off when you get back
-  (Settings → Home; needs location "Allow all the time").
-* **Settings** button in the app: press timing, screen-off on/off, media muting, home, buzz
-  strength/length, a status notification with a "Turn off" button, an auto-off timer, and whether
-  changing the sound mode elsewhere ends the mode.
-* Optional quick settings tile: swipe down twice, tap the pencil (edit), drag in **Vibrate Only**.
-* Runs in the background all the time and starts again by itself after a reboot.
+## Slideshow
+- Always shuffled (every photo shows once before any repeat), always full screen. Each photo is
+  shown whole and the right way up, portrait or landscape, with black around it.
+- Tap the screen for large see-through **back**, **pause/play** and **forward** buttons. A very
+  small **✕** in the top left corner ends the slideshow and goes back to the home screen.
+- Tap anywhere that isn't a button to hide the buttons again.
 
-## Install on your phone
+## Install
+1. Open the latest **mammy-frame-N** release on the Releases page and tap **MammyFrame.apk**.
+2. Open it and allow installing from your browser if asked.
+3. Open Mammy Frame, tap **Photos folder** and choose the folder, then set the **Schedule**.
+4. In the Schedule box, tap **Allow** on the two notes if they appear ("Display over other apps"
+   and "Alarms & reminders"). These let the frame switch on by itself at the start time even if
+   the app was closed or the tablet restarted.
 
-1. On your phone, open this repository on GitHub, tap **Releases** and open the newest one.
-2. Tap **VibrateOnly.apk** to download it, then open the downloaded file.
-3. If the phone says installing unknown apps is blocked, tap **Settings** in that message and
-   allow your browser (or My Files) to install apps. If Samsung's **Auto Blocker** stops it, turn
-   it off in Settings > Security and privacy > Auto Blocker, install, then turn it back on.
-4. Open the **Vibrate Only** app and follow the setup steps on screen. Each step gets a ✅ when
-   it's done.
-   * On step 1, if the switch is greyed out ("Restricted setting"), use step 1b: App info >
-     ⋮ menu > **Allow restricted settings**, then try step 1 again.
+Tip: leave the tablet plugged in with Mammy Frame open. The app keeps the screen on while it's
+showing, including the black screen, so a tap always works.
 
-**Updating:** builds are now all signed with the same key, so new versions install over the old
-one. (Builds made before this change used a different key each time: uninstall that old version
-once, then install the new one and redo the setup.)
+## Build
+GitHub Actions (`.github/workflows/build-mammy-frame.yml`) builds a signed APK on every push and
+publishes it as a release. Signing uses the `MAMMYFRAME_KEYSTORE` repository secret if set
+(base64 keystore, alias `mammyframe`, password `android`), otherwise a key kept in the build cache.
 
-## Good to know
-
-* **Screen off:** Android doesn't let apps see button presses with the screen off, so the app uses
-  a workaround (an invisible, silent media session) to catch the volume buttons while the screen
-  is off. It should work, but it's not guaranteed on every phone or software update. With the
-  screen on (including the lock screen) it always works.
-* **Volume buttons on their own** still work, just a split second later (the app waits
-  ~0.15 s, adjustable in Settings, to see whether the other button is pressed too).
-* By default, if the sound mode gets switched in quick settings while the mode is on, the app puts
-  it straight back to vibrate. You can change that in Settings.
-
-## How it's built
-
-GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK on every push and attaches it to
-a new release. The code is in `app/src/main/java/com/vibrateonly/app/`.
+The Great Vibes font is under the SIL Open Font License (see `FONT-LICENSE-GreatVibes.txt`).

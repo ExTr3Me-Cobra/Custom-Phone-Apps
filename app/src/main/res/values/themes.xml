@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.MammyFrame" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/cream</item>
+    </style>
+    <color name="cream">#FFFFF9F2</color>
+    <color name="rose">#FFB4506F</color>
+</resources>

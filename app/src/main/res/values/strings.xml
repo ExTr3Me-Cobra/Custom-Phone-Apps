@@ -1,6 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Vibrate Only</string>
-    <string name="accessibility_summary">Press Volume Up + Volume Down together to toggle Vibrate Only Mode.</string>
-    <string name="accessibility_description">Vibrate Only listens for Volume Up and Volume Down pressed at the same time and toggles Vibrate Only Mode (calls and alarms still ring, everything else vibrates). It does not read the screen or anything you type; it only looks at the two volume buttons.</string>
+    <string name="app_name">Mammy Frame</string>
 </resources>

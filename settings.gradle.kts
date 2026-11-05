@@ -12,5 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = 'VibrateOnly'
-include ':app'
+
+rootProject.name = "MammyFrame"
+include(":app")

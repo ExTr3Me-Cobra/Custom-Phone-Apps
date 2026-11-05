@@ -1,0 +1,76 @@
+name: Build Mammy Frame APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One build at a time, so every build signs with the same saved key.
+concurrency:
+  group: mammy-frame-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Every build must be signed with the same key, or Android refuses to install it as an
+      # update ("App not installed"). The key is made once and kept in the build cache.
+      - name: Reuse the same signing key
+        uses: actions/cache@v4
+        with:
+          path: signing/mammyframe.keystore
+          key: mammyframe-signing-key-v1
+
+      # The permanent key: the repository secret MAMMYFRAME_KEYSTORE, which nothing can delete. It replaces any cached key.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.MAMMYFRAME_KEYSTORE }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > signing/mammyframe.keystore; echo "Using the MAMMYFRAME_KEYSTORE secret."; fi
+
+
+      - name: Make the signing key (first build only)
+        run: |
+          mkdir -p signing
+          if [ ! -f signing/mammyframe.keystore ]; then
+            keytool -genkeypair -v -keystore signing/mammyframe.keystore -alias mammyframe \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass android -keypass android -dname "CN=Mammy Frame"
+          fi
+          keytool -list -v -keystore signing/mammyframe.keystore -storepass android | grep SHA256
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace -PsignKeystore=$PWD/signing/mammyframe.keystore
+          cp app/build/outputs/apk/release/app-release.apk MammyFrame.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MammyFrame-apk
+          path: MammyFrame.apk
+
+      - name: Publish download on the Releases page
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mammy-frame-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Mammy Frame (build ${{ github.run_number }})
+          body: |
+            On your phone, tap **MammyFrame.apk** below to download it, then open it to install.
+            See the README on the ccr-15902e51-tf2l8x branch for setup steps.
+          files: MammyFrame.apk
+          make_latest: false
