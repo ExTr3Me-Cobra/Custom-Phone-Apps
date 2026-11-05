@@ -66,7 +66,7 @@ jobs:
           path: signing/vipervision.keystore
           key: vipervision-signing-key-v1
 
-      # The key itself can also be the repository secret VIPERVISION_KEYSTORE_BASE64 (the keystore
+      # The key itself can also be the repository secret VIPERVISION_KEYSTORE_BASE64 or VIPERVISION_KEYSTORE (the keystore
       # file as base64): it's used when set, on any branch, and never expires.
       # The build cache forgets anything unused for 7 days, so the key is also kept as an
       # encrypted copy in the "vipervision-signing-key" release, locked with the passphrase saved
@@ -78,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PASSPHRASE: ${{ secrets.VIPERVISION_KEY_PASSPHRASE }}
-          KEYSTORE_B64: ${{ secrets.VIPERVISION_KEYSTORE_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.VIPERVISION_KEYSTORE_BASE64 || secrets.VIPERVISION_KEYSTORE }}
           EXPECTED: "2C:DA:3E:98:C1:BE:F1:86:C7:FE:CD:96:8E:4F:4C:AA:DD:3F:2B:7C:FD:63:D4:2D:AA:31:1F:FF:7B:0B:59:9A"
         run: |
           mkdir -p signing
