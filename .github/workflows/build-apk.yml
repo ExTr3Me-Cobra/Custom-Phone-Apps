@@ -33,6 +33,15 @@ jobs:
           path: signing/vibrateonly.keystore
           key: vibrateonly-signing-key-v1
 
+      # The permanent key: the repository secret VIBRATEONLY_KEYSTORE, which nothing can delete. It replaces any cached key.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.VIBRATEONLY_KEYSTORE }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > signing/vibrateonly.keystore; echo "Using the VIBRATEONLY_KEYSTORE secret."; fi
+
+
       - name: Make the signing key (first build only)
         run: |
           mkdir -p signing
