@@ -45,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 
 private val Ink2 = Color(0xFF4A3A3F)
 
@@ -252,6 +255,7 @@ private fun Controls(
             }
 
             if (status.running) {
+                RunTimer(status)
                 Text("Checking photo ${status.done} of ${status.total}…", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                 LinearProgressIndicator(
                     progress = { if (status.total == 0) 0f else status.done / status.total.toFloat() },
@@ -268,6 +272,7 @@ private fun Controls(
                 Button(onClick = onStart) {
                     Text(if (checked == 0) "Check all photos" else "Check new photos", fontSize = 17.sp)
                 }
+                LastRun(status)
             }
             status.message?.let { msg ->
                 Surface(color = Color(0xFFFFF1E0), shape = RoundedCornerShape(12.dp)) {
@@ -315,6 +320,77 @@ private fun Controls(
                 if (status.saving) CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 3.dp)
                 Switch(status.rotationsOn, { AiRotate.setRotationsOn(context, it) })
             }
+        }
+    }
+}
+
+/** "5 h 12 min", "3 min 20 s", "45 s". */
+fun durationText(ms: Long): String {
+    val totalS = (ms / 1000).coerceAtLeast(0)
+    val h = totalS / 3600
+    val m = (totalS % 3600) / 60
+    val sec = totalS % 60
+    return when {
+        h > 0 -> "$h h ${"%02d".format(m)} min"
+        m > 0 -> "$m min ${"%02d".format(sec)} s"
+        else -> "$sec s"
+    }
+}
+
+/** While checking: how long it has been going, and when it should finish (updated every second). */
+@Composable
+private fun RunTimer(status: AiRotate.Status) {
+    val context = LocalContext.current
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(status.startedAt) {
+        while (true) { now = SystemClock.elapsedRealtime(); delay(1000) }
+    }
+    val left = status.toAnalyze - status.analyzed
+    val estimate = when {
+        status.analyzeStartedAt == 0L -> "Looking through the folder…"
+        status.toAnalyze == 0 -> "No new photos to check."
+        status.analyzed < 3 -> "Working out how long it will take…"
+        else -> {
+            // Average time per photo so far, times the photos still to check.
+            val perPhoto = (now - status.analyzeStartedAt).toDouble() / status.analyzed
+            val remainingMs = (perPhoto * left).toLong()
+            val at = java.util.Date(System.currentTimeMillis() + remainingMs)
+            val clock = android.text.format.DateFormat.getTimeFormat(context).format(at)
+            val day = if (remainingMs > 12 * 3600_000L)
+                android.text.format.DateFormat.format("EEE ", at).toString() else ""
+            "About ${durationText(remainingMs)} left · should finish around $day$clock"
+        }
+    }
+    Text("Running for ${durationText(now - status.startedAt)}", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+    Text(estimate, fontSize = 15.sp, color = Ink2.copy(alpha = 0.8f))
+}
+
+/** After a check: how long it took. Stays until the next check; tap to copy it. */
+@Composable
+private fun LastRun(status: AiRotate.Status) {
+    if (status.lastRunMs < 0) return
+    val context = LocalContext.current
+    val ended = java.util.Date(status.lastRunEndedAt)
+    val endedText = android.text.format.DateFormat.getMediumDateFormat(context).format(ended) + " " +
+        android.text.format.DateFormat.getTimeFormat(context).format(ended)
+    val took = durationText(status.lastRunMs)
+    val what = "%,d photos checked by the AI (of %,d in the folder)".format(status.lastRunAnalyzed, status.lastRunTotal)
+    val line = if (status.lastRunFinished) "Last check took $took" else "Last check stopped after $took"
+    val copyText = "Mammy Frame AI check: ${if (status.lastRunFinished) "took" else "stopped after"} $took, " +
+        "$what, ended $endedText"
+    Surface(
+        color = Rose.copy(alpha = 0.07f), shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Mammy Frame AI check", copyText))
+            // Android 13+ shows its own "copied" note.
+            if (Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(line, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Ink2)
+            Text("$what · ended $endedText", fontSize = 14.sp, color = Ink2.copy(alpha = 0.75f))
+            Text("Tap to copy", fontSize = 13.sp, color = Rose.copy(alpha = 0.8f))
         }
     }
 }

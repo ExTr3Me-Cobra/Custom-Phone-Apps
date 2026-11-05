@@ -45,6 +45,9 @@ Finds sideways and upside-down photos in the chosen folder and turns them the ri
   again to turn them again.
 - **Check new photos** later only looks at photos that are new or changed.
 - It keeps going in the background with a progress notification.
+- While it runs, the screen shows how long it has been going, about how long is left and the
+  time it should finish (worked out from the average time per photo so far, so it settles as it
+  goes). When it ends, the total time stays on screen (and is remembered); tap it to copy it.
 
 How photos are saved:
 - **JPEG** (almost all camera photos): only the rotation tag inside the file is changed. The

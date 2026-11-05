@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
@@ -83,6 +84,18 @@ object AiRotate {
         val message: String? = null,
         /** Goes up every time anything changes, so screens know to refresh. */
         val revision: Int = 0,
+        /** The check that's running now: when it started, and how many photos it has to look at. */
+        val startedAt: Long = 0L,        // SystemClock.elapsedRealtime()
+        val toAnalyze: Int = 0,
+        val analyzed: Int = 0,
+        /** When the AI started on the first photo (time before that is just listing the folder). */
+        val analyzeStartedAt: Long = 0L,
+        /** The last check that ended: how long it took, how many photos it looked at, and whether it finished. */
+        val lastRunMs: Long = -1L,
+        val lastRunAnalyzed: Int = 0,
+        val lastRunTotal: Int = 0,
+        val lastRunFinished: Boolean = true,
+        val lastRunEndedAt: Long = 0L,   // wall clock
     )
 
     private val store = Dispatchers.IO.limitedParallelism(1)
@@ -146,6 +159,11 @@ object AiRotate {
                 rotationsOn = p.getBoolean("rotationsOn", it.rotationsOn),
                 reviewShowsAi = p.getBoolean("reviewShowsAi", it.reviewShowsAi),
                 askBeforeTurning = p.getBoolean("askBeforeTurning", it.askBeforeTurning),
+                lastRunMs = p.getLong("lastRunMs", -1L),
+                lastRunAnalyzed = p.getInt("lastRunAnalyzed", 0),
+                lastRunTotal = p.getInt("lastRunTotal", 0),
+                lastRunFinished = p.getBoolean("lastRunFinished", true),
+                lastRunEndedAt = p.getLong("lastRunEndedAt", 0L),
             )
         }
     }
@@ -207,10 +225,10 @@ object AiRotate {
 
     /** While checking, tell the screens at most about once a second (they re-sort the whole list). */
     private var lastNotice = 0L
-    private fun changedSoon(done: Int) {
+    private fun changedSoon(done: Int, analyzed: Int) {
         if (System.currentTimeMillis() - lastNotice < 1000) return
         lastNotice = System.currentTimeMillis()
-        _status.update { it.copy(done = done, revision = it.revision + 1) }
+        _status.update { it.copy(done = done, analyzed = analyzed, revision = it.revision + 1) }
     }
 
     // ---------------------------------------------------------------- reading, for the screens
@@ -322,9 +340,17 @@ object AiRotate {
     private suspend fun scan(c: Context, folder: String) {
         ensureLoaded(c)
         var model: OrientationModel? = null
+        val started = SystemClock.elapsedRealtime()
+        _status.update { it.copy(startedAt = started, toAnalyze = 0, analyzed = 0, analyzeStartedAt = 0L) }
+        var analyzed = 0
+        var finished = false
+        var total = 0
         try {
             val files = Photos.files(c, folder)
-            _status.update { it.copy(total = files.size) }
+            total = files.size
+            fun needsCheck(f: PhotoFile) = records[f.uri.toString()].let { it == null || it.modified != f.modified || it.size != f.size }
+            val toAnalyze = files.count(::needsCheck)
+            _status.update { it.copy(total = files.size, toAnalyze = toAnalyze, analyzeStartedAt = SystemClock.elapsedRealtime()) }
             // Forget photos that are no longer in the folder.
             val present = files.map { it.uri.toString() }.toSet()
             val gone = records.values.filter { it.folder == folder && it.uri !in present }
@@ -344,17 +370,29 @@ object AiRotate {
                         put(c, rec)
                         writeFile(c, rec)
                     }
+                    analyzed++
                 }
-                changedSoon(i + 1)
+                changedSoon(i + 1, analyzed)
             }
-            _status.update { it.copy(done = files.size) }
+            _status.update { it.copy(done = files.size, analyzed = analyzed) }
+            finished = true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             _status.update { it.copy(message = "Something went wrong while checking: ${e.message ?: e.javaClass.simpleName}") }
         } finally {
             model?.close()
-            _status.update { it.copy(running = false) }
+            // Remember how long this check took (kept after it ends, and after the app closes).
+            val took = SystemClock.elapsedRealtime() - started
+            val ended = System.currentTimeMillis()
+            prefs(c).edit()
+                .putLong("lastRunMs", took).putInt("lastRunAnalyzed", analyzed).putInt("lastRunTotal", total)
+                .putBoolean("lastRunFinished", finished).putLong("lastRunEndedAt", ended)
+                .apply()
+            _status.update {
+                it.copy(running = false, lastRunMs = took, lastRunAnalyzed = analyzed, lastRunTotal = total,
+                    lastRunFinished = finished, lastRunEndedAt = ended)
+            }
             changed()
         }
     }
