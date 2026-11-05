@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -72,20 +74,35 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
             .sortedByDescending { it.certainty }
     }
     var index by remember { mutableIntStateOf(0) }
-    val images = remember { mutableStateMapOf<String, Bitmap>() }
+    val status by AiRotate.status.collectAsState()
+    val images = remember { mutableStateMapOf<String, Shown>() }
+    // What you saved with Next, so going Back shows it the way you left it.
+    val chosen = remember { mutableStateMapOf<String, Int>() }
 
     val list = queue
     val current = list?.getOrNull(index)
-    // Load this photo and the next one, and let go of the rest.
-    LaunchedEffect(list, index) {
+    // Load this photo and its neighbours (reloading any that were just saved), and let go of the rest.
+    LaunchedEffect(list, index, status.revision) {
         list ?: return@LaunchedEffect
-        val wanted = listOfNotNull(list.getOrNull(index), list.getOrNull(index + 1)).map { it.uri }
-        images.keys.filter { it !in wanted }.forEach { images.remove(it) }
-        for (u in wanted) if (u !in images) Photos.decode(context, Uri.parse(u), maxSide)?.let { images[u] = it }
+        val wanted = listOfNotNull(list.getOrNull(index), list.getOrNull(index + 1), list.getOrNull(index - 1))
+        images.keys.filter { k -> wanted.none { it.uri == k } }.forEach { images.remove(it) }
+        for (q in wanted) {
+            val r = AiRotate.get(context, q.uri) ?: q
+            val stamp = "${r.modified}|${r.size}|${r.applied}|${r.method}"
+            if (images[q.uri]?.stamp == stamp) continue
+            Photos.decode(context, Uri.parse(q.uri), maxSide)?.let {
+                images[q.uri] = Shown(it, if (r.method == AiRotate.Method.APP) 0 else r.applied, stamp)
+            }
+        }
     }
 
-    // Angle the photo is shown at, in degrees clockwise from the original photo.
-    var angle by remember(current?.uri) { mutableFloatStateOf((current?.fix ?: 0).toFloat()) }
+    // Angle the photo is shown at, in degrees clockwise from the original photo: what you chose
+    // before, else the AI's suggestion or the original, depending on the review setting.
+    var angle by remember(current?.uri) {
+        mutableFloatStateOf(
+            (current?.let { chosen[it.uri] ?: if (status.reviewShowsAi) it.fix else 0 } ?: 0).toFloat()
+        )
+    }
     var spinning by remember { mutableStateOf(false) }
 
     // Finished: say so briefly, then go back.
@@ -100,11 +117,11 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
         val center = Offset(boxW / 2, boxH / 2)
 
         if (current != null) {
-            val bmp = images[current.uri]
-            // The decoded picture is how the file is saved right now; turn it the rest of the way.
-            val onDisk = if (current.method == AiRotate.Method.APP) 0 else current.applied
-            val shownTurn = angle - onDisk
-            if (bmp != null) {
+            val shown = images[current.uri]
+            if (shown != null) {
+                val bmp = shown.bmp
+                // The decoded picture is how the file was saved when loaded; turn it the rest of the way.
+                val shownTurn = angle - shown.onDisk
                 // Shrink smoothly while turning so the whole photo always fits on the screen.
                 val rad = Math.toRadians(shownTurn.toDouble())
                 val c = abs(cos(rad)).toFloat()
@@ -161,25 +178,29 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp)
             )
 
-            // Translucent Next button: saves the photo as it's shown now (the AI's turn, or yours).
+            // Translucent Back and Next buttons at the bottom. Next saves the photo as it's shown
+            // now (the AI's turn, or yours); Back goes to the photo before.
             Row(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 28.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .border(1.5.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(50))
-                    .clickable(enabled = !spinning) {
-                        val deg = (((angle / 90f).roundToInt() * 90) % 360 + 360) % 360
-                        AiRotate.decide(context, listOf(current.uri)) { deg }
-                        index++
-                    }
-                    .padding(horizontal = 30.dp, vertical = 14.dp),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Next", color = Color.White.copy(alpha = 0.9f), fontSize = 22.sp)
-                Spacer(Modifier.width(8.dp))
-                GlyphIcon(Glyph.FORWARD, Color.White.copy(alpha = 0.9f), Modifier.size(20.dp))
+                val canBack = index > 0
+                Pill(enabled = canBack && !spinning, dim = !canBack, onClick = { index-- }) {
+                    GlyphIcon(Glyph.BACK, Color.White.copy(alpha = if (canBack) 0.9f else 0.3f), Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Back", color = Color.White.copy(alpha = if (canBack) 0.9f else 0.3f), fontSize = 22.sp)
+                }
+                Pill(enabled = !spinning, dim = false, onClick = {
+                    val deg = (((angle / 90f).roundToInt() * 90) % 360 + 360) % 360
+                    chosen[current.uri] = deg
+                    AiRotate.decide(context, listOf(current.uri)) { deg }
+                    index++
+                }) {
+                    Text("Next", color = Color.White.copy(alpha = 0.9f), fontSize = 22.sp)
+                    Spacer(Modifier.width(8.dp))
+                    GlyphIcon(Glyph.FORWARD, Color.White.copy(alpha = 0.9f), Modifier.size(20.dp))
+                }
             }
         } else if (list != null) {
             Text(
@@ -202,4 +223,19 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
             GlyphIcon(Glyph.CLOSE, Color.White.copy(alpha = 0.75f), Modifier.fillMaxSize())
         }
     }
+}
+
+private class Shown(val bmp: Bitmap, val onDisk: Int, val stamp: String)
+
+@Composable
+private fun Pill(enabled: Boolean, dim: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = if (dim) 0.15f else 0.35f))
+            .border(1.5.dp, Color.White.copy(alpha = if (dim) 0.15f else 0.45f), RoundedCornerShape(50))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 26.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) { content() }
 }

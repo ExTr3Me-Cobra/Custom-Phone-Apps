@@ -98,6 +98,9 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
 
     val review = recs.filter { AiRotate.kind(it, threshold) == AiRotate.Kind.REVIEW }
     val turned = recs.filter { AiRotate.target(it, threshold) != 0 }
+    // Photos you turned in the list below stay there, even if you turn one back to how it was.
+    var touched by remember { mutableStateOf(setOf<String>()) }
+    val turnedShown = recs.filter { AiRotate.target(it, threshold) != 0 || it.uri in touched }
 
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         AiRotate.start(context, settings.folderUri)
@@ -155,6 +158,17 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                             fontSize = 15.sp, color = Ink2.copy(alpha = 0.8f)
                         )
                         if (review.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Show them turned the AI's way", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        if (status.reviewShowsAi) "Each photo starts the way the AI thinks is right."
+                                        else "Each photo starts the way it is now (original).",
+                                        fontSize = 14.sp, color = Ink2.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Switch(status.reviewShowsAi, { AiRotate.setReviewShowsAi(context, it) })
+                            }
                             Button(onClick = onReview, modifier = Modifier.padding(top = 10.dp)) {
                                 Text("Start review (${review.size})", fontSize = 18.sp)
                             }
@@ -174,17 +188,20 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                         Text("Turned photos (${turned.size})", fontFamily = Script, fontSize = 36.sp, color = Rose,
                             modifier = Modifier.weight(1f))
-                        if (turned.isNotEmpty()) TextButton(onClick = { showTurned = !showTurned }) {
+                        if (turnedShown.isNotEmpty()) TextButton(onClick = { showTurned = !showTurned }) {
                             Text(if (showTurned) "Hide" else "Show", fontSize = 17.sp)
                         }
                     }
                 }
-                if (showTurned) items(turned, key = { "t" + it.uri }) { r ->
+                if (showTurned) items(turnedShown, key = { "t" + it.uri }) { r ->
                     val t = AiRotate.target(r, threshold)
-                    PhotoTile(r, initial = t, thumbs = thumbs,
+                    PhotoTile(r, current = t, thumbs = thumbs,
                         caption = (if (r.decision >= 0) "You chose: " else "AI (${(r.certainty * 100).roundToInt()}% sure): ") +
                             turnText(t) + if (!status.rotationsOn) " (AI rotations are off)" else "",
-                    ) { deg -> AiRotate.decide(context, listOf(r.uri)) { deg } }
+                    ) { deg ->
+                        touched = touched + r.uri
+                        AiRotate.decide(context, listOf(r.uri)) { deg }
+                    }
                 }
             }
         }
@@ -297,19 +314,22 @@ private fun CountBox(title: String, count: Int, detail: String, color: Color, mo
 @Composable
 private fun PhotoTile(
     r: AiRotate.Rec,
-    initial: Int,
+    current: Int,
     thumbs: LruCache<String, Bitmap>,
     caption: String,
-    onSave: (Int) -> Unit,
+    onTurn: (Int) -> Unit,
 ) {
     val context = LocalContext.current
-    // What's saved in the file right now (photos turned inside the app only aren't changed on disk).
+    // Shown straight away when you tap an arrow; the file is saved in the background.
+    var preview by remember(r.uri) { mutableIntStateOf(current) }
+    // The picture as it was saved when loaded (photos turned inside the app only aren't changed on disk).
     val onDisk = if (r.method == AiRotate.Method.APP) 0 else r.applied
-    var preview by remember(r.uri, initial) { mutableIntStateOf(initial) }
-    val key = "${r.uri}|${r.modified}|${r.size}"
-    var bmp by remember(key) { mutableStateOf(thumbs.get(key)) }
+    val key = "${r.uri}|${r.modified}|${r.size}|$onDisk"
+    var shown by remember(r.uri) { mutableStateOf<Pair<Bitmap, Int>?>(thumbs.get(key)?.let { it to onDisk }) }
     LaunchedEffect(key) {
-        if (bmp == null) Photos.decode(context, Uri.parse(r.uri), 360)?.let { thumbs.put(key, it); bmp = it }
+        val cached = thumbs.get(key)
+        if (cached != null) shown = cached to onDisk
+        else Photos.decode(context, Uri.parse(r.uri), 360)?.let { thumbs.put(key, it); shown = it to onDisk }
     }
     Surface(color = Color.White, shape = RoundedCornerShape(16.dp), shadowElevation = 2.dp) {
         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -317,22 +337,18 @@ private fun PhotoTile(
                 Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(Color(0xFFF2ECE8)),
                 contentAlignment = Alignment.Center
             ) {
-                bmp?.let {
+                shown?.let { (bmp, savedTurn) ->
                     Image(
-                        it.asImageBitmap(), contentDescription = r.name, contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().rotate((preview - onDisk).toFloat())
+                        bmp.asImageBitmap(), contentDescription = r.name, contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().rotate((preview - savedTurn).toFloat())
                     )
                 }
             }
             Text(caption, fontSize = 13.sp, color = Ink2, textAlign = TextAlign.Center, lineHeight = 16.sp,
                 modifier = Modifier.padding(vertical = 6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SmallRound(Glyph.TURN_LEFT) { preview = (preview + 270) % 360 }
-                SmallRound(Glyph.TURN_RIGHT) { preview = (preview + 90) % 360 }
-                Spacer(Modifier.width(4.dp))
-                Button(onClick = { onSave(preview) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp)) {
-                    Text("Save")
-                }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SmallRound(Glyph.TURN_LEFT) { preview = (preview + 270) % 360; onTurn(preview) }
+                SmallRound(Glyph.TURN_RIGHT) { preview = (preview + 90) % 360; onTurn(preview) }
             }
         }
     }

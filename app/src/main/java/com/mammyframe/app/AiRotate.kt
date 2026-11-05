@@ -76,6 +76,8 @@ object AiRotate {
         val total: Int = 0,
         val threshold: Float = 0.95f,
         val rotationsOn: Boolean = true,
+        /** Review shows photos turned the AI's way (true) or as they are now (false). */
+        val reviewShowsAi: Boolean = true,
         val message: String? = null,
         /** Goes up every time anything changes, so screens know to refresh. */
         val revision: Int = 0,
@@ -135,7 +137,10 @@ object AiRotate {
                 )
                 records[r.uri] = r
             }
-            _status.update { it.copy(threshold = o.getDouble("threshold").toFloat(), rotationsOn = o.getBoolean("rotationsOn")) }
+            _status.update {
+                it.copy(threshold = o.getDouble("threshold").toFloat(), rotationsOn = o.getBoolean("rotationsOn"),
+                    reviewShowsAi = o.optBoolean("reviewShowsAi", true))
+            }
         }
         _status.update { it.copy(loaded = true) }
     }
@@ -151,7 +156,8 @@ object AiRotate {
             })
         }
         val s = _status.value
-        val o = JSONObject().put("threshold", s.threshold.toDouble()).put("rotationsOn", s.rotationsOn).put("records", arr)
+        val o = JSONObject().put("threshold", s.threshold.toDouble()).put("rotationsOn", s.rotationsOn)
+            .put("reviewShowsAi", s.reviewShowsAi).put("records", arr)
         val tmp = File(dir(c), "state.json.tmp")
         tmp.writeText(o.toString())
         tmp.renameTo(File(dir(c), "state.json"))
@@ -170,6 +176,18 @@ object AiRotate {
     suspend fun appTurns(c: Context): Map<String, Int> = withContext(store) {
         ensureLoaded(c)
         records.values.filter { it.method == Method.APP && it.applied != 0 }.associate { it.uri to it.applied }
+    }
+
+    suspend fun get(c: Context, uri: String): Rec? = withContext(store) {
+        ensureLoaded(c)
+        records[uri]
+    }
+
+    fun setReviewShowsAi(c: Context, on: Boolean) = scope.launch {
+        ensureLoaded(c)
+        _status.update { it.copy(reviewShowsAi = on) }
+        save(c.applicationContext)
+        changed()
     }
 
     fun load(c: Context) {

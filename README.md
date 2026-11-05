@@ -27,11 +27,15 @@ Finds sideways and upside-down photos in the chosen folder and turns them the ri
   an AI looks at the picture itself. If the camera and the AI agree the photo is fine, it's left
   alone. If they disagree, it always goes to review.
 - Photos the AI is sure about are turned and saved straight away. The rest go to **For review**.
-- **Start review** shows the review photos one at a time, full screen, the way the AI thinks is
-  right, most sure first. Drag round in a circle to spin a photo; it snaps to the nearest quarter
-  turn when you let go. The see-through **Next** button at the bottom saves the photo as shown
-  (the AI's turn or yours) and moves on. The tiny ✕ in the top left leaves review.
-  **Use the AI's guess for all** / **Leave all as they are** do the whole list at once.
+- **Start review** shows the review photos one at a time, full screen, most sure first. Drag
+  round in a circle to spin a photo; it snaps to the nearest quarter turn when you let go. The
+  see-through **Next** button saves the photo as shown (the AI's turn or yours) and moves on;
+  **Back** goes to the photo before, the way you saved it. The tiny ✕ in the top left leaves
+  review. **Use the AI's guess for all** / **Leave all as they are** do the whole list at once.
+- **Show them turned the AI's way**: on, review photos start the way the AI suggests; off, they
+  start the way they are now (original).
+- **Turned photos** (tap Show): turn any photo with the arrows. Each turn is saved straight
+  away, and the photo stays in the list.
 - **The slider** sets how sure the AI must be to turn a photo by itself (50–99%, default 95%).
   Moving it immediately moves photos between "turned" and "for review".
 - **Keep AI rotations**: switch it off to put every photo back exactly as it was. Switch it on
