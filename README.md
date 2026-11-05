@@ -19,6 +19,12 @@ A very simple digital photo frame for an Android tablet.
   how long the transition takes; how long each photo shows (5 seconds to 10 minutes); and an
   optional gentle slow zoom on each photo.
 
+## Screen sizes
+The home screen fits itself to the screen it's on: settings in a row on tablets, stacked on phones
+held upright, and side by side (name and Play on the left, settings on the right) on phones turned
+sideways. The name, Play button and slideshow buttons scale with the screen, and everything
+scrolls if it ever doesn't fit (for example with very large system text).
+
 ## Slideshow
 - Always shuffled (every photo shows once before any repeat), always full screen. Each photo is
   shown whole and the right way up, portrait or landscape, with black around it.

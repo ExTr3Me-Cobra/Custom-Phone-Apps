@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -66,6 +67,8 @@ private val Ink = Color(0xFF4A3A3F)
 
 enum class HomeDialog { NONE, SCHEDULE, TRANSITIONS }
 
+private enum class HomeLayout { WIDE, NARROW, SIDE_BY_SIDE }
+
 @Composable
 fun HomeScreen(
     settings: Settings,
@@ -83,55 +86,97 @@ fun HomeScreen(
             .background(Brush.verticalGradient(listOf(Color(0xFFFFF9F2), Color(0xFFFBEDE8), Color(0xFFF3DDE2))))
     ) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
-            val wide = maxWidth > 760.dp
-            val fullHeight = maxHeight
-            val titleSize = if (maxWidth > 900.dp) 120.sp else if (maxWidth > 600.dp) 96.sp else 72.sp
-            Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = fullHeight).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                val context = LocalContext.current
-                Logo(titleSize) {
+            val w = maxWidth
+            val h = maxHeight
+            // Pick a layout from the real screen size: tablets, phones held upright, and phones on their side.
+            val layout = when {
+                h < 520.dp && w > h -> HomeLayout.SIDE_BY_SIDE
+                w >= 760.dp -> HomeLayout.WIDE
+                else -> HomeLayout.NARROW
+            }
+            val context = LocalContext.current
+            val folderText = when {
+                settings.folderUri == null -> "Tap to choose"
+                photoCount == null -> settings.folderName ?: "Chosen"
+                else -> "${settings.folderName ?: "Folder"}\n$photoCount photo${if (photoCount == 1) "" else "s"}"
+            }
+            val scheduleText =
+                if (settings.scheduleOn) "${timeText(settings.startMinute)} to\n${timeText(settings.endMinute)}"
+                else "Off"
+            val transitionText = "${settings.transition.label}\n${secondsText(settings.photoSeconds)} each"
+
+            val logoWidth = if (layout == HomeLayout.SIDE_BY_SIDE) w / 2 - 32.dp else w - 48.dp
+            val titleSize = (logoWidth.value / 4.6f).coerceIn(40f, if (layout == HomeLayout.SIDE_BY_SIDE) 84f else 120f)
+                .coerceAtMost(if (layout == HomeLayout.SIDE_BY_SIDE) h.value * 0.26f else h.value * 0.16f).sp
+            val playSize = (if (layout == HomeLayout.SIDE_BY_SIDE) h * 0.34f else minOf(w, h) * 0.28f)
+                .coerceIn(84.dp, 150.dp)
+            val narrowCardWidth = minOf(320.dp, w - 48.dp)
+
+            val logo: @Composable () -> Unit = {
+                Logo(titleSize, minOf(320.dp, logoWidth * 0.8f)) {
                     if (!settings.developer) {
                         onChange(settings.copy(developer = true))
                         android.widget.Toast.makeText(context, "Developer settings on", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                PlayButton(onPlay)
-                Spacer(Modifier.height(28.dp))
-
-                val folderText = when {
-                    settings.folderUri == null -> "Tap to choose"
-                    photoCount == null -> settings.folderName ?: "Chosen"
-                    else -> "${settings.folderName ?: "Folder"}\n$photoCount photo${if (photoCount == 1) "" else "s"}"
-                }
-                val scheduleText =
-                    if (settings.scheduleOn) "${timeText(settings.startMinute)} to\n${timeText(settings.endMinute)}"
-                    else "Off"
-                val transitionText = "${settings.transition.label}\n${secondsText(settings.photoSeconds)} each"
-
-                if (!settings.developer) {
-                    SettingCard("Photos folder", folderText, Modifier.width(if (wide) 260.dp else 320.dp), onChooseFolder)
-                } else if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        SettingCard("Photos folder", folderText, Modifier.width(220.dp), onChooseFolder)
-                        SettingCard("Schedule", scheduleText, Modifier.width(220.dp)) { onDialog(HomeDialog.SCHEDULE) }
-                        SettingCard("Transitions", transitionText, Modifier.width(220.dp)) { onDialog(HomeDialog.TRANSITIONS) }
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.width(320.dp)) {
-                        SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
+            }
+            val cardsColumn: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { cardWidth ->
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.width(cardWidth)) {
+                    SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
+                    if (settings.developer) {
                         SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
                         SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
                     }
                 }
+            }
+            val devOff: @Composable () -> Unit = {
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
                     OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
                         Text("Turn off developer settings", fontSize = 16.sp)
                     }
+                }
+            }
+
+            if (layout == HomeLayout.SIDE_BY_SIDE) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        logo()
+                        Spacer(Modifier.height(6.dp))
+                        PlayButton(playSize, onPlay)
+                    }
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        cardsColumn(minOf(320.dp, w / 2 - 32.dp))
+                        devOff()
+                    }
+                }
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = h).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    logo()
+                    Spacer(Modifier.height(12.dp))
+                    PlayButton(playSize, onPlay)
+                    Spacer(Modifier.height(if (h < 700.dp) 18.dp else 28.dp))
+                    if (layout == HomeLayout.WIDE && settings.developer) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                            SettingCard("Photos folder", folderText, Modifier.width(220.dp), onChooseFolder)
+                            SettingCard("Schedule", scheduleText, Modifier.width(220.dp)) { onDialog(HomeDialog.SCHEDULE) }
+                            SettingCard("Transitions", transitionText, Modifier.width(220.dp)) { onDialog(HomeDialog.TRANSITIONS) }
+                        }
+                    } else {
+                        cardsColumn(if (layout == HomeLayout.WIDE) 260.dp else narrowCardWidth)
+                    }
+                    devOff()
                 }
             }
         }
@@ -145,7 +190,9 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Logo(size: androidx.compose.ui.unit.TextUnit, onSecretTaps: () -> Unit) {
+private fun Logo(size: androidx.compose.ui.unit.TextUnit, flourishWidth: androidx.compose.ui.unit.Dp, onSecretTaps: () -> Unit) {
+    // Shrinks a little more if the name still doesn't fit on one line (e.g. large system text).
+    var shrink by remember(size) { mutableStateOf(1f) }
     // Ten quick taps on the name (each within 0.7 s of the last) open the developer settings.
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
@@ -165,13 +212,16 @@ private fun Logo(size: androidx.compose.ui.unit.TextUnit, onSecretTaps: () -> Un
             "Mammy Frame",
             style = TextStyle(
                 fontFamily = Script,
-                fontSize = size,
+                fontSize = size * shrink,
                 brush = Brush.linearGradient(listOf(Color(0xFF9E3D5C), Rose, Gold, Color(0xFFA8455F))),
                 shadow = Shadow(Color(0x33803040), Offset(2f, 4f), 10f),
                 textAlign = TextAlign.Center,
-            )
+            ),
+            maxLines = 1,
+            softWrap = false,
+            onTextLayout = { if (it.hasVisualOverflow && shrink > 0.4f) shrink *= 0.9f },
         )
-        Flourish(Modifier.width(320.dp).height(28.dp))
+        Flourish(Modifier.width(flourishWidth).height(28.dp))
     }
 }
 
@@ -197,21 +247,21 @@ private fun Flourish(modifier: Modifier) {
 }
 
 @Composable
-private fun PlayButton(onPlay: () -> Unit) {
+private fun PlayButton(size: androidx.compose.ui.unit.Dp, onPlay: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
-                .size(150.dp)
-                .shadow(14.dp, CircleShape)
+                .size(size)
+                .shadow(size * 0.09f, CircleShape)
                 .clip(CircleShape)
                 .background(Brush.linearGradient(listOf(Color(0xFFCB6A88), Color(0xFFA13F5F))))
                 .clickable(onClick = onPlay)
-                .padding(start = 46.dp, end = 34.dp, top = 40.dp, bottom = 40.dp)
+                .padding(start = size * 0.31f, end = size * 0.23f, top = size * 0.27f, bottom = size * 0.27f)
         ) {
             GlyphIcon(Glyph.PLAY, Color.White, Modifier.fillMaxSize())
         }
         Spacer(Modifier.height(8.dp))
-        Text("Play", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Medium)
+        Text("Play", fontSize = if (size < 120.dp) 20.sp else 26.sp, color = Ink, fontWeight = FontWeight.Medium)
     }
 }
 

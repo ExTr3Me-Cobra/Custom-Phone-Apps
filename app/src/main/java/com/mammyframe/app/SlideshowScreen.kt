@@ -208,7 +208,7 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
                 if (settings.folderUri == null) "No photos folder has been chosen yet."
                 else "There are no photos in the chosen folder yet.",
                 color = Color.White.copy(alpha = 0.8f),
-                fontSize = 28.sp,
+                fontSize = if (screenW < 600.dp) 20.sp else 28.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp)
             )
