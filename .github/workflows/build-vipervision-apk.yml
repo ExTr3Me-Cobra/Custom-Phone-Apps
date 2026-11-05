@@ -66,6 +66,8 @@ jobs:
           path: signing/vipervision.keystore
           key: vipervision-signing-key-v1
 
+      # The key itself can also be the repository secret VIPERVISION_KEYSTORE_BASE64 (the keystore
+      # file as base64): it's used when set, on any branch, and never expires.
       # The build cache forgets anything unused for 7 days, so the key is also kept as an
       # encrypted copy in the "vipervision-signing-key" release, locked with the passphrase saved
       # as the repository secret VIPERVISION_KEY_PASSPHRASE (only GitHub and its owner can read
@@ -76,11 +78,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PASSPHRASE: ${{ secrets.VIPERVISION_KEY_PASSPHRASE }}
+          KEYSTORE_B64: ${{ secrets.VIPERVISION_KEYSTORE_BASE64 }}
           EXPECTED: "2C:DA:3E:98:C1:BE:F1:86:C7:FE:CD:96:8E:4F:4C:AA:DD:3F:2B:7C:FD:63:D4:2D:AA:31:1F:FF:7B:0B:59:9A"
         run: |
           mkdir -p signing
           KEY=signing/vipervision.keystore
           BACKUP_TAG=vipervision-signing-key
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$KEY"
+            echo "Using the signing key from the VIPERVISION_KEYSTORE_BASE64 secret."
+          fi
           has_backup() { gh release view "$BACKUP_TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx vipervision.keystore.enc; }
           if [ ! -f "$KEY" ] && has_backup; then
             if [ -z "$PASSPHRASE" ]; then
@@ -93,7 +100,7 @@ jobs:
             echo "Restored the signing key from its encrypted backup."
           fi
           if [ ! -f "$KEY" ]; then
-            echo "::error::No signing key: run the 'Signing keys' workflow on the default branch. A build never makes a key."
+            echo "::error::No signing key: add the repository secret VIPERVISION_KEYSTORE_BASE64 (Viper Vision's keystore as base64). A build never makes a key."
             exit 1
           fi
           keytool -list -v -keystore "$KEY" -storepass android | grep SHA256
