@@ -33,6 +33,15 @@ jobs:
           path: signing/glowalerts.keystore
           key: glowalerts-signing-key-v1
 
+      # The permanent key: the repository secret GLOWALERTS_KEYSTORE, which nothing can delete. It replaces any cached key.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.GLOWALERTS_KEYSTORE }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > signing/glowalerts.keystore; echo "Using the GLOWALERTS_KEYSTORE secret."; fi
+
+
       - name: Make the signing key (first build only)
         run: |
           mkdir -p signing
