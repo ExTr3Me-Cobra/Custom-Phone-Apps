@@ -156,7 +156,7 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
 
             // Which photo this is (just a quiet label, not a button).
             Text(
-                "${index + 1} of ${list!!.size}",
+                "${index + 1} of ${list!!.size} · ${list.size - index} left to review",
                 color = Color.White.copy(alpha = 0.45f), fontSize = 14.sp,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp)
             )

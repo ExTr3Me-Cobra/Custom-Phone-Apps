@@ -78,9 +78,8 @@ fun aiSummary(status: AiRotate.Status, recs: List<AiRotate.Rec>): String {
     if (status.running) return "Checking\n${status.done} of ${status.total}"
     if (recs.isEmpty()) return "Not checked yet"
     val kinds = recs.map { AiRotate.kind(it, status.threshold) }
-    val turned = recs.count { AiRotate.target(it, status.threshold) != 0 }
     val review = kinds.count { it == AiRotate.Kind.REVIEW }
-    return "$turned turned\n$review to review" + if (!status.rotationsOn) " (off)" else ""
+    return "${recs.size - review} sorted\n$review to review" + if (!status.rotationsOn) " (off)" else ""
 }
 
 @Composable
@@ -137,6 +136,11 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                         onThresholdDone = { AiRotate.setThreshold(context, threshold) },
                         onStart = ::startChecking,
                         turnedCount = turned.size, reviewCount = review.size,
+                        aiSureCount = recs.count {
+                            val k = AiRotate.kind(it, threshold)
+                            k == AiRotate.Kind.AUTO || k == AiRotate.Kind.UPRIGHT
+                        },
+                        reviewedCount = recs.count { AiRotate.kind(it, threshold) == AiRotate.Kind.MANUAL },
                     )
                 }
 
@@ -198,6 +202,8 @@ private fun Controls(
     onStart: () -> Unit,
     turnedCount: Int,
     reviewCount: Int,
+    aiSureCount: Int,
+    reviewedCount: Int,
 ) {
     val context = LocalContext.current
     Surface(color = Color.White.copy(alpha = 0.85f), shape = RoundedCornerShape(20.dp), shadowElevation = 2.dp) {
@@ -213,6 +219,17 @@ private fun Controls(
                 fontSize = 15.sp, color = Ink2.copy(alpha = 0.8f)
             )
 
+            // Live counts: update with every photo checked and every photo you review.
+            if (checked > 0 || status.running) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CountBox(
+                        "Sorted", aiSureCount + reviewedCount,
+                        "AI was sure: $aiSureCount · you reviewed: $reviewedCount", Color(0xFF3E7D5A), Modifier.weight(1f)
+                    )
+                    CountBox("Waiting for review", reviewCount, "the AI wasn't sure enough", Rose, Modifier.weight(1f))
+                }
+            }
+
             if (status.running) {
                 Text("Checking photo ${status.done} of ${status.total}…", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                 LinearProgressIndicator(
@@ -224,7 +241,7 @@ private fun Controls(
             } else {
                 Text(
                     if (checked == 0) "Not checked yet."
-                    else "$checked photos checked · $turnedCount turned · $reviewCount for review",
+                    else "$checked photos checked · $turnedCount turned",
                     fontSize = 18.sp, fontWeight = FontWeight.Medium
                 )
                 Button(onClick = onStart) {
@@ -262,6 +279,17 @@ private fun Controls(
                 if (status.saving) CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 3.dp)
                 Switch(status.rotationsOn, { AiRotate.setRotationsOn(context, it) })
             }
+        }
+    }
+}
+
+@Composable
+private fun CountBox(title: String, count: Int, detail: String, color: Color, modifier: Modifier) {
+    Surface(color = color.copy(alpha = 0.08f), shape = RoundedCornerShape(16.dp), modifier = modifier) {
+        Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("%,d".format(count), fontSize = 40.sp, fontWeight = FontWeight.SemiBold, color = color)
+            Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Ink2, textAlign = TextAlign.Center)
+            Text(detail, fontSize = 13.sp, color = Ink2.copy(alpha = 0.7f), textAlign = TextAlign.Center)
         }
     }
 }
