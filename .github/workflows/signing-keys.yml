@@ -1,11 +1,17 @@
 name: Signing keys
 # Keeps the signing keys of Loadout and Viper Vision in this default branch's build cache, which every branch can read,
 # so app branches can be renamed without losing their key. GitHub deletes a cache nobody uses for 7 days, so this runs
-# every 3 days and just reads each key. A key is only made if it's missing (the first run).
+# every 3 days and just reads each key. A missing key is only made by a manual run with "make missing keys" ticked;
+# a scheduled run that finds one missing fails, so it gets noticed instead of quietly changing the key.
 on:
   schedule:
     - cron: '17 6 */3 * *'
   workflow_dispatch:
+    inputs:
+      make:
+        description: 'Make any missing key (phones must reinstall that app)'
+        type: boolean
+        default: false
   push:
     paths:
       - '.github/workflows/signing-keys.yml'
@@ -33,7 +39,11 @@ jobs:
       - run: |
           mkdir -p signing
           if [ ! -f signing/${{ matrix.app }}.keystore ]; then
-            echo "::warning::Making a new ${{ matrix.cn }} signing key (first run only)."
+            if [ "${{ inputs.make }}" != "true" ]; then
+              echo "::error::The ${{ matrix.cn }} signing key is missing. Run this workflow by hand with 'make missing keys' to make a new one."
+              exit 1
+            fi
+            echo "::warning::Making a new ${{ matrix.cn }} signing key."
             keytool -genkeypair -keystore signing/${{ matrix.app }}.keystore -alias ${{ matrix.alias }} \
               -keyalg RSA -keysize 2048 -validity 36500 -storepass android -keypass android -dname "CN=${{ matrix.cn }}"
           fi
