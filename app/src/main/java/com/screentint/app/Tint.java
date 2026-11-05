@@ -22,6 +22,14 @@ final class Tint {
     static final String KEY_BLUE = "blue";
     /** Overall strength, 0..1000 (tenths of a percent). */
     static final String KEY_STRENGTH = "strength_x10";
+    /** Warmth, -100 (cooler) .. +100 (warmer), in tenths. */
+    static final String KEY_WARMTH = "warmth_x10";
+    /** Tint, -100 (greener) .. +100 (pinker), in tenths. */
+    static final String KEY_TINT = "tint_x10";
+    /** Brightness, 20..100%, in tenths. */
+    static final String KEY_BRIGHTNESS = "brightness_x10";
+    /** Colour sliders cover 0-100% instead of the fine 85-100% range. */
+    static final String KEY_WIDE = "wide_range";
 
     /** Never cover the screen completely, so it can always be seen and turned off. */
     static final float MAX_OPACITY = 0.85f;
@@ -71,6 +79,44 @@ final class Tint {
         prefs(c).edit().putInt(KEY_STRENGTH, tenths(percent)).apply();
     }
 
+    /** An adjustment (warmth, tint or brightness) with one decimal. */
+    static float adjust(Context c, String key, float def) {
+        return prefs(c).getInt(key, Math.round(def * 10f)) / 10f;
+    }
+
+    static void setAdjust(Context c, String key, float value) {
+        prefs(c).edit().putInt(key, Math.round(value * 10f)).apply();
+    }
+
+    /** Puts warmth, tint and brightness back to neutral (presets start from a clean slate). */
+    static void resetAdjustments(Context c) {
+        prefs(c).edit().remove(KEY_WARMTH).remove(KEY_TINT).remove(KEY_BRIGHTNESS).apply();
+    }
+
+    /**
+     * How much warmth, tint and brightness scale red, green and blue (each 0..1). Gentle on
+     * purpose: the ends of the warmth slider are roughly 4,500 K (warm) and 8,000 K (cool) from a
+     * 6,500 K white, and the ends of the tint slider take 15% off green or off red and blue.
+     */
+    static float[] gains(float warmth, float tint, float brightness) {
+        float r = 1f, g = 1f, b = 1f;
+        float w = warmth / 100f, t = tint / 100f;
+        if (w > 0) { b *= 1f - 0.30f * w; g *= 1f - 0.10f * w; }
+        else if (w < 0) { r *= 1f + 0.20f * w; g *= 1f + 0.07f * w; }
+        if (t > 0) { g *= 1f - 0.15f * t; }
+        else if (t < 0) { r *= 1f + 0.15f * t; b *= 1f + 0.15f * t; }
+        float br = Math.max(0.2f, Math.min(1f, brightness / 100f));
+        return new float[] {r * br, g * br, b * br};
+    }
+
+    /** The red, green and blue that reach the screen, in percent, with everything applied. */
+    static float[] finalLevels(Context c) {
+        float s = strength(c);
+        float[] g = gains(adjust(c, KEY_WARMTH, 0f), adjust(c, KEY_TINT, 0f), adjust(c, KEY_BRIGHTNESS, 100f));
+        return new float[] {effective(level(c, KEY_RED) * g[0], s), effective(level(c, KEY_GREEN) * g[1], s),
+                effective(level(c, KEY_BLUE) * g[2], s)};
+    }
+
     private static int tenths(float percent) {
         return Math.round(Math.max(0f, Math.min(100f, percent)) * 10f);
     }
@@ -86,9 +132,8 @@ final class Tint {
      */
     static float[] overlay(Context c) {
         if (!enabled(c)) return null;
-        float s = strength(c);
-        return overlay(effective(level(c, KEY_RED), s), effective(level(c, KEY_GREEN), s),
-                effective(level(c, KEY_BLUE), s));
+        float[] l = finalLevels(c);
+        return overlay(l[0], l[1], l[2]);
     }
 
     static float[] overlay(float r, float g, float b) {

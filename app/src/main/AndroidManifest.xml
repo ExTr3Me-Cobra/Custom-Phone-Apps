@@ -8,6 +8,10 @@
         android:theme="@android:style/Theme.DeviceDefault.DayNight">
 
         <activity
+            android:name=".CalibrateActivity"
+            android:exported="false"
+            android:label="Calibrate" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

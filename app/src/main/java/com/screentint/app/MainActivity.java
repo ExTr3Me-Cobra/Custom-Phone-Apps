@@ -116,8 +116,19 @@ public class MainActivity extends Activity {
 
         // Colour
         heading("Colour");
-        content.addView(text("How much of each colour reaches the screen. 100% = normal. Moves in "
-                + "0.1% steps; the sliders are extra fine near 100%, and − / + nudge by 0.1%.", 14));
+        content.addView(text("How much of each colour reaches the screen. 100% = normal. The sliders cover "
+                + "85-100% for fine control (turn on Wide range for 0-100%); − / + nudge by 0.1%.", 14));
+        LinearLayout wideRow = new LinearLayout(this);
+        wideRow.setGravity(Gravity.CENTER_VERTICAL);
+        wideRow.addView(text("Wide range (0-100%)", 15), new LinearLayout.LayoutParams(0, -2, 1f));
+        Switch wide = new Switch(this);
+        wide.setChecked(wideRange());
+        wide.setOnCheckedChangeListener((b, on) -> {
+            Tint.prefs(this).edit().putBoolean(Tint.KEY_WIDE, on).apply();
+            render();
+        });
+        wideRow.addView(wide);
+        content.addView(wideRow);
         swatch = new View(this);
         content.addView(swatch, new LinearLayout.LayoutParams(-1, dp(36)));
         String[] names = {"Red", "Green", "Blue"};
@@ -126,6 +137,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < 3; i++) {
             final int ch = i;
             levels[i] = Tint.level(this, keys[i]);
+            final boolean wideNow = wideRange();
             labels[i] = text("", 16);
             labels[i].setTypeface(Typeface.DEFAULT_BOLD);
             labels[i].setTextColor(colors[i]);
@@ -138,12 +150,12 @@ public class MainActivity extends Activity {
             line.addView(nudge("−", () -> setLevel(ch, levels[ch] - 0.1f)));
             SeekBar bar = new SeekBar(this);
             bar.setMax(STEPS);
-            bar.setProgress(toSlider(levels[i]));
+            bar.setProgress(toSlider(levels[i], wideNow));
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
                     if (updatingBars || !fromUser) return;
-                    levels[ch] = fromSlider(p);
+                    levels[ch] = fromSlider(p, wideNow);
                     saveLevels();
                 }
 
@@ -164,19 +176,19 @@ public class MainActivity extends Activity {
         strengthLabel.setTypeface(Typeface.DEFAULT_BOLD);
         strengthLabel.setPadding(0, dp(16), 0, 0);
         content.addView(strengthLabel);
-        content.addView(text("Fades the whole tint in or out smoothly, keeping the same colour "
-                + "balance. 100% = exactly the levels above.", 14));
+        content.addView(text("Fades the whole look in or out, keeping its colour balance. 100% = exactly "
+                + "as set. The slider is gentle at the start: its middle is 25%.", 14));
         LinearLayout sLine = new LinearLayout(this);
         sLine.setGravity(Gravity.CENTER_VERTICAL);
         sLine.addView(nudge("−", () -> setStrength(Tint.strength(this) - 0.1f)));
         strengthBar = new SeekBar(this);
         strengthBar.setMax(STEPS);
-        strengthBar.setProgress(Math.round(Tint.strength(this) * 10));
+        strengthBar.setProgress(strengthToSlider(Tint.strength(this)));
         strengthBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
                 if (!fromUser) return;
-                Tint.setStrength(MainActivity.this, p / 10f);
+                Tint.setStrength(MainActivity.this, strengthFromSlider(p));
                 if (!Tint.enabled(MainActivity.this)) master.setChecked(true);
                 updateLabels();
             }
@@ -190,6 +202,17 @@ public class MainActivity extends Activity {
         sLine.addView(strengthBar, new LinearLayout.LayoutParams(0, -2, 1f));
         sLine.addView(nudge("+", () -> setStrength(Tint.strength(this) + 0.1f)));
         content.addView(sLine);
+
+        // Adjustments on top of the colour levels.
+        heading("Adjustments");
+        AdjustRow.add(this, content, "Warmth", "Cooler ← → warmer (about 8,000 K to 4,500 K at the ends)",
+                Tint.KEY_WARMTH, -100f, 100f, 0f, 1f, "", this::updateLabels);
+        AdjustRow.add(this, content, "Tint", "Greener ← → pinker", Tint.KEY_TINT, -100f, 100f, 0f, 1f, "",
+                this::updateLabels);
+        AdjustRow.add(this, content, "Brightness", "Dims everything evenly, below the phone's lowest brightness",
+                Tint.KEY_BRIGHTNESS, 20f, 100f, 100f, 1f, "%", this::updateLabels);
+        content.addView(button("Calibrate with test images",
+                () -> startActivity(new Intent(this, CalibrateActivity.class))));
         updateLabels();
 
         // Presets
@@ -238,7 +261,7 @@ public class MainActivity extends Activity {
     private void setLevel(int ch, float value) {
         levels[ch] = Math.round(Math.max(0f, Math.min(100f, value)) * 10f) / 10f;
         updatingBars = true;
-        bars[ch].setProgress(toSlider(levels[ch]));
+        bars[ch].setProgress(toSlider(levels[ch], wideRange()));
         updatingBars = false;
         saveLevels();
     }
@@ -246,7 +269,7 @@ public class MainActivity extends Activity {
     private void setStrength(float value) {
         float v = Math.round(Math.max(0f, Math.min(100f, value)) * 10f) / 10f;
         Tint.setStrength(this, v);
-        strengthBar.setProgress(Math.round(v * 10));
+        strengthBar.setProgress(strengthToSlider(v));
         if (!Tint.enabled(this)) master.setChecked(true);
         updateLabels();
     }
@@ -254,22 +277,43 @@ public class MainActivity extends Activity {
     private void setLevels(float r, float g, float b) {
         Tint.setLevels(this, r, g, b);
         Tint.setStrength(this, 100f);
+        Tint.resetAdjustments(this);
         Tint.setEnabled(this, true);
         render();
     }
 
+    private boolean wideRange() {
+        return Tint.prefs(this).getBoolean(Tint.KEY_WIDE, false);
+    }
+
+    /** Fine range: 85-100% along the whole slider, straight. */
+    private static final float FINE_MIN = 85f;
+
     /**
-     * Slider position to level: curved so the top of the range (90-100%, where small tweaks
-     * matter most) gets far more of the slider's length.
+     * Slider position to level. Normally the slider covers just 85-100% (where small tweaks
+     * matter), so a full slide is a gentle change; wide range covers 0-100%, curved so the top of
+     * the range still gets most of the slider's length.
      */
-    private static float fromSlider(int p) {
+    private static float fromSlider(int p, boolean wide) {
+        if (!wide) return Math.round((FINE_MIN + (100f - FINE_MIN) * p / STEPS) * 10f) / 10f;
         double x = 1.0 - p / (double) STEPS;
         return Math.round((float) (100.0 * (1.0 - x * x)) * 10f) / 10f;
     }
 
-    private static int toSlider(float level) {
+    private static int toSlider(float level, boolean wide) {
+        if (!wide) return Math.round(Math.max(0f, (level - FINE_MIN) / (100f - FINE_MIN)) * STEPS);
         double x = Math.sqrt(Math.max(0.0, 1.0 - level / 100.0));
         return (int) Math.round((1.0 - x) * STEPS);
+    }
+
+    /** Strength slider: squared, so the first half of the slider only reaches 25%. */
+    private static float strengthFromSlider(int p) {
+        double x = p / (double) STEPS;
+        return Math.round((float) (100.0 * x * x) * 10f) / 10f;
+    }
+
+    private static int strengthToSlider(float strength) {
+        return (int) Math.round(Math.sqrt(Math.max(0f, strength) / 100.0) * STEPS);
     }
 
     private void updateLabels() {
@@ -279,8 +323,8 @@ public class MainActivity extends Activity {
         float s = Tint.strength(this);
         strengthLabel.setText(String.format(java.util.Locale.US, "Strength: %.1f%%", s));
         // What white looks like through the overlay with the current settings.
-        swatch.setBackgroundColor(Tint.whiteThrough(Tint.effective(levels[0], s),
-                Tint.effective(levels[1], s), Tint.effective(levels[2], s)));
+        float[] l = Tint.finalLevels(this);
+        swatch.setBackgroundColor(Tint.whiteThrough(l[0], l[1], l[2]));
     }
 
     /** A small − / + button for 0.1% nudges (hold-free: tap repeatedly). */
@@ -325,11 +369,9 @@ public class MainActivity extends Activity {
                     List<String[]> looks = loadSaved();
                     String name = typed.isEmpty() ? "Look " + (looks.size() + 1) : typed;
                     looks.removeIf(l -> l[0].equals(name)); // same name replaces the old one
-                    float st = Tint.strength(this);
-                    looks.add(new String[] {name,
-                            String.valueOf(Tint.effective(levels[0], st)),
-                            String.valueOf(Tint.effective(levels[1], st)),
-                            String.valueOf(Tint.effective(levels[2], st))});
+                    float[] fl = Tint.finalLevels(this);
+                    looks.add(new String[] {name, String.valueOf(fl[0]), String.valueOf(fl[1]),
+                            String.valueOf(fl[2])});
                     storeSaved(looks);
                     render();
                 })

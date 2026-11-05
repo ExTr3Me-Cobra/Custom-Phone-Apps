@@ -3,7 +3,11 @@
 An always-on colour layer for Android that lets you set how much **red, green and blue** reach the
 screen, going further than the phone's built-in colour settings allow.
 
-* Free Red / Green / Blue sliders (0–100%), changes show instantly.
+* Red / Green / Blue sliders, fine 85–100% range by default (Wide range for 0–100%), changes show instantly.
+* Warmth (about 8,000 K to 4,500 K), Tint (greener / pinker) and Brightness (down to 20%) adjustments.
+* Gentle Strength slider (its middle is 25%) that fades the whole look in or out.
+* **Calibrate with test images**: grey ramp, grey patches, colour bars, skin and nature tones and a
+  full white screen to compare with paper, with the Warmth / Tint / Brightness sliders beside them.
 * Presets (Warm, Very warm, Night red, Cool, Dim, Very dim) plus your own saved looks.
 * Runs all the time and starts again by itself after every restart.
 * Quick settings tile to switch it on and off.
