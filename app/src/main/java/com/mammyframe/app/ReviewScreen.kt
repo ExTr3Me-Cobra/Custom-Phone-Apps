@@ -71,7 +71,8 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
         val threshold = AiRotate.status.value.threshold
         queue = AiRotate.recordsIn(context, settings.folderUri)
             .filter { AiRotate.kind(it, threshold) == AiRotate.Kind.REVIEW }
-            .sortedByDescending { it.certainty }
+            // Turns the AI is sure about (waiting for your OK) first, then the unsure ones; most sure first.
+            .sortedWith(compareByDescending<AiRotate.Rec> { AiRotate.waitingForOk(it, threshold) }.thenByDescending { it.certainty })
     }
     var index by remember { mutableIntStateOf(0) }
     val status by AiRotate.status.collectAsState()

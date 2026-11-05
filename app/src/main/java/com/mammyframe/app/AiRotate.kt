@@ -78,6 +78,8 @@ object AiRotate {
         val rotationsOn: Boolean = true,
         /** Review shows photos turned the AI's way (true) or as they are now (false). */
         val reviewShowsAi: Boolean = true,
+        /** Never turn a photo by itself: every turn the AI wants goes to review first. */
+        val askBeforeTurning: Boolean = false,
         val message: String? = null,
         /** Goes up every time anything changes, so screens know to refresh. */
         val revision: Int = 0,
@@ -93,13 +95,21 @@ object AiRotate {
 
     // ---------------------------------------------------------------- the rules
 
-    fun kind(r: Rec, threshold: Float): Kind = when {
+    fun kind(r: Rec, threshold: Float, askFirst: Boolean = _status.value.askBeforeTurning): Kind = when {
         r.decision >= 0 -> Kind.MANUAL
         r.origExif in 2..8 && r.fix == 0 -> Kind.UPRIGHT // the camera and the AI agree
         r.cameraDisagrees -> Kind.REVIEW
-        r.certainty >= threshold -> if (r.fix == 0) Kind.UPRIGHT else Kind.AUTO
+        r.certainty >= threshold -> when {
+            r.fix == 0 -> Kind.UPRIGHT
+            askFirst -> Kind.REVIEW // sure, but you asked to see every turn first
+            else -> Kind.AUTO
+        }
         else -> Kind.REVIEW
     }
+
+    /** In review only because you asked to see every turn first (the AI is sure about it). */
+    fun waitingForOk(r: Rec, threshold: Float): Boolean =
+        r.decision < 0 && !r.cameraDisagrees && r.fix != 0 && r.certainty >= threshold
 
     fun target(r: Rec, threshold: Float): Int = when (kind(r, threshold)) {
         Kind.MANUAL -> r.decision
@@ -139,7 +149,8 @@ object AiRotate {
             }
             _status.update {
                 it.copy(threshold = o.getDouble("threshold").toFloat(), rotationsOn = o.getBoolean("rotationsOn"),
-                    reviewShowsAi = o.optBoolean("reviewShowsAi", true))
+                    reviewShowsAi = o.optBoolean("reviewShowsAi", true),
+                    askBeforeTurning = o.optBoolean("askBeforeTurning", false))
             }
         }
         _status.update { it.copy(loaded = true) }
@@ -157,7 +168,7 @@ object AiRotate {
         }
         val s = _status.value
         val o = JSONObject().put("threshold", s.threshold.toDouble()).put("rotationsOn", s.rotationsOn)
-            .put("reviewShowsAi", s.reviewShowsAi).put("records", arr)
+            .put("reviewShowsAi", s.reviewShowsAi).put("askBeforeTurning", s.askBeforeTurning).put("records", arr)
         val tmp = File(dir(c), "state.json.tmp")
         tmp.writeText(o.toString())
         tmp.renameTo(File(dir(c), "state.json"))
@@ -181,6 +192,13 @@ object AiRotate {
     suspend fun get(c: Context, uri: String): Rec? = withContext(store) {
         ensureLoaded(c)
         records[uri]
+    }
+
+    /** Turning this on puts back any automatic turns (they wait in review); off turns them again. */
+    fun setAskBeforeTurning(c: Context, on: Boolean) = scope.launch {
+        ensureLoaded(c)
+        _status.update { it.copy(askBeforeTurning = on) }
+        syncAll(c.applicationContext)
     }
 
     fun setReviewShowsAi(c: Context, on: Boolean) = scope.launch {

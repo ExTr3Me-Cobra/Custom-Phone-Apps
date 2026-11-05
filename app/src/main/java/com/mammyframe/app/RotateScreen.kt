@@ -144,6 +144,7 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                             k == AiRotate.Kind.AUTO || k == AiRotate.Kind.UPRIGHT
                         },
                         reviewedCount = recs.count { AiRotate.kind(it, threshold) == AiRotate.Kind.MANUAL },
+                        waitingOkCount = review.count { AiRotate.waitingForOk(it, threshold) },
                     )
                 }
 
@@ -213,6 +214,7 @@ private fun Controls(
     reviewCount: Int,
     aiSureCount: Int,
     reviewedCount: Int,
+    waitingOkCount: Int,
 ) {
     val context = LocalContext.current
     Surface(color = Color.White.copy(alpha = 0.85f), shape = RoundedCornerShape(20.dp), shadowElevation = 2.dp) {
@@ -235,7 +237,12 @@ private fun Controls(
                         "Sorted", aiSureCount + reviewedCount,
                         "AI was sure: $aiSureCount · you reviewed: $reviewedCount", Color(0xFF3E7D5A), Modifier.weight(1f)
                     )
-                    CountBox("Waiting for review", reviewCount, "the AI wasn't sure enough", Rose, Modifier.weight(1f))
+                    CountBox(
+                        "Waiting for review", reviewCount,
+                        if (waitingOkCount > 0) "turns for your OK: $waitingOkCount · AI unsure: ${reviewCount - waitingOkCount}"
+                        else "the AI wasn't sure enough",
+                        Rose, Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -267,7 +274,9 @@ private fun Controls(
             }
 
             Spacer(Modifier.height(4.dp))
-            Text("Turn photos automatically when the AI is at least ${(threshold * 100).roundToInt()}% sure",
+            Text(
+                if (status.askBeforeTurning) "Put turns first in review when the AI is at least ${(threshold * 100).roundToInt()}% sure"
+                else "Turn photos automatically when the AI is at least ${(threshold * 100).roundToInt()}% sure",
                 fontSize = 17.sp, fontWeight = FontWeight.Medium)
             Slider(
                 value = threshold, onValueChange = onThreshold, onValueChangeFinished = onThresholdDone,
@@ -275,6 +284,19 @@ private fun Controls(
             )
             Text("Higher = fewer mistakes, more photos to review. Lower = fewer to review.",
                 fontSize = 14.sp, color = Ink2.copy(alpha = 0.7f))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ask before turning anything", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (status.askBeforeTurning) "Nothing is turned by itself. Every turn the AI wants waits at the " +
+                            "front of review for your OK. Photos it's sure are already right are left alone."
+                        else "Photos the AI is sure about are turned by themselves.",
+                        fontSize = 14.sp, color = Ink2.copy(alpha = 0.7f)
+                    )
+                }
+                Switch(status.askBeforeTurning, { AiRotate.setAskBeforeTurning(context, it) })
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

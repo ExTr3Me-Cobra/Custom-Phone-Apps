@@ -38,6 +38,9 @@ Finds sideways and upside-down photos in the chosen folder and turns them the ri
   away, and the photo stays in the list.
 - **The slider** sets how sure the AI must be to turn a photo by itself (50–99%, default 95%).
   Moving it immediately moves photos between "turned" and "for review".
+- **Ask before turning anything**: nothing is turned by itself. Photos the AI is sure are already
+  right are left alone, and every turn it wants waits at the front of review (most sure first)
+  for your OK. Switching it on puts back any automatic turns until you approve them.
 - **Keep AI rotations**: switch it off to put every photo back exactly as it was. Switch it on
   again to turn them again.
 - **Check new photos** later only looks at photos that are new or changed.
