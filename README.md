@@ -20,6 +20,38 @@ A very simple digital photo frame for an Android tablet.
   how long the transition takes; how long each photo shows (5 seconds to 10 minutes); and an
   optional gentle slow zoom on each photo.
 
+## AI rotate (developer settings)
+Finds sideways and upside-down photos in the chosen folder and turns them the right way up.
+
+- **Check all photos** looks at every photo. First it reads the camera's own rotation tag. Then
+  an AI looks at the picture itself. If the camera and the AI agree the photo is fine, it's left
+  alone. If they disagree, it always goes to review.
+- Photos the AI is sure about are turned and saved straight away. The rest go to **For review**.
+  Each one shows the AI's best guess: turn it with the arrows if needed and tap **Save**, or use
+  **Use the AI's guess for all** / **Leave all as they are**.
+- **The slider** sets how sure the AI must be to turn a photo by itself (50–99%, default 95%).
+  Moving it immediately moves photos between "turned" and "for review".
+- **Keep AI rotations**: switch it off to put every photo back exactly as it was. Switch it on
+  again to turn them again.
+- **Check new photos** later only looks at photos that are new or changed.
+- It keeps going in the background with a progress notification.
+
+How photos are saved:
+- **JPEG** (almost all camera photos): only the rotation tag inside the file is changed. The
+  picture itself is never re-saved, so there's no quality loss, and undoing is exact.
+- **PNG / WebP**: saved turned with no quality loss. An exact copy of the original is kept inside
+  the app until it's undone.
+- **HEIC and other kinds** that Android can't save: turned inside Mammy Frame only.
+
+Saving needs permission to change the folder. If the folder was chosen before this version,
+choose it again (Photos folder card) and Mammy Frame will ask.
+
+The AI is [deep-image-orientation-detection](https://huggingface.co/DuarteBarbosa/deep-image-orientation-detection)
+(EfficientNetV2-S, 98.8% on its own test photos, MIT license, see `MODEL-LICENSE.txt`). It runs on
+the tablet itself, so photos never leave it. Each photo is checked four times (turned each way)
+and the answers are combined. Photos with no clear "up" (things shot from directly above,
+patterns) are the hardest. Those usually end up in review.
+
 ## Screen sizes
 The home screen fits itself to the screen it's on: settings in a row on tablets, stacked on phones
 held upright, and side by side (name and Play on the left, settings on the right) on phones turned

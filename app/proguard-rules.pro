@@ -1,1 +1,2 @@
-# No reflection or serialization libraries; default rules are enough.
+# ONNX Runtime calls back into its Java classes from native code.
+-keep class ai.onnxruntime.** { *; }

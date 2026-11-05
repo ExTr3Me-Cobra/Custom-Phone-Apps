@@ -21,6 +21,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -34,10 +36,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
-enum class Screen { HOME, SLIDESHOW, BLACK }
+enum class Screen { HOME, SLIDESHOW, BLACK, ROTATE }
 
 /** How long the menu stays up after tapping the black screen, before it goes black again. */
 private const val BLACK_RETURN_MS = 60_000L
+
+/** AI rotate goes back to the frame after this long without being touched. */
+private const val ROTATE_IDLE_MS = 10 * 60_000L
 
 class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf(Screen.HOME)
@@ -102,6 +107,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enter(phase: Phase) {
+        if (screen == Screen.ROTATE) return // finish what you're doing first; see the idle timer below
         dialog = HomeDialog.NONE
         when (phase) {
             Phase.ON -> if (screen != Screen.SLIDESHOW) {
@@ -124,11 +130,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun chooseFolder(uri: Uri) {
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-        runCatching { contentResolver.takePersistableUriPermission(uri, flags) }
-        settings.folderUri?.let { old ->
-            if (old != uri.toString()) runCatching { contentResolver.releasePersistableUriPermission(Uri.parse(old), flags) }
-        }
+        // Read and write: AI rotate saves turned photos back into the folder. Older folders keep
+        // their permission too, so their AI rotations can still be undone.
+        val rw = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        runCatching { contentResolver.takePersistableUriPermission(uri, rw) }
+            .onFailure { runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
         val name = runCatching {
             val doc = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
             contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
@@ -141,7 +147,7 @@ class MainActivity : ComponentActivity() {
     private fun applyWindow(s: Screen) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (s == Screen.HOME) {
+        if (s == Screen.HOME || s == Screen.ROTATE) {
             controller.show(WindowInsetsCompat.Type.systemBars())
             controller.isAppearanceLightStatusBars = true
             controller.isAppearanceLightNavigationBars = true
@@ -181,6 +187,25 @@ class MainActivity : ComponentActivity() {
             if (Schedule.phaseNow(settings) == Phase.OFF) screen = Screen.BLACK
         }
 
+        // Left on the AI rotate screen: go back to the frame (slideshow if it's that time).
+        LaunchedEffect(screen, lastTouch, resumed) {
+            if (screen != Screen.ROTATE || !resumed) return@LaunchedEffect
+            val wait = ROTATE_IDLE_MS - (SystemClock.elapsedRealtime() - lastTouch)
+            if (wait > 0) delay(wait)
+            screen = Screen.HOME
+            when (Schedule.phaseNow(settings)) {
+                Phase.ON -> { slideshowRun++; screen = Screen.SLIDESHOW }
+                Phase.OFF -> screen = Screen.BLACK
+                null -> {}
+            }
+        }
+
+        val aiStatus by AiRotate.status.collectAsState()
+        var aiText by remember { mutableStateOf("") }
+        LaunchedEffect(aiStatus.revision, aiStatus.running, aiStatus.done, settings.folderUri) {
+            aiText = aiSummary(aiStatus, AiRotate.recordsIn(this@MainActivity, settings.folderUri))
+        }
+
         LaunchedEffect(settings.folderUri, resumeTick) {
             photoCount = if (settings.folderUri == null) null else Photos.list(this@MainActivity, settings.folderUri).size
         }
@@ -195,6 +220,8 @@ class MainActivity : ComponentActivity() {
                     dialog = dialog,
                     onDialog = { dialog = it; lastTouch = SystemClock.elapsedRealtime() },
                     onChooseFolder = { runCatching { picker.launch(settings.folderUri?.let(Uri::parse)) } },
+                    aiText = aiText,
+                    onOpenAiRotate = { screen = Screen.ROTATE },
                     onPlay = { slideshowRun++; screen = Screen.SLIDESHOW },
                     onChange = ::update,
                     resumeTick = resumeTick,
@@ -202,6 +229,7 @@ class MainActivity : ComponentActivity() {
                 Screen.SLIDESHOW -> androidx.compose.runtime.key(slideshowRun) {
                     SlideshowScreen(settings) { screen = Screen.HOME }
                 }
+                Screen.ROTATE -> RotateScreen(settings) { screen = Screen.HOME }
                 Screen.BLACK -> Box(
                     Modifier
                         .fillMaxSize()

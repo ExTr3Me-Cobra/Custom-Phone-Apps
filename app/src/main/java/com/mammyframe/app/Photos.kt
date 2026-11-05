@@ -8,12 +8,17 @@ import android.provider.DocumentsContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** One picture in the folder, with what's needed to notice if it changes. */
+data class PhotoFile(val uri: Uri, val name: String, val mime: String, val modified: Long, val size: Long)
+
 object Photos {
     /** Every picture in the chosen folder and its subfolders. */
-    suspend fun list(c: Context, folderUri: String?): List<Uri> = withContext(Dispatchers.IO) {
+    suspend fun list(c: Context, folderUri: String?): List<Uri> = files(c, folderUri).map { it.uri }
+
+    suspend fun files(c: Context, folderUri: String?): List<PhotoFile> = withContext(Dispatchers.IO) {
         if (folderUri == null) return@withContext emptyList()
         val tree = Uri.parse(folderUri)
-        val out = ArrayList<Uri>()
+        val out = ArrayList<PhotoFile>()
         runCatching {
             val pending = ArrayDeque<String>()
             pending.add(DocumentsContract.getTreeDocumentId(tree))
@@ -21,6 +26,8 @@ object Photos {
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_MIME_TYPE,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                DocumentsContract.Document.COLUMN_SIZE,
             )
             while (pending.isNotEmpty() && out.size < 50_000) {
                 val parent = pending.removeFirst()
@@ -34,7 +41,11 @@ object Photos {
                             mime == DocumentsContract.Document.MIME_TYPE_DIR ->
                                 if (!name.startsWith(".")) pending.add(id)
                             mime.startsWith("image/") && mime != "image/svg+xml" && !name.startsWith(".") ->
-                                out.add(DocumentsContract.buildDocumentUriUsingTree(tree, id))
+                                out.add(PhotoFile(
+                                    DocumentsContract.buildDocumentUriUsingTree(tree, id), name, mime,
+                                    if (cur.isNull(3)) 0 else cur.getLong(3),
+                                    if (cur.isNull(4)) 0 else cur.getLong(4),
+                                ))
                         }
                     }
                 }
@@ -47,16 +58,24 @@ object Photos {
      * Loads a photo turned the right way up (the camera's rotation tag is applied), shrunk
      * to about the screen's size so big camera photos don't use too much memory.
      */
-    suspend fun decode(c: Context, uri: Uri, maxSide: Int): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun decode(c: Context, uri: Uri, maxSide: Int, turnCw: Int = 0): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
-            ImageDecoder.decodeBitmap(ImageDecoder.createSource(c.contentResolver, uri)) { decoder, info, _ ->
+            val bmp = ImageDecoder.decodeBitmap(ImageDecoder.createSource(c.contentResolver, uri)) { decoder, info, _ ->
                 val longest = maxOf(info.size.width, info.size.height)
                 var sample = 1
                 while (longest / (sample * 2) >= maxSide) sample *= 2
                 decoder.setTargetSampleSize(sample)
                 decoder.isMutableRequired = false
+                if (turnCw != 0) decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
+            if (turnCw == 0) bmp else turned(bmp, turnCw)
         }.getOrNull()
+    }
+
+    fun turned(bmp: Bitmap, degreesCw: Int): Bitmap {
+        if (degreesCw % 360 == 0) return bmp
+        val m = android.graphics.Matrix().apply { postRotate(degreesCw.toFloat()) }
+        return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
     }
 }
 

@@ -76,6 +76,8 @@ fun HomeScreen(
     dialog: HomeDialog,
     onDialog: (HomeDialog) -> Unit,
     onChooseFolder: () -> Unit,
+    aiText: String,
+    onOpenAiRotate: () -> Unit,
     onPlay: () -> Unit,
     onChange: (Settings) -> Unit,
     resumeTick: Int,
@@ -127,6 +129,7 @@ fun HomeScreen(
                     SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
                     SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
                     SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
+                    SettingCard("AI rotate", aiText, Modifier.fillMaxWidth(), onOpenAiRotate)
                 }
             }
             val devOff: @Composable () -> Unit = {
@@ -169,10 +172,16 @@ fun HomeScreen(
                     if (!settings.developer) return@Column
                     Spacer(Modifier.height(if (h < 700.dp) 18.dp else 28.dp))
                     if (layout == HomeLayout.WIDE) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                            SettingCard("Photos folder", folderText, Modifier.width(220.dp), onChooseFolder)
-                            SettingCard("Schedule", scheduleText, Modifier.width(220.dp)) { onDialog(HomeDialog.SCHEDULE) }
-                            SettingCard("Transitions", transitionText, Modifier.width(220.dp)) { onDialog(HomeDialog.TRANSITIONS) }
+                        // Four cards: two rows of two.
+                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                SettingCard("Photos folder", folderText, Modifier.width(260.dp), onChooseFolder)
+                                SettingCard("Schedule", scheduleText, Modifier.width(260.dp)) { onDialog(HomeDialog.SCHEDULE) }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                SettingCard("Transitions", transitionText, Modifier.width(260.dp)) { onDialog(HomeDialog.TRANSITIONS) }
+                                SettingCard("AI rotate", aiText, Modifier.width(260.dp), onOpenAiRotate)
+                            }
                         }
                     } else {
                         cardsColumn(if (layout == HomeLayout.WIDE) 260.dp else narrowCardWidth)

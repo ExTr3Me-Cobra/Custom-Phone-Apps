@@ -81,7 +81,10 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
     var controls by remember { mutableStateOf(false) }
     val cache = remember { mutableStateMapOf<Uri, Bitmap>() }
 
-    suspend fun load(uri: Uri): Bitmap? = cache[uri] ?: Photos.decode(context, uri, maxSide)?.also { cache[uri] = it }
+    // Photos AI rotate turned inside the app only (kinds Android can't save, such as HEIC).
+    var appTurns by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    suspend fun load(uri: Uri): Bitmap? = cache[uri]
+        ?: Photos.decode(context, uri, maxSide, appTurns[uri.toString()] ?: 0)?.also { cache[uri] = it }
 
     fun tidyAndPrefetch(list: Playlist) {
         val keep = setOfNotNull(list.current, list.peekPrevious(), list.peekNext())
@@ -125,6 +128,7 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
 
     // Find the photos, then show the first one.
     LaunchedEffect(Unit) {
+        appTurns = runCatching { AiRotate.appTurns(context) }.getOrDefault(emptyMap())
         val list = Playlist(Photos.list(context, settings.folderUri))
         playlist = list
         if (!list.isEmpty) go(1)
