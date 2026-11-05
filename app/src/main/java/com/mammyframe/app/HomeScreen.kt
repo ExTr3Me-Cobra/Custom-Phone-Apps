@@ -105,9 +105,10 @@ fun HomeScreen(
                 else "Off"
             val transitionText = "${settings.transition.label}\n${secondsText(settings.photoSeconds)} each"
 
-            val logoWidth = if (layout == HomeLayout.SIDE_BY_SIDE) w / 2 - 32.dp else w - 48.dp
-            val titleSize = (logoWidth.value / 4.6f).coerceIn(40f, if (layout == HomeLayout.SIDE_BY_SIDE) 84f else 120f)
-                .coerceAtMost(if (layout == HomeLayout.SIDE_BY_SIDE) h.value * 0.26f else h.value * 0.16f).sp
+            val sideBySide = layout == HomeLayout.SIDE_BY_SIDE && settings.developer
+            val logoWidth = if (sideBySide) w / 2 - 32.dp else w - 48.dp
+            val titleSize = (logoWidth.value / 4.6f).coerceIn(40f, if (sideBySide) 84f else 120f)
+                .coerceAtMost(if (sideBySide || layout == HomeLayout.SIDE_BY_SIDE) h.value * 0.26f else h.value * 0.16f).sp
             val playSize = (if (layout == HomeLayout.SIDE_BY_SIDE) h * 0.34f else minOf(w, h) * 0.28f)
                 .coerceIn(84.dp, 150.dp)
             val narrowCardWidth = minOf(320.dp, w - 48.dp)
@@ -120,13 +121,12 @@ fun HomeScreen(
                     }
                 }
             }
+            // All settings are developer settings; normally only the name and Play show.
             val cardsColumn: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { cardWidth ->
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.width(cardWidth)) {
                     SettingCard("Photos folder", folderText, Modifier.fillMaxWidth(), onChooseFolder)
-                    if (settings.developer) {
-                        SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
-                        SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
-                    }
+                    SettingCard("Schedule", scheduleText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.SCHEDULE) }
+                    SettingCard("Transitions", transitionText, Modifier.fillMaxWidth()) { onDialog(HomeDialog.TRANSITIONS) }
                 }
             }
             val devOff: @Composable () -> Unit = {
@@ -138,7 +138,7 @@ fun HomeScreen(
                 }
             }
 
-            if (layout == HomeLayout.SIDE_BY_SIDE) {
+            if (layout == HomeLayout.SIDE_BY_SIDE && settings.developer) {
                 Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(
                         Modifier.weight(1f).verticalScroll(rememberScrollState()),
@@ -166,8 +166,9 @@ fun HomeScreen(
                     logo()
                     Spacer(Modifier.height(12.dp))
                     PlayButton(playSize, onPlay)
+                    if (!settings.developer) return@Column
                     Spacer(Modifier.height(if (h < 700.dp) 18.dp else 28.dp))
-                    if (layout == HomeLayout.WIDE && settings.developer) {
+                    if (layout == HomeLayout.WIDE) {
                         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                             SettingCard("Photos folder", folderText, Modifier.width(220.dp), onChooseFolder)
                             SettingCard("Schedule", scheduleText, Modifier.width(220.dp)) { onDialog(HomeDialog.SCHEDULE) }
