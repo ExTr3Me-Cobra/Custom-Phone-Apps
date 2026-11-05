@@ -73,8 +73,14 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
 
     private val slope = FloatArray(w * h)
 
-    /** Per depth-map pixel, how much to brighten or darken it to take out the photo's own lighting (full strength). */
+    /**
+     * Per depth-map pixel, how much (as a log) it would need brightening or darkening to take out
+     * the photo's own lighting completely.
+     */
     private val existing: FloatArray
+
+    /** How much each depth-map pixel is the subject (near), 0..1: only that is evened out, not the room. */
+    private val subject: FloatArray
 
     init {
         val smooth = FloatArray(w * h)
@@ -126,6 +132,8 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
             nx[i] = ax / len; ny[i] = ay / len; nz[i] = az / len
         }
         existing = fitLighting()
+        val middle = z.copyOf().apply { sort() }[w * h / 2]
+        subject = boxBlur(FloatArray(w * h) { ((z[it] - middle) / 0.125f).coerceIn(0f, 1f) }, w, h, 3)
     }
 
     /**
@@ -170,7 +178,7 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         val logRatio = FloatArray(w * h) { i -> kotlin.math.ln((mean / max(1e-3f, shading[i])).coerceIn(0.6f, 2.2f)) }
         val r = max(2, (max(w, h) * 0.075f).roundToInt())
         val broad = boxBlur(boxBlur(logRatio, w, h, r), w, h, r)
-        return FloatArray(w * h) { i -> kotlin.math.exp(logRatio[i] - broad[i]).coerceIn(0.8f, 1.35f) }
+        return FloatArray(w * h) { i -> logRatio[i] - broad[i] }
     }
 
     /** Solves the small system [m]·x = [v] (null if it can't be). */
@@ -222,7 +230,15 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         // depth map's size, then enlarged so they follow the photo's own edges (a guided filter
         // on a copy of at most 1600 px), so nothing spills past the outline of things.
         val shade = shading(s)
-        val ratio = FloatArray(w * h) { i -> if (s.remove <= 0f) 1f else kotlin.math.exp(kotlin.math.ln(existing[i]) * s.remove) }
+        // Each spot changes only as much as it needs, up to what the slider allows: faint shading
+        // is fully evened out early and then stays put, deeper shadows keep lifting as it goes up.
+        val allow = s.remove * MAX_LIFT
+        val ratio = FloatArray(w * h) { i ->
+            if (s.remove <= 0f) 1f else {
+                val need = existing[i]
+                kotlin.math.exp(kotlin.math.sign(need) * min(kotlin.math.abs(need), allow) * subject[i])
+            }
+        }
         val guide = image.scaledToFit(1600)
         val gw = guide.width
         val gh = guide.height
@@ -243,10 +259,22 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
             val fy = ((y + 0.5f) / ih * gh - 0.5f).coerceIn(0f, gh - 1f)
             val sh = max(0f, sample(gShade, gw, gh, fx, fy))
             val keep = max(0.3f, sample(gRatio, gw, gh, fx, fy))
+            // Taking out the old lighting: a lift adds mostly neutral light (half the colour, half
+            // grey), so lifted skin doesn't turn orange; a darkening just scales.
+            var r0 = c.red8.toFloat()
+            var g0 = c.green8.toFloat()
+            var b0 = c.blue8.toFloat()
+            if (keep > 1f) {
+                val l = 0.299f * r0 + 0.587f * g0 + 0.114f * b0
+                val k = keep - 1f
+                r0 += k * (0.5f * r0 + 0.5f * l); g0 += k * (0.5f * g0 + 0.5f * l); b0 += k * (0.5f * b0 + 0.5f * l)
+            } else {
+                r0 *= keep; g0 *= keep; b0 *= keep
+            }
             val lit = s.strength * sh
-            val f = (ambient + 1.6f * lit) * keep
+            val f = ambient + 1.6f * lit
             val glow = 22f * lit
-            rgb(c.red8 * f * (1 + (cr - 1) * lit * 2) + glow * cr, c.green8 * f * (1 + (cg - 1) * lit * 2) + glow * cg, c.blue8 * f * (1 + (cb - 1) * lit * 2) + glow * cb)
+            rgb(r0 * f * (1 + (cr - 1) * lit * 2) + glow * cr, g0 * f * (1 + (cg - 1) * lit * 2) + glow * cg, b0 * f * (1 + (cb - 1) * lit * 2) + glow * cb)
         }
     }
 
@@ -344,5 +372,10 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
             LabeledSlider("Darken ${(darken * 100).roundToInt()}%", darken, 0f..1f) { darken = it }
             LabeledSlider(if (warmth >= 0) "Warm ${(warmth * 100).roundToInt()}" else "Cool ${(-warmth * 100).roundToInt()}", warmth, -1f..1f) { warmth = it }
         }
+    }
+
+    private companion object {
+        /** The most Remove light ever lifts or lowers a spot (at 100%): ×1.8. */
+        val MAX_LIFT = kotlin.math.ln(1.8f)
     }
 }
