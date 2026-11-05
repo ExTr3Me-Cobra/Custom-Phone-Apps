@@ -84,7 +84,7 @@ fun aiSummary(status: AiRotate.Status, recs: List<AiRotate.Rec>): String {
 }
 
 @Composable
-fun RotateScreen(settings: Settings, onBack: () -> Unit) {
+fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
     val context = LocalContext.current
     val status by AiRotate.status.collectAsState()
     var recs by remember { mutableStateOf<List<AiRotate.Rec>>(emptyList()) }
@@ -145,25 +145,25 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit) {
                         Text("For review (${review.size})", fontFamily = Script, fontSize = 36.sp, color = Rose)
                         Text(
                             if (review.isEmpty()) "Nothing to look at right now."
-                            else "The AI wasn't sure enough about these. Each one shows the AI's best guess: " +
-                                "turn it with the arrows if needed, then tap Save.",
+                            else "The AI wasn't sure enough about these. Review shows them one at a time, full " +
+                                "screen, the way the AI thinks is right (most sure first). Drag round in a circle " +
+                                "to turn a photo; Next saves it as shown.",
                             fontSize = 15.sp, color = Ink2.copy(alpha = 0.8f)
                         )
-                        if (review.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                            OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { it.fix } }) {
-                                Text("Use the AI's guess for all")
+                        if (review.isNotEmpty()) {
+                            Button(onClick = onReview, modifier = Modifier.padding(top = 10.dp)) {
+                                Text("Start review (${review.size})", fontSize = 18.sp)
                             }
-                            OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { 0 } }) {
-                                Text("Leave all as they are")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { it.fix } }) {
+                                    Text("Use the AI's guess for all")
+                                }
+                                OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { 0 } }) {
+                                    Text("Leave all as they are")
+                                }
                             }
                         }
                     }
-                }
-                items(review, key = { "r" + it.uri }) { r ->
-                    PhotoTile(r, initial = r.fix, thumbs = thumbs,
-                        caption = (if (r.cameraDisagrees) "Camera and AI disagree. " else "") +
-                            "AI: ${turnText(r.fix)} · ${(r.certainty * 100).roundToInt()}% sure",
-                    ) { deg -> AiRotate.decide(context, listOf(r.uri)) { deg } }
                 }
 
                 item(span = { GridItemSpan(maxLineSpan) }) {

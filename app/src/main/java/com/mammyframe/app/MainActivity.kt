@@ -36,7 +36,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
-enum class Screen { HOME, SLIDESHOW, BLACK, ROTATE }
+enum class Screen { HOME, SLIDESHOW, BLACK, ROTATE, REVIEW }
 
 /** How long the menu stays up after tapping the black screen, before it goes black again. */
 private const val BLACK_RETURN_MS = 60_000L
@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enter(phase: Phase) {
-        if (screen == Screen.ROTATE) return // finish what you're doing first; see the idle timer below
+        if (screen == Screen.ROTATE || screen == Screen.REVIEW) return // finish what you're doing first; see the idle timer below
         dialog = HomeDialog.NONE
         when (phase) {
             Phase.ON -> if (screen != Screen.SLIDESHOW) {
@@ -189,7 +189,7 @@ class MainActivity : ComponentActivity() {
 
         // Left on the AI rotate screen: go back to the frame (slideshow if it's that time).
         LaunchedEffect(screen, lastTouch, resumed) {
-            if (screen != Screen.ROTATE || !resumed) return@LaunchedEffect
+            if ((screen != Screen.ROTATE && screen != Screen.REVIEW) || !resumed) return@LaunchedEffect
             val wait = ROTATE_IDLE_MS - (SystemClock.elapsedRealtime() - lastTouch)
             if (wait > 0) delay(wait)
             screen = Screen.HOME
@@ -210,7 +210,7 @@ class MainActivity : ComponentActivity() {
             photoCount = if (settings.folderUri == null) null else Photos.list(this@MainActivity, settings.folderUri).size
         }
 
-        BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+        BackHandler(enabled = screen != Screen.HOME) { screen = if (screen == Screen.REVIEW) Screen.ROTATE else Screen.HOME }
 
         MaterialTheme(colorScheme = lightColorScheme(primary = Rose, secondary = Rose)) {
             when (screen) {
@@ -229,7 +229,8 @@ class MainActivity : ComponentActivity() {
                 Screen.SLIDESHOW -> androidx.compose.runtime.key(slideshowRun) {
                     SlideshowScreen(settings) { screen = Screen.HOME }
                 }
-                Screen.ROTATE -> RotateScreen(settings) { screen = Screen.HOME }
+                Screen.ROTATE -> RotateScreen(settings, onBack = { screen = Screen.HOME }, onReview = { screen = Screen.REVIEW })
+                Screen.REVIEW -> ReviewScreen(settings) { screen = Screen.ROTATE }
                 Screen.BLACK -> Box(
                     Modifier
                         .fillMaxSize()
