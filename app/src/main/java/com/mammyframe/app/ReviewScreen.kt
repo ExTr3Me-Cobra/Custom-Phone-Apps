@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -179,20 +180,25 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp)
             )
 
-            // Translucent Back and Next buttons at the bottom. Next saves the photo as it's shown
-            // now (the AI's turn, or yours); Back goes to the photo before.
-            Row(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Bottom row: turn 90° (left), Back (middle), Next (right). Next saves the photo as it's
+            // shown now (the AI's turn, or yours); Back goes to the photo before.
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
+                Pill(enabled = !spinning, dim = false, modifier = Modifier.align(Alignment.CenterStart), onClick = {
+                    val from = angle
+                    val to = (from / 90f).roundToInt() * 90f + 90f
+                    scope.launch { animate(from, to, animationSpec = spring(dampingRatio = 0.8f)) { v, _ -> angle = v } }
+                }) {
+                    GlyphIcon(Glyph.TURN_RIGHT, Color.White.copy(alpha = 0.9f), Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("90°", color = Color.White.copy(alpha = 0.9f), fontSize = 22.sp)
+                }
                 val canBack = index > 0
-                Pill(enabled = canBack && !spinning, dim = !canBack, onClick = { index-- }) {
+                Pill(enabled = canBack && !spinning, dim = !canBack, modifier = Modifier.align(Alignment.Center), onClick = { index-- }) {
                     GlyphIcon(Glyph.BACK, Color.White.copy(alpha = if (canBack) 0.9f else 0.3f), Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Back", color = Color.White.copy(alpha = if (canBack) 0.9f else 0.3f), fontSize = 22.sp)
                 }
-                Pill(enabled = !spinning, dim = false, onClick = {
+                Pill(enabled = !spinning, dim = false, modifier = Modifier.align(Alignment.CenterEnd), onClick = {
                     val deg = (((angle / 90f).roundToInt() * 90) % 360 + 360) % 360
                     chosen[current.uri] = deg
                     AiRotate.decide(context, listOf(current.uri)) { deg }
@@ -229,14 +235,16 @@ fun ReviewScreen(settings: Settings, onBack: () -> Unit) {
 private class Shown(val bmp: Bitmap, val onDisk: Int, val stamp: String)
 
 @Composable
-private fun Pill(enabled: Boolean, dim: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun Pill(
+    enabled: Boolean, dim: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit, content: @Composable () -> Unit,
+) {
     Row(
-        Modifier
+        modifier
             .clip(RoundedCornerShape(50))
             .background(Color.Black.copy(alpha = if (dim) 0.15f else 0.35f))
             .border(1.5.dp, Color.White.copy(alpha = if (dim) 0.15f else 0.45f), RoundedCornerShape(50))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 26.dp, vertical = 14.dp),
+            .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) { content() }
 }
