@@ -66,6 +66,6 @@ jobs:
           name: Motion Dots (build ${{ github.run_number }})
           body: |
             On your phone, tap **MotionDots.apk** below to download it, then open it to install.
-            See the README on the claude/motion-cues-app branch for setup steps.
+            See the README on the claude/motion-dots-app branch for setup steps.
           files: MotionDots.apk
           make_latest: false
