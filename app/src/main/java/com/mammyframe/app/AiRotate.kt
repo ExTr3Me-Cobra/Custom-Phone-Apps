@@ -130,51 +130,88 @@ object AiRotate {
         return File(File(dir(c), "originals").apply { mkdirs() }, h)
     }
 
+    private var db: RotateDb? = null
+    private fun db(c: Context) = db ?: RotateDb(c.applicationContext).also { db = it }
+    private fun prefs(c: Context) = c.getSharedPreferences("airotate", Context.MODE_PRIVATE)
+
     private fun ensureLoaded(c: Context) {
         if (_status.value.loaded) return
+        importOldFile(c)
+        db(c).loadAll().forEach { records[it.uri] = it }
+        val p = prefs(c)
+        _status.update {
+            it.copy(
+                loaded = true,
+                threshold = p.getFloat("threshold", it.threshold),
+                rotationsOn = p.getBoolean("rotationsOn", it.rotationsOn),
+                reviewShowsAi = p.getBoolean("reviewShowsAi", it.reviewShowsAi),
+                askBeforeTurning = p.getBoolean("askBeforeTurning", it.askBeforeTurning),
+            )
+        }
+    }
+
+    /** Versions before the database kept everything in one file; move it over once. */
+    private fun importOldFile(c: Context) {
         val f = File(dir(c), "state.json")
+        if (!f.exists()) return
         runCatching {
             val o = JSONObject(f.readText())
             val arr = o.getJSONArray("records")
-            for (i in 0 until arr.length()) {
-                val j = arr.getJSONObject(i)
-                val r = Rec(
-                    uri = j.getString("uri"), folder = j.getString("folder"), name = j.optString("name"),
-                    mime = j.optString("mime"), modified = j.getLong("modified"), size = j.getLong("size"),
-                    origExif = j.getInt("origExif"), fix = j.getInt("fix"), certainty = j.getDouble("certainty").toFloat(),
-                    decision = j.getInt("decision"), applied = j.getInt("applied"),
-                    method = Method.valueOf(j.getString("method")),
-                )
-                records[r.uri] = r
+            db(c).batch {
+                for (i in 0 until arr.length()) {
+                    val j = arr.getJSONObject(i)
+                    db(c).put(Rec(
+                        uri = j.getString("uri"), folder = j.getString("folder"), name = j.optString("name"),
+                        mime = j.optString("mime"), modified = j.getLong("modified"), size = j.getLong("size"),
+                        origExif = j.getInt("origExif"), fix = j.getInt("fix"), certainty = j.getDouble("certainty").toFloat(),
+                        decision = j.getInt("decision"), applied = j.getInt("applied"),
+                        method = Method.valueOf(j.getString("method")),
+                    ))
+                }
             }
-            _status.update {
-                it.copy(threshold = o.getDouble("threshold").toFloat(), rotationsOn = o.getBoolean("rotationsOn"),
-                    reviewShowsAi = o.optBoolean("reviewShowsAi", true),
-                    askBeforeTurning = o.optBoolean("askBeforeTurning", false))
-            }
+            prefs(c).edit()
+                .putFloat("threshold", o.getDouble("threshold").toFloat())
+                .putBoolean("rotationsOn", o.getBoolean("rotationsOn"))
+                .putBoolean("reviewShowsAi", o.optBoolean("reviewShowsAi", true))
+                .putBoolean("askBeforeTurning", o.optBoolean("askBeforeTurning", false))
+                .apply()
         }
-        _status.update { it.copy(loaded = true) }
+        f.delete()
     }
 
-    private fun save(c: Context) {
-        val arr = JSONArray()
-        records.values.forEach { r ->
-            arr.put(JSONObject().apply {
-                put("uri", r.uri); put("folder", r.folder); put("name", r.name); put("mime", r.mime)
-                put("modified", r.modified); put("size", r.size); put("origExif", r.origExif)
-                put("fix", r.fix); put("certainty", r.certainty.toDouble()); put("decision", r.decision)
-                put("applied", r.applied); put("method", r.method.name)
-            })
-        }
+    private fun saveSettings(c: Context) {
         val s = _status.value
-        val o = JSONObject().put("threshold", s.threshold.toDouble()).put("rotationsOn", s.rotationsOn)
-            .put("reviewShowsAi", s.reviewShowsAi).put("askBeforeTurning", s.askBeforeTurning).put("records", arr)
-        val tmp = File(dir(c), "state.json.tmp")
-        tmp.writeText(o.toString())
-        tmp.renameTo(File(dir(c), "state.json"))
+        prefs(c).edit()
+            .putFloat("threshold", s.threshold)
+            .putBoolean("rotationsOn", s.rotationsOn)
+            .putBoolean("reviewShowsAi", s.reviewShowsAi)
+            .putBoolean("askBeforeTurning", s.askBeforeTurning)
+            .apply()
     }
 
-    private fun changed() = _status.update { it.copy(revision = it.revision + 1) }
+    /** Remembers one photo (in memory and in the database). */
+    private fun put(c: Context, r: Rec) {
+        records[r.uri] = r
+        db(c).put(r)
+    }
+
+    private fun forget(c: Context, uri: String) {
+        records.remove(uri)
+        db(c).delete(uri)
+    }
+
+    private fun changed() {
+        lastNotice = System.currentTimeMillis()
+        _status.update { it.copy(revision = it.revision + 1) }
+    }
+
+    /** While checking, tell the screens at most about once a second (they re-sort the whole list). */
+    private var lastNotice = 0L
+    private fun changedSoon(done: Int) {
+        if (System.currentTimeMillis() - lastNotice < 1000) return
+        lastNotice = System.currentTimeMillis()
+        _status.update { it.copy(done = done, revision = it.revision + 1) }
+    }
 
     // ---------------------------------------------------------------- reading, for the screens
 
@@ -204,7 +241,7 @@ object AiRotate {
     fun setReviewShowsAi(c: Context, on: Boolean) = scope.launch {
         ensureLoaded(c)
         _status.update { it.copy(reviewShowsAi = on) }
-        save(c.applicationContext)
+        saveSettings(c.applicationContext)
         changed()
     }
 
@@ -234,22 +271,22 @@ object AiRotate {
         ensureLoaded(app)
         for (u in uris) {
             val r = records[u] ?: continue
-            records[u] = r.copy(decision = ((choose(r) % 360) + 360) % 360)
-            writeFile(app, records[u]!!)
+            val chosen = r.copy(decision = ((choose(r) % 360) + 360) % 360)
+            put(app, chosen)
+            writeFile(app, chosen)
         }
-        save(app)
         changed()
     }
 
     private suspend fun syncAll(c: Context) {
+        saveSettings(c)
+        // Only photos that are actually different from what they should be are touched.
+        val toChange = records.values.filter { desired(it) != it.applied }
+        if (toChange.isEmpty()) { changed(); return }
         _status.update { it.copy(saving = true) }
         try {
-            for (u in records.keys.toList()) {
-                val r = records[u] ?: continue
-                if (desired(r) != r.applied) writeFile(c, r)
-            }
+            db(c).batch { for (r in toChange) writeFile(c, r) }
         } finally {
-            save(c)
             _status.update { it.copy(saving = false) }
             changed()
         }
@@ -275,8 +312,9 @@ object AiRotate {
         ContextCompat.startForegroundService(app, Intent(app, RotateService::class.java))
     }
 
-    fun stop() {
+    fun stop(message: String? = null) {
         scanJob?.cancel()
+        if (message != null) _status.update { it.copy(message = message) }
     }
 
     val isRunning get() = scanJob?.isActive == true
@@ -289,9 +327,10 @@ object AiRotate {
             _status.update { it.copy(total = files.size) }
             // Forget photos that are no longer in the folder.
             val present = files.map { it.uri.toString() }.toSet()
-            records.values.filter { it.folder == folder && it.uri !in present }.forEach { records.remove(it.uri) }
+            val gone = records.values.filter { it.folder == folder && it.uri !in present }
+            if (gone.isNotEmpty()) db(c).batch { gone.forEach { forget(c, it.uri) } }
+            Photos.remember(c, folder, files.map { it.uri })
 
-            var sinceSave = 0
             for ((i, f) in files.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 val key = f.uri.toString()
@@ -302,21 +341,19 @@ object AiRotate {
                     if (model == null) model = withContext(Dispatchers.Default) { OrientationModel.open(c) }
                     val rec = analyze(c, model, f, folder)
                     if (rec != null) {
-                        records[key] = rec
+                        put(c, rec)
                         writeFile(c, rec)
-                        changed()
                     }
-                    if (++sinceSave >= 10) { save(c); sinceSave = 0 }
                 }
-                _status.update { it.copy(done = i + 1) }
+                changedSoon(i + 1)
             }
+            _status.update { it.copy(done = files.size) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             _status.update { it.copy(message = "Something went wrong while checking: ${e.message ?: e.javaClass.simpleName}") }
         } finally {
             model?.close()
-            save(c)
             _status.update { it.copy(running = false) }
             changed()
         }
@@ -394,14 +431,14 @@ object AiRotate {
             // Couldn't save to this file (some storage won't allow it): turn it inside the app instead.
             // First make sure the file is back as it was, if part of a change got through.
             r = r.copy(method = Method.APP, applied = 0)
-            records[r.uri] = r
+            put(c, r)
             writeFile(c, r)
             return
         }
         // Remember the file's new date and size, so it isn't mistaken for a changed photo.
         val (mod, size) = stamp(c, uri) ?: (r.modified to r.size)
-        records[r.uri] = r.copy(applied = want, modified = if (r.method == Method.APP) r.modified else mod,
-            size = if (r.method == Method.APP) r.size else size)
+        put(c, r.copy(applied = want, modified = if (r.method == Method.APP) r.modified else mod,
+            size = if (r.method == Method.APP) r.size else size))
     }
 
     private fun stamp(c: Context, uri: Uri): Pair<Long, Long>? = runCatching {

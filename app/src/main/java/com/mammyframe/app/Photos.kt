@@ -12,8 +12,69 @@ import kotlinx.coroutines.withContext
 data class PhotoFile(val uri: Uri, val name: String, val mime: String, val modified: Long, val size: Long)
 
 object Photos {
-    /** Every picture in the chosen folder and its subfolders. */
-    suspend fun list(c: Context, folderUri: String?): List<Uri> = files(c, folderUri).map { it.uri }
+    /** Every picture in the chosen folder and its subfolders (a fresh look; also saved for next time). */
+    suspend fun list(c: Context, folderUri: String?): List<Uri> {
+        val uris = files(c, folderUri).map { it.uri }
+        if (folderUri != null) remember(c, folderUri, uris)
+        return uris
+    }
+
+    // ------------------------------------------------ the saved list of photos
+    // Looking through tens of thousands of photos takes a while, so the last list is kept and
+    // used straight away; a fresh look only happens when the saved one is getting old.
+
+    private const val FRESH_MS = 60 * 60 * 1000L
+    private val saved = HashMap<String, Pair<Long, List<Uri>>>()
+    private val _counts = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** How many photos each folder had last time it was looked through. */
+    val counts: kotlinx.coroutines.flow.StateFlow<Map<String, Int>> = _counts
+
+    private fun listFile(c: Context, folder: String): java.io.File {
+        val h = java.security.MessageDigest.getInstance("SHA-1").digest(folder.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return java.io.File(java.io.File(c.filesDir, "photolists").apply { mkdirs() }, "$h.txt")
+    }
+
+    @Synchronized
+    fun remember(c: Context, folder: String, uris: List<Uri>) {
+        saved[folder] = System.currentTimeMillis() to uris
+        _counts.value = _counts.value + (folder to uris.size)
+        runCatching {
+            val f = listFile(c, folder)
+            val tmp = java.io.File(f.path + ".tmp")
+            tmp.bufferedWriter().use { w -> uris.forEach { w.write(it.toString()); w.write("\n") } }
+            tmp.renameTo(f)
+        }
+    }
+
+    /** The saved list and when it was made, or null if this folder was never looked through. */
+    @Synchronized
+    private fun savedList(c: Context, folder: String): Pair<Long, List<Uri>>? {
+        saved[folder]?.let { return it }
+        val f = listFile(c, folder)
+        if (!f.exists()) return null
+        val uris = runCatching { f.readLines().filter { it.isNotBlank() }.map(Uri::parse) }.getOrNull() ?: return null
+        val entry = f.lastModified() to uris
+        saved[folder] = entry
+        _counts.value = _counts.value + (folder to uris.size)
+        return entry
+    }
+
+    /**
+     * The photos to show: the saved list straight away if there is one ([refresh] is then true
+     * when it's over an hour old and worth looking again), otherwise a fresh look.
+     */
+    suspend fun listQuick(c: Context, folderUri: String?): Pair<List<Uri>, Boolean> = withContext(Dispatchers.IO) {
+        if (folderUri == null) return@withContext emptyList<Uri>() to false
+        val s = savedList(c, folderUri)
+        if (s == null || s.second.isEmpty()) list(c, folderUri) to false
+        else s.second to (System.currentTimeMillis() - s.first > FRESH_MS)
+    }
+
+    /** Makes sure [counts] has this folder, looking through it only if it was never looked through. */
+    suspend fun ensureCount(c: Context, folderUri: String?) = withContext(Dispatchers.IO) {
+        if (folderUri != null && savedList(c, folderUri) == null) list(c, folderUri)
+    }
 
     suspend fun files(c: Context, folderUri: String?): List<PhotoFile> = withContext(Dispatchers.IO) {
         if (folderUri == null) return@withContext emptyList()
@@ -29,7 +90,7 @@ object Photos {
                 DocumentsContract.Document.COLUMN_LAST_MODIFIED,
                 DocumentsContract.Document.COLUMN_SIZE,
             )
-            while (pending.isNotEmpty() && out.size < 50_000) {
+            while (pending.isNotEmpty()) {
                 val parent = pending.removeFirst()
                 val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parent)
                 c.contentResolver.query(children, cols, null, null, null)?.use { cur ->

@@ -10,6 +10,8 @@
     <!-- AI rotate keeps checking photos in the background, with a progress notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -33,7 +35,11 @@
         <service
             android:name=".RotateService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Checking which way up the photos in a folder are, on the device (can take hours)" />
+        </service>
 
         <receiver android:name=".ScheduleReceiver" android:exported="false" />
 

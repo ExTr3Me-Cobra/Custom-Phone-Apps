@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf(Screen.HOME)
     private var slideshowRun by mutableIntStateOf(0)
     private var settings by mutableStateOf(Settings())
-    private var photoCount by mutableStateOf<Int?>(null)
     private var dialog by mutableStateOf(HomeDialog.NONE)
     private var resumed by mutableStateOf(false)
     private var resumeTick by mutableIntStateOf(0)
@@ -140,7 +139,6 @@ class MainActivity : ComponentActivity() {
             contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
                 ?.use { if (it.moveToFirst()) it.getString(0) else null }
         }.getOrNull()
-        photoCount = null
         update(settings.copy(folderUri = uri.toString(), folderName = name ?: "Photos"))
     }
 
@@ -206,9 +204,10 @@ class MainActivity : ComponentActivity() {
             aiText = aiSummary(aiStatus, AiRotate.recordsIn(this@MainActivity, settings.folderUri))
         }
 
-        LaunchedEffect(settings.folderUri, resumeTick) {
-            photoCount = if (settings.folderUri == null) null else Photos.list(this@MainActivity, settings.folderUri).size
-        }
+        // The photo count comes from the saved list of photos; the folder is only looked through
+        // if it never has been (the slideshow and AI rotate keep the list up to date).
+        val counts by Photos.counts.collectAsState()
+        LaunchedEffect(settings.folderUri) { Photos.ensureCount(this@MainActivity, settings.folderUri) }
 
         BackHandler(enabled = screen != Screen.HOME) { screen = if (screen == Screen.REVIEW) Screen.ROTATE else Screen.HOME }
 
@@ -216,7 +215,7 @@ class MainActivity : ComponentActivity() {
             when (screen) {
                 Screen.HOME -> HomeScreen(
                     settings = settings,
-                    photoCount = photoCount,
+                    photoCount = settings.folderUri?.let { counts[it] },
                     dialog = dialog,
                     onDialog = { dialog = it; lastTouch = SystemClock.elapsedRealtime() },
                     onChooseFolder = { runCatching { picker.launch(settings.folderUri?.let(Uri::parse)) } },

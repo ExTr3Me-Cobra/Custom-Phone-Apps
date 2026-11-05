@@ -129,7 +129,11 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
     // Find the photos, then show the first one.
     LaunchedEffect(Unit) {
         appTurns = runCatching { AiRotate.appTurns(context) }.getOrDefault(emptyMap())
-        val list = Playlist(Photos.list(context, settings.folderUri))
+        // Start straight away from the saved list of photos; if it's getting old, look through
+        // the folder again in the background so new photos are in the next slideshow.
+        val (uris, refresh) = Photos.listQuick(context, settings.folderUri)
+        val list = Playlist(uris)
+        if (refresh) scope.launch { runCatching { Photos.list(context, settings.folderUri) } }
         playlist = list
         if (!list.isEmpty) go(1)
     }

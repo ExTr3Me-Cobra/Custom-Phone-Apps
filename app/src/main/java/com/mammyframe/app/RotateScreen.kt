@@ -112,7 +112,12 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
         else AiRotate.start(context, settings.folderUri)
     }
 
-    val thumbs = remember { LruCache<String, Bitmap>(150) }
+    // Thumbnails are limited by memory used (about 32 MB), not by how many there are.
+    val thumbs = remember {
+        object : LruCache<String, Bitmap>(32 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().background(Color(0xFFFFF9F2))

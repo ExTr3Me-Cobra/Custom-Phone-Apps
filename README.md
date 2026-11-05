@@ -53,6 +53,17 @@ How photos are saved:
   the app until it's undone.
 - **HEIC and other kinds** that Android can't save: turned inside Mammy Frame only.
 
+Built for big folders (tens of thousands of photos):
+- Each photo's result is saved on its own in a small database, so nothing is rewritten over
+  and over, and stopping halfway loses nothing. "Check new photos" carries on where it stopped.
+- It keeps the tablet working while checking, even if the screen goes off. On Android 14 and
+  newer it isn't subject to Android's daily time limit for background work.
+- The list of photos is saved, so the home screen and slideshow start straight away instead of
+  looking through the whole folder each time. The slideshow quietly looks again if the saved
+  list is over an hour old, so new photos show up next time.
+- Thumbnails are limited to about 32 MB of memory, and the screens update at most once a second
+  while checking.
+
 Saving needs permission to change the folder. If the folder was chosen before this version,
 choose it again (Photos folder card) and Mammy Frame will ask.
 
