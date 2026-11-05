@@ -132,23 +132,29 @@ jobs:
           ls -la ../ViperVision*.apk
 
       - name: Publish download on the Releases page
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: vipervision-build-${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          name: Viper Vision (build ${{ github.run_number }})
-          body: |
-            On your phone, tap **ViperVision.apk** below to download it, then open it to install.
-            It downloads its AI models (about 2 GB) itself, once.
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: vipervision-build-${{ github.run_number }}
+        run: |
+          cat > notes.md <<'NOTES'
+          On your phone, tap **ViperVision.apk** below to download it, then open it to install.
+          It downloads its AI models (about 2 GB) itself, once.
 
-            When this build was asked for with the all-in-one, **ViperVision-AllInOne.apk** (added
-            a few minutes after the build) is the same app with every AI model inside it, for a fresh install with no internet afterwards: it unpacks the
-            models, then switches itself to the normal version (tap Update when Android asks).
+          When this build was asked for with the all-in-one, **ViperVision-AllInOne.apk** (added
+          a few minutes after the build) is the same app with every AI model inside it, for a fresh install with no internet afterwards: it unpacks the
+          models, then switches itself to the normal version (tap Update when Android asks).
 
-            Fossify Gallery (GPL-3.0) for browsing photos, with Viper Vision's own photo and video
-            editor (built on Image Toolbox's engines, Apache-2.0).
-          files: ViperVision.apk
-          make_latest: false
+          Fossify Gallery (GPL-3.0) for browsing photos, with Viper Vision's own photo and video
+          editor (built on Image Toolbox's engines, Apache-2.0).
+          NOTES
+          # A rerun of the same build replaces its download.
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" ViperVision.apk --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" ViperVision.apk --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+              --title "Viper Vision (build ${{ github.run_number }})" --notes-file notes.md --latest=false
+          fi
 
   # The all-in-one APK: the APK just built plus every AI model from the "vipervision-ai-models"
   # release (compressed, about 2 GB → 1.7 GB) and a copy of the normal APK, which the app installs
