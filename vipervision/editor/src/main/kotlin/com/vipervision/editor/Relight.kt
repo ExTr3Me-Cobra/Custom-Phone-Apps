@@ -73,7 +73,7 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
 
     private val slope = FloatArray(w * h)
 
-    /** The photo's own lighting at each depth-map pixel (fitted to its surfaces), for removing it. */
+    /** Per depth-map pixel, how much to brighten or darken it to take out the photo's own lighting (full strength). */
     private val existing: FloatArray
 
     init {
@@ -129,44 +129,64 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
     }
 
     /**
-     * The photo's own lighting: its brightness fitted as a + b·(surface direction) over the whole
-     * photo (one soft light and fill, the usual case), which follows shape but not colours.
+     * How much each depth-map pixel is brightened (or darkened) to take out the photo's own
+     * lighting, at full strength. The lighting is fitted as a + b·(surface direction), mostly on
+     * what's near (the subject, not the room), with no light from behind; then only its local
+     * part is kept (across a cheek, a muscle, an arm), so whole areas, like a face shaded by a cap,
+     * keep their brightness instead of being lifted as if by a new light.
      */
     private fun fitLighting(): FloatArray {
         val small = Bitmap.createScaledBitmap(preview, w, h, true)
         val px = IntArray(w * h)
         small.getPixels(px, 0, w, 0, 0, w, h)
         if (small !== preview) small.recycle()
-        val m = Array(4) { DoubleArray(4) }
-        val v = DoubleArray(4)
-        for (i in 0 until w * h) {
-            val c = px[i]
-            val l = (0.299 * c.red8 + 0.587 * c.green8 + 0.114 * c.blue8) / 255.0
-            if (l < 0.03 || l > 0.97) continue
-            val f = doubleArrayOf(1.0, nx[i].toDouble(), ny[i].toDouble(), nz[i].toDouble())
-            for (a in 0..3) {
-                v[a] += f[a] * l
-                for (b in 0..3) m[a][b] += f[a] * f[b]
-            }
+        val near = z.copyOf().apply { sort() }[w * h / 2]
+        val lum = DoubleArray(w * h) { i -> (0.299 * px[i].red8 + 0.587 * px[i].green8 + 0.114 * px[i].blue8) / 255.0 }
+        val weight = DoubleArray(w * h) { i ->
+            if (lum[i] < 0.03 || lum[i] > 0.97) 0.0 else ((z[i] - near) / 0.125f).coerceIn(0.05f, 1f).toDouble()
         }
-        val c = solve4(m, v) ?: return FloatArray(w * h) { 1f }
-        val s = FloatArray(w * h) { i -> (c[0] + c[1] * nx[i] + c[2] * ny[i] + c[3] * nz[i]).toFloat() }
-        return boxBlur(boxBlur(s, w, h, 2), w, h, 2)
+        fun fit(terms: Int): DoubleArray? {
+            val m = Array(terms) { DoubleArray(terms) }
+            val v = DoubleArray(terms)
+            for (i in 0 until w * h) {
+                val k = weight[i]
+                if (k <= 0.0) continue
+                val f = doubleArrayOf(1.0, nx[i].toDouble(), ny[i].toDouble(), nz[i].toDouble())
+                for (a in 0 until terms) {
+                    v[a] += k * f[a] * lum[i]
+                    for (b in 0 until terms) m[a][b] += k * f[a] * f[b]
+                }
+            }
+            return solve(m, v)
+        }
+        var c = fit(4) ?: return FloatArray(w * h) { 1f }
+        // Facing the camera can't make a surface darker (that would be light from behind).
+        if (c[3] < 0) c = (fit(3) ?: return FloatArray(w * h) { 1f }).let { doubleArrayOf(it[0], it[1], it[2], 0.0) }
+        val shading = boxBlur(boxBlur(FloatArray(w * h) { i -> (c[0] + c[1] * nx[i] + c[2] * ny[i] + c[3] * nz[i]).toFloat() }, w, h, 2), w, h, 2)
+        var sum = 0.0
+        var wsum = 0.0
+        for (i in 0 until w * h) { sum += shading[i] * weight[i]; wsum += weight[i] }
+        val mean = if (wsum > 0) (sum / wsum).toFloat() else shading.average().toFloat()
+        val logRatio = FloatArray(w * h) { i -> kotlin.math.ln((mean / max(1e-3f, shading[i])).coerceIn(0.6f, 2.2f)) }
+        val r = max(2, (max(w, h) * 0.075f).roundToInt())
+        val broad = boxBlur(boxBlur(logRatio, w, h, r), w, h, r)
+        return FloatArray(w * h) { i -> kotlin.math.exp(logRatio[i] - broad[i]).coerceIn(0.8f, 1.35f) }
     }
 
-    /** Solves the 4×4 system [m]·x = [v] (null if it can't be). */
-    private fun solve4(m: Array<DoubleArray>, v: DoubleArray): DoubleArray? {
-        val a = Array(4) { r -> DoubleArray(5) { c -> if (c < 4) m[r][c] else v[r] } }
-        for (col in 0..3) {
-            val p = (col..3).maxBy { kotlin.math.abs(a[it][col]) }
+    /** Solves the small system [m]·x = [v] (null if it can't be). */
+    private fun solve(m: Array<DoubleArray>, v: DoubleArray): DoubleArray? {
+        val n = v.size
+        val a = Array(n) { r -> DoubleArray(n + 1) { c -> if (c < n) m[r][c] else v[r] } }
+        for (col in 0 until n) {
+            val p = (col until n).maxBy { kotlin.math.abs(a[it][col]) }
             if (kotlin.math.abs(a[p][col]) < 1e-9) return null
             val t = a[p]; a[p] = a[col]; a[col] = t
-            for (r in 0..3) if (r != col) {
+            for (r in 0 until n) if (r != col) {
                 val f = a[r][col] / a[col][col]
-                for (c in col..4) a[r][c] -= f * a[col][c]
+                for (c in col..n) a[r][c] -= f * a[col][c]
             }
         }
-        return DoubleArray(4) { a[it][4] / a[it][it] }
+        return DoubleArray(n) { a[it][n] / a[it][it] }
     }
 
     /** How lit each depth-map pixel is (0..1). */
@@ -202,8 +222,7 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         // depth map's size, then enlarged so they follow the photo's own edges (a guided filter
         // on a copy of at most 1600 px), so nothing spills past the outline of things.
         val shade = shading(s)
-        val mean = existing.average().toFloat()
-        val ratio = FloatArray(w * h) { i -> (mean / max(1e-3f, existing[i])).coerceIn(0.6f, 2.2f).let { r -> if (s.remove <= 0f) 1f else kotlin.math.exp(kotlin.math.ln(r) * s.remove) } }
+        val ratio = FloatArray(w * h) { i -> if (s.remove <= 0f) 1f else kotlin.math.exp(kotlin.math.ln(existing[i]) * s.remove) }
         val guide = image.scaledToFit(1600)
         val gw = guide.width
         val gh = guide.height
