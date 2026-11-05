@@ -20,10 +20,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Every build must be signed with the same key, or Android refuses to install it as an update.
+      # The key is the repository secret WEBSHORTCUTS_KEYSTORE; a build never makes one.
+      - name: Signing key from the secret
+        env:
+          KEYSTORE_B64: ${{ secrets.WEBSHORTCUTS_KEYSTORE }}
+        run: |
+          [ -n "$KEYSTORE_B64" ] || { echo "::error::The WEBSHORTCUTS_KEYSTORE secret is missing."; exit 1; }
+          mkdir -p signing && echo "$KEYSTORE_B64" | base64 -d > signing/webshortcuts.keystore
+          keytool -list -v -keystore signing/webshortcuts.keystore -storepass android | grep SHA256
+
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease --stacktrace -PsignKeystore=$PWD/signing/webshortcuts.keystore
           cp app/build/outputs/apk/release/app-release.apk WebShortcuts.apk
 
       - uses: actions/upload-artifact@v4

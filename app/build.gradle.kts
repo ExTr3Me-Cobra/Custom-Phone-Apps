@@ -14,8 +14,22 @@ android {
         applicationId = "com.webshortcuts.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = "1.0.$versionCode"
+    }
+
+    signingConfigs {
+        // The build server passes the same keystore every time (the WEBSHORTCUTS_KEYSTORE secret), so new versions
+        // install as updates.
+        val ks = providers.gradleProperty("signKeystore").orNull
+        if (ks != null) {
+            create("stable") {
+                storeFile = file(ks)
+                storePassword = "android"
+                keyAlias = "webshortcuts"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
@@ -26,10 +40,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Personal app: sign release builds with the debug key so they install without
-            // setting up a keystore. Android Studio keeps that key on your PC, so new builds
-            // install over old ones.
-            signingConfig = signingConfigs.getByName("debug")
+            // The permanent key from the build server; a local build without it uses the debug key.
+            signingConfig = signingConfigs.findByName("stable") ?: signingConfigs.getByName("debug")
         }
     }
 
