@@ -345,38 +345,47 @@ fun SettingsScreen() {
                     androidx.compose.material3.Switch(p.devResearch, { set(p.copy(devResearch = it)) })
                 }
                 // Which standards rank you: V1 (normal), V2 (trial) or Gemini-favored. One at a time.
-                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devV2 = false, devGemini = false, devPersonal = false)) }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devV2 = false, devGemini = false, devPersonal = false, devPurged = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("V1 rankings")
                         Text("The normal standards everyone gets.", color = Sub, fontSize = 13.sp)
                     }
-                    androidx.compose.material3.Switch(!p.devV2 && !p.devGemini && !p.devPersonal, { set(p.copy(devV2 = false, devGemini = false, devPersonal = false)) })
+                    androidx.compose.material3.Switch(!p.devV2 && !p.devGemini && !p.devPersonal && !p.devPurged, { set(p.copy(devV2 = false, devGemini = false, devPersonal = false, devPurged = false)) })
                 }
-                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devV2 = !p.devV2, devGemini = false, devPersonal = false)) }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devV2 = !p.devV2, devGemini = false, devPersonal = false, devPurged = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("V2 rankings (trial)")
                         Text("Fixes light lifters' standards; women's pull-ups, push-ups, leg press and lat pulldown; kettlebell front squat and Tate press units; squat, bench and dumbbell press variants; counts at most 12 reps on machine and isolation lifts; your own tests count as one vote.",
                             color = Sub, fontSize = 13.sp)
                     }
-                    androidx.compose.material3.Switch(p.devV2, { set(p.copy(devV2 = it, devGemini = false, devPersonal = false)) })
+                    androidx.compose.material3.Switch(p.devV2, { set(p.copy(devV2 = it, devGemini = false, devPersonal = false, devPurged = false)) })
                 }
-                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devGemini = !p.devGemini, devV2 = false, devPersonal = false)) }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devGemini = !p.devGemini, devV2 = false, devPersonal = false, devPurged = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Favor Gemini's data (trial)")
                         Text("Ranks with standards built mostly (80%) from the Gemini database's own numbers, research lifts included. Stars stay the same; bodyweight-rep moves don't change.",
                             color = Sub, fontSize = 13.sp)
                     }
-                    androidx.compose.material3.Switch(p.devGemini, { set(p.copy(devGemini = it, devV2 = false, devPersonal = false)) })
+                    androidx.compose.material3.Switch(p.devGemini, { set(p.copy(devGemini = it, devV2 = false, devPersonal = false, devPurged = false)) })
+                }
+                // PERSONAL-USE (removable): the pre-purge standards (tools/personal/build_purged.py).
+                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devPurged = !p.devPurged, devPersonal = false, devV2 = false, devGemini = false)) }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Purged rankings")
+                        Text("Ranks only with the app's standards from before the October 2026 purge (${StandardsData.purgedCount} exercises). Exercises they don't cover aren't ranked.",
+                            color = Sub, fontSize = 13.sp)
+                    }
+                    androidx.compose.material3.Switch(p.devPurged, { set(p.copy(devPurged = it, devPersonal = false, devV2 = false, devGemini = false)) })
                 }
                 // PERSONAL-USE (removable): see tools/personal/README.md.
-                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devPersonal = !p.devPersonal, devV2 = false, devGemini = false)) }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { set(p.copy(devPersonal = !p.devPersonal, devV2 = false, devGemini = false, devPurged = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Personal-use rankings")
                         Text(if (StandardsData.personalCount == 0) "No personal-use data in this build yet."
                             else "Ranks only with the separate personal-use standards (${StandardsData.personalCount} exercises), including sources that aren't free for commercial use. Exercises they don't cover aren't ranked.",
                             color = Sub, fontSize = 13.sp)
                     }
-                    androidx.compose.material3.Switch(p.devPersonal, { set(p.copy(devPersonal = it, devV2 = false, devGemini = false)) })
+                    androidx.compose.material3.Switch(p.devPersonal, { set(p.copy(devPersonal = it, devV2 = false, devGemini = false, devPurged = false)) })
                 }
                 Row(Modifier.fillMaxWidth().clickable { set(p.copy(devAi = !p.devAi)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -429,7 +438,7 @@ fun SettingsScreen() {
                 }
                 // Replays the first-run welcome; your answers are already filled in and nothing else is reset.
                 GreyButton("Show the welcome screens again") { set(p.copy(onboarded = false)) }
-                GreyButton("Hide developer settings", textColor = Red) { set(p.copy(devUnlocked = false, devAi = false, dev1rm = false, devGemini = false, devV2 = false, devPersonal = false, devResearch = false)) }
+                GreyButton("Hide developer settings", textColor = Red) { set(p.copy(devUnlocked = false, devAi = false, dev1rm = false, devGemini = false, devV2 = false, devPersonal = false, devPurged = false, devResearch = false)) }
                 Spacer(8)
                 Text("Backup log", fontWeight = FontWeight.Bold)
                 Text("What Android's Google backup has done with Loadout. Empty means Android hasn't asked Loadout for a backup yet.",

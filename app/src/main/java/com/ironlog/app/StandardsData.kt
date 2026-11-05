@@ -49,11 +49,15 @@ object StandardsData {
     // PERSONAL-USE (removable): standards from non-commercial sources, kept entirely apart (tools/personal/README.md).
     @Volatile private var personal: List<Std> = emptyList()
     val personalCount get() = personal.size
+    // PERSONAL-USE (removable): the app's standards from before the October 2026 purge (tools/personal/build_purged.py).
+    @Volatile private var purged: List<Std> = emptyList()
+    val purgedCount get() = purged.size
 
     /** The standards in use: normally standards.json (V1); the V2 or Gemini-favored set while that developer setting is on. */
     val all: List<Std> get() = Store.profile.value.let { p ->
         when {
             p.devPersonal -> personal // PERSONAL-USE (removable)
+            p.devPurged -> purged // PERSONAL-USE (removable)
             p.devV2 && v2.isNotEmpty() -> v2
             p.devGemini && gemini.isNotEmpty() -> gemini
             else -> normal
@@ -67,6 +71,7 @@ object StandardsData {
         gemini = load(c, "standards_gemini.json")
         v2 = load(c, "standards_v2.json")
         personal = load(c, "personal/standards_personal.json") // PERSONAL-USE (removable)
+        purged = load(c, "personal/standards_purged.json") // PERSONAL-USE (removable)
     }
 
     private fun load(c: Context, file: String): List<Std> =

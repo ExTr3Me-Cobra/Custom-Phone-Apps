@@ -14,9 +14,14 @@ are ranked (timed holds on seconds); blank rows aren't. `build_personal.py` appl
 of the same file, e.g. weighted-vest calf raises = the barbell calf raise) and turns it into the app's file (see its header for
 the body-weight scaling and stars).
 
+## Purged rankings
+Developer settings → "Purged rankings": the app's standards from before the October 2026 purge, for the 315 exercises
+still in the app. `inputs/purged_tables.json` was recovered from the owner's comparison page; `build_purged.py` writes
+`app/src/main/assets/personal/standards_purged.json`.
+
 ## Files (everything to delete to remove it)
 - `tools/personal/` (this folder: build scripts and fetched inputs)
-- `app/src/main/assets/personal/standards_personal.json`
+- `app/src/main/assets/personal/standards_personal.json` and `standards_purged.json`
 - Code marked `PERSONAL-USE (removable)`: `StandardsData.kt` (the `personal` list and its line in `all`),
   `Model.kt` (`devPersonal`, json key `dper`) and `Profile.kt` (the toggle)
 
