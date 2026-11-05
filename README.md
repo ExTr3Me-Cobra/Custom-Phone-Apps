@@ -31,7 +31,7 @@ Finds sideways and upside-down photos in the chosen folder and turns them the ri
   round in a circle to spin a photo; it snaps to the nearest quarter turn when you let go. The
   see-through **Next** button saves the photo as shown (the AI's turn or yours) and moves on;
   **Back** goes to the photo before, the way you saved it. The tiny ✕ in the top left leaves
-  review. **Use the AI's guess for all** / **Leave all as they are** do the whole list at once.
+  review. Each photo is decided one at a time; there's no "all at once".
 - **Show them turned the AI's way**: on, review photos start the way the AI suggests; off, they
   start the way they are now (original).
 - **Turned photos** (tap Show): turn any photo with the arrows. Each turn is saved straight

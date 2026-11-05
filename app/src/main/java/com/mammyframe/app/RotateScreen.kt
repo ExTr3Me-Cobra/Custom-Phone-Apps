@@ -172,14 +172,6 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
                             Button(onClick = onReview, modifier = Modifier.padding(top = 10.dp)) {
                                 Text("Start review (${review.size})", fontSize = 18.sp)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                                OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { it.fix } }) {
-                                    Text("Use the AI's guess for all")
-                                }
-                                OutlinedButton(onClick = { AiRotate.decide(context, review.map { it.uri }) { 0 } }) {
-                                    Text("Leave all as they are")
-                                }
-                            }
                         }
                     }
                 }
