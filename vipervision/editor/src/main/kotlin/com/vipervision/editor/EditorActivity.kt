@@ -792,7 +792,15 @@ class EditorActivity : ComposeActivity() {
                 StudioKind.Relight -> {
                     need("the depth model", { DepthAnything.isDownloaded() }) { DepthAnything.download(it) }
                     controller.busyMessage = "Working out depth…"
-                    withContext(Dispatchers.Default) { RelightTool(preview, DepthAnything.estimate(preview)) }
+                    val depth = withContext(Dispatchers.Default) { DepthAnything.estimate(preview) }
+                    // Faces, for Face shadow (fetched if missing; without them there's no Face shadow).
+                    val faces = runCatching {
+                        need("the face finder", { YuNet.isDownloaded() }) { YuNet.download(it) }
+                        need("the face model", { FaceParser.isDownloaded() }) { FaceParser.download(it) }
+                        controller.busyMessage = "Finding faces…"
+                        withContext(Dispatchers.Default) { Faces.detect(preview).let { if (it.isEmpty()) emptyList() else Faces.parse(preview, it) } }
+                    }.onFailure { ViperLog.error("EDITOR", "Relight: no faces (Face shadow off)", it) }.getOrDefault(emptyList())
+                    withContext(Dispatchers.Default) { RelightTool(preview, depth, faces) }
                 }
                 StudioKind.FaceRetouch -> {
                     need("the face finder", { YuNet.isDownloaded() }) { YuNet.download(it) }

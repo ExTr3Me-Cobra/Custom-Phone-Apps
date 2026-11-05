@@ -38,14 +38,21 @@ data class LightSettings(
     /** -1 (cool, blue) .. 1 (warm, orange). */
     val warmth: Float,
     /** 0..1 how much of the photo's own lighting is taken out first. */
-    val remove: Float = 0f
+    val remove: Float = 0f,
+    /** 0..1 how much the shade on faces (from a cap's brim, say) is lifted. */
+    val faceShadow: Float = 0f
 )
 
 /**
  * Relight: a light placed where you tap, which lights the photo by its shape (the surfaces facing
  * it brighten, those turned away less), worked out from Depth Anything's depth map.
  */
-class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.Depth) : StudioTool {
+class RelightTool(
+    private val preview: Bitmap,
+    private val depth: DepthAnything.Depth,
+    /** The faces in the photo and their parts (empty when there are none, or no face models). */
+    private val faces: List<Faces.Parts> = emptyList()
+) : StudioTool {
     override val stepName = "Relight"
 
     var light by mutableStateOf(Offset(0.3f, 0.3f))
@@ -60,8 +67,12 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
 
     private fun settings() = LightSettings(
         light.x, light.y, strength, size, darken, warmth,
-        remove = if (strength > 0f || removeTouched) removeLight else 0f
+        remove = if (strength > 0f || removeTouched) removeLight else 0f,
+        faceShadow = faceShadow
     )
+
+    /** Face shadow: starts at 0. */
+    var faceShadow by mutableFloatStateOf(0f)
 
     // Surface directions from the depth map (smoothed first so tiny bumps don't count).
     private val w = depth.width
@@ -131,9 +142,13 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
             val len = sqrt(ax * ax + ay * ay + az * az)
             nx[i] = ax / len; ny[i] = ay / len; nz[i] = az / len
         }
-        existing = fitLighting()
         val middle = z.copyOf().apply { sort() }[w * h / 2]
         subject = boxBlur(FloatArray(w * h) { ((z[it] - middle) / 0.125f).coerceIn(0f, 1f) }, w, h, 3)
+        // Relative to the subject's own typical level, so it's evened out around its middle.
+        val broad = fitLighting()
+        val onSubject = broad.filterIndexed { i, _ -> subject[i] > 0.5f }.sorted()
+        val level = if (onSubject.isEmpty()) 0f else onSubject[onSubject.size / 2]
+        existing = FloatArray(w * h) { broad[it] - level }
     }
 
     /**
@@ -176,9 +191,10 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         for (i in 0 until w * h) { sum += shading[i] * weight[i]; wsum += weight[i] }
         val mean = if (wsum > 0) (sum / wsum).toFloat() else shading.average().toFloat()
         val logRatio = FloatArray(w * h) { i -> kotlin.math.ln((mean / max(1e-3f, shading[i])).coerceIn(0.6f, 2.2f)) }
-        val r = max(2, (max(w, h) * 0.075f).roundToInt())
-        val broad = boxBlur(boxBlur(logRatio, w, h, r), w, h, r)
-        return FloatArray(w * h) { i -> logRatio[i] - broad[i] }
+        // Only the broad part (one side of the body darker than the other); the finer shading
+        // across muscles, a cheek or an arm is shape, and stays.
+        val r = max(2, (max(w, h) * 0.05f).roundToInt())
+        return boxBlur(boxBlur(logRatio, w, h, r), w, h, r)
     }
 
     /** Solves the small system [m]·x = [v] (null if it can't be). */
@@ -224,8 +240,9 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         return out
     }
 
-    private suspend fun render(image: Bitmap, s: LightSettings): Bitmap {
-        if (s.strength <= 0f && s.remove <= 0f && s.darken <= 0f) return image
+    private suspend fun render(source: Bitmap, s: LightSettings): Bitmap {
+        if (s.strength <= 0f && s.remove <= 0f && s.darken <= 0f && s.faceShadow <= 0f) return source
+        val image = liftFaceShadows(source, s.faceShadow)
         // The light, and how much the photo's own lighting is evened out, worked out at the
         // depth map's size, then enlarged so they follow the photo's own edges (a guided filter
         // on a copy of at most 1600 px), so nothing spills past the outline of things.
@@ -276,6 +293,67 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
             val glow = 22f * lit
             rgb(r0 * f * (1 + (cr - 1) * lit * 2) + glow * cr, g0 * f * (1 + (cg - 1) * lit * 2) + glow * cg, b0 * f * (1 + (cb - 1) * lit * 2) + glow * cb)
         }
+    }
+
+    /**
+     * Face shadow: on each face's skin (and a little on the eyes and brows), the parts above the
+     * nose that are darker than the face's lit skin (shade from a cap's brim, say) are lifted
+     * toward it, by [amount] (at most 85% of the way, so it never looks flat). The cap, hair,
+     * beard and everything else are left alone.
+     */
+    private fun liftFaceShadows(image: Bitmap, amount: Float): Bitmap {
+        if (amount <= 0f || faces.isEmpty()) return image
+        val out = image.copy(Bitmap.Config.ARGB_8888, true)
+        for (p in faces) {
+            val left = (p.crop.left * out.width).roundToInt().coerceIn(0, out.width - 1)
+            val top = (p.crop.top * out.height).roundToInt().coerceIn(0, out.height - 1)
+            val cw = ((p.crop.right * out.width).roundToInt().coerceIn(left + 1, out.width)) - left
+            val ch = ((p.crop.bottom * out.height).roundToInt().coerceIn(top + 1, out.height)) - top
+            val px = IntArray(cw * ch)
+            out.getPixels(px, 0, cw, left, top, cw, ch)
+            val side = com.t8rin.neural_tools.viper.FaceParser.SIDE
+            val skin = FloatArray(cw * ch)
+            val eyes = FloatArray(cw * ch)
+            for (y in 0 until ch) {
+                val ly = ((y + 0.5f) / ch * side).toInt().coerceIn(0, side - 1)
+                for (x in 0 until cw) {
+                    val lx = ((x + 0.5f) / cw * side).toInt().coerceIn(0, side - 1)
+                    when (p.labels[ly * side + lx].toInt()) {
+                        1, 10 -> skin[y * cw + x] = 1f
+                        2, 3, 4, 5 -> eyes[y * cw + x] = 1f
+                    }
+                }
+            }
+            val lum = FloatArray(cw * ch) { 0.299f * px[it].red8 + 0.587f * px[it].green8 + 0.114f * px[it].blue8 }
+            val skinLum = lum.filterIndexed { i, _ -> skin[i] > 0f }.sorted()
+            if (skinLum.size < 50) continue
+            val lit = skinLum[(skinLum.size * 0.75f).toInt()]
+            val faceSize = max(p.face.box.width() * out.width, p.face.box.height() * out.height)
+            val r = max(3, (faceSize * 0.06f).roundToInt())
+            val near = boxBlur(FloatArray(cw * ch) { lum[it] * skin[it] }, cw, ch, r)
+            val weight = boxBlur(skin, cw, ch, r)
+            val noseY = p.face.nose.y * out.height - top
+            val soft = max(1, (faceSize * 0.012f * 1.5f).roundToInt())
+            val area = boxBlur(boxBlur(FloatArray(cw * ch) { (skin[it] + 0.7f * eyes[it]).coerceAtMost(1f) }, cw, ch, soft), cw, ch, soft)
+            for (y in 0 until ch) {
+                val upper = ((noseY - y) / (0.12f * faceSize) + 0.6f).coerceIn(0f, 1f)
+                if (upper <= 0f) continue
+                for (x in 0 until cw) {
+                    val i = y * cw + x
+                    val a = area[i] * upper
+                    if (a <= 0.002f || weight[i] < 1e-3f) continue
+                    val shade = (near[i] / weight[i] / lit).coerceIn(0.35f, 1f)
+                    val g = kotlin.math.exp(-kotlin.math.ln(shade) * amount * 0.85f * a)
+                    if (g <= 1.0005f) continue
+                    val c = px[i]
+                    val l = lum[i]
+                    val k = g - 1f
+                    px[i] = rgb(c.red8 + k * (0.5f * c.red8 + 0.5f * l), c.green8 + k * (0.5f * c.green8 + 0.5f * l), c.blue8 + k * (0.5f * c.blue8 + 0.5f * l))
+                }
+            }
+            out.setPixels(px, 0, cw, left, top, cw, ch)
+        }
+        return out
     }
 
     /** [a] (depth-map size) enlarged to [tw]×[th] (bilinear). */
@@ -364,6 +442,9 @@ class RelightTool(private val preview: Bitmap, private val depth: DepthAnything.
         ) {
             StudioHint("Tap the photo to move the light. Remove light evens out the photo's own lighting first.")
             LabeledSlider("Light ${(strength * 100).roundToInt()}%", strength, 0f..1f) { strength = it }
+            if (faces.isNotEmpty()) {
+                LabeledSlider("Face shadow ${(faceShadow * 100).roundToInt()}%", faceShadow, 0f..1f) { faceShadow = it }
+            }
             LabeledSlider("Remove light ${(removeLight * 100).roundToInt()}%", removeLight, 0f..1f) {
                 removeLight = it
                 removeTouched = true
