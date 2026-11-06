@@ -293,8 +293,6 @@ fun SettingsScreen() {
             }
             if (AutoSave.active().isNotEmpty()) Text("Save a one-off copy somewhere else", color = Blue, fontSize = 13.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { export.launch("loadout-backup.zip") }.padding(vertical = 4.dp))
-            Text("📂 Open the folder where Loadout's data is stored", color = Blue, fontSize = 13.sp,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { DataFiles.open(context) }.padding(vertical = 4.dp))
             Spacer(4)
             Text("Recycle Bin", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("Deleted routines, workouts, exercises and pictures wait here for 30 days, so you can put them back.", color = Sub, fontSize = 13.sp)

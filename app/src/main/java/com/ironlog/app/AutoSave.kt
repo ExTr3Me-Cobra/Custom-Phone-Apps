@@ -159,7 +159,7 @@ object AutoSave {
     }
 
     /** This phone's own auto-save files, if they're set up (no picker needed to restore them). */
-    fun ownFiles(): List<Uri> = states[Slot.PHONE]?.takeIf { it.ready }?.uris?.filterNotNull()?.map(Uri::parse).orEmpty()
+    fun ownFiles(): List<Uri> = states[Slot.PHONE]?.takeIf { it.ready && it.on }?.uris?.filterNotNull()?.map(Uri::parse).orEmpty()
 
     /** Backups in a folder you opened (and its subfolders, one level down): auto-save files and saved backups. */
     fun findInTree(c: Context, tree: Uri): List<Uri> {
@@ -189,9 +189,24 @@ object AutoSave {
     const val TWO_FILES = "Loadout saves two backup files that take turns (A and B), so one is always a good copy if a save is cut short. " +
         "To restore, select both files – Loadout uses the newer one."
 
-    fun setOn(c: Context, s: Slot, on: Boolean) {
+    /**
+     * Switching a place off deletes its backup files. This phone keeps the folder, so switching back on makes the files
+     * again and saves straight away; Google Drive forgets the files, so switching back on asks for them again.
+     */
+    fun turnOff(c: Context, s: Slot) {
         val st = states[s] ?: return
-        states[s] = State(st.uris, st.lasts, on, st.error); save(c)
+        st.uris.filterNotNull().forEach { u -> runCatching { android.provider.DocumentsContract.deleteDocument(c.contentResolver, Uri.parse(u)) } }
+        if (s == Slot.PHONE && phoneTree != null) { states[s] = State(st.uris, listOf(null, null), false, null); save(c) }
+        else forget(c, s)
+    }
+
+    /** Switching this phone's auto-save back on: remake the files in the same folder and save. False if it needs a folder again. */
+    fun turnOn(c: Context, s: Slot): Boolean {
+        val st = states[s]?.takeIf { it.ready } ?: return false
+        if (s == Slot.PHONE && phoneTree == null) return false
+        states[s] = State(st.uris, st.lasts, true, null); save(c)
+        soon(c)
+        return true
     }
 
     fun forget(c: Context, s: Slot) {
@@ -318,6 +333,19 @@ fun AutoSaveSettings(show: (String) -> Unit) {
             }
         }
     }
+    // Switching off deletes the backup files: asked first.
+    var confirmOff by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AutoSave.Slot?>(null) }
+    confirmOff?.let { s ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmOff = null },
+            text = { Text("Turn off ${s.title.lowercase().replaceFirstChar { it.uppercase() }} auto-save? Its two backup files are deleted until you turn it back on.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                confirmOff = null
+                scope.launch(kotlinx.coroutines.Dispatchers.IO) { AutoSave.turnOff(context, s) }
+            }) { Text("Turn off and delete", color = Red) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmOff = null }) { Text("Keep it on") } },
+        )
+    }
     // The A/B explanation pops up before each picker; OK opens it.
     var explain by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AutoSave.Slot?>(null) }
     explain?.let { s ->
@@ -340,20 +368,18 @@ fun AutoSaveSettings(show: (String) -> Unit) {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text((if (s == AutoSave.Slot.PHONE) "📱 Auto-save on this phone" else "☁️ Auto-save to Google Drive"), fontWeight = FontWeight.Bold,
                     modifier = androidx.compose.ui.Modifier.weight(1f))
-                // On with nothing picked yet: the A/B explanation, then the picker. Off: pauses it (the files stay).
+                // On: this phone remakes its files in the same folder; otherwise the A/B note, then the picker.
+                // Off: deletes the backup files (after asking).
                 androidx.compose.material3.Switch(on, { want ->
                     when {
-                        !want -> AutoSave.setOn(context, s, false)
-                        st?.ready == true -> AutoSave.setOn(context, s, true)
+                        !want -> confirmOff = s
+                        st?.ready == true && AutoSave.turnOn(context, s) -> show("${s.title}: auto-save on – saving…")
                         else -> explain = s
                     }
                 })
             }
             // Only problems are shown (e.g. a Drive file was deleted).
             st?.error?.takeIf { st.ready }?.let { Text("⚠️ $it", color = Red, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 4.dp)) }
-            if (st?.ready == true) Text(if (s == AutoSave.Slot.PHONE) "Change folder" else "Change files", color = Blue, fontSize = 13.sp,
-                modifier = androidx.compose.ui.Modifier.padding(top = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                    .clickable { explain = s }.padding(vertical = 4.dp))
         }
     }
 }
