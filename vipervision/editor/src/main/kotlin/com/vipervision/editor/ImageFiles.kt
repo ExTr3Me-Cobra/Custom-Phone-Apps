@@ -226,14 +226,21 @@ suspend fun saveEditedCopy(
     forcePng: Boolean = false,
     encode: (suspend (Bitmap, Boolean) -> EncodedPhoto)? = null,
     keepMetadata: Boolean = true,
-    metadata: Map<String, String?>? = null
+    metadata: Map<String, String?>? = null,
+    pixelsUnchanged: Boolean = false
 ): Uri {
-    val rendered = renderFull(context, renderFrom, geometry, finish)
     val info = sourceInfo(context, source, realPath)
-    val isPng = forcePng || info.displayName.endsWith(".png", ignoreCase = true)
-    val encoded = encode?.invoke(rendered, isPng) ?: java.io.ByteArrayOutputStream().let { out ->
-        rendered.compress(if (isPng) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 95, out)
-        if (isPng) EncodedPhoto(out.toByteArray(), "png", "image/png") else EncodedPhoto(out.toByteArray(), "jpg", "image/jpeg")
+    // Only turned or flipped: the original's own bytes, untouched (see losslessTurn).
+    val lossless = if (pixelsUnchanged && encode == null && !forcePng && renderFrom == source && keepMetadata && metadata == null) {
+        losslessTurn(context, source, geometry)
+    } else null
+    val encoded = if (lossless != null) EncodedPhoto(lossless, "jpg", "image/jpeg") else {
+        val rendered = renderFull(context, renderFrom, geometry, finish, pixelsUnchanged)
+        val isPng = forcePng || info.displayName.endsWith(".png", ignoreCase = true)
+        encode?.invoke(rendered, isPng) ?: java.io.ByteArrayOutputStream().let { out ->
+            rendered.compress(if (isPng) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            if (isPng) EncodedPhoto(out.toByteArray(), "png", "image/png") else EncodedPhoto(out.toByteArray(), "jpg", "image/jpeg")
+        }
     }
     val extension = encoded.extension
     val mime = encoded.mimeType
@@ -243,7 +250,8 @@ suspend fun saveEditedCopy(
     val canHoldExif = extension.lowercase() in setOf("jpg", "jpeg", "png", "webp")
 
     fun writeDetails(target: Uri) {
-        if (!canHoldExif) return
+        // The untouched original already has all its details (and its new orientation).
+        if (!canHoldExif || lossless != null) return
         if (keepMetadata) copyExif(context, source, target)
         if (metadata != null) setExif(context, target, metadata)
     }
@@ -293,8 +301,10 @@ suspend fun encodeForOverwrite(
     geometry: Geometry,
     finish: FinishEdits,
     renderFrom: Uri,
-    needsTransparency: Boolean
+    needsTransparency: Boolean,
+    pixelsUnchanged: Boolean = false
 ): ByteArray? {
+    if (pixelsUnchanged && renderFrom == source && !needsTransparency) losslessTurn(context, source, geometry)?.let { return it }
     val name = sourceInfo(context, source, realPath).displayName.lowercase()
     val format = when {
         name.endsWith(".png") -> Bitmap.CompressFormat.PNG
@@ -303,8 +313,8 @@ suspend fun encodeForOverwrite(
         name.endsWith(".webp") -> @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
         else -> return null
     }
-    val rendered = renderFull(context, renderFrom, geometry, finish)
-    return java.io.ByteArrayOutputStream().also { rendered.compress(format, 95, it) }.toByteArray()
+    val rendered = renderFull(context, renderFrom, geometry, finish, pixelsUnchanged)
+    return java.io.ByteArrayOutputStream().also { rendered.compress(format, JPEG_QUALITY, it) }.toByteArray()
         .also { rendered.recycle() }
 }
 
@@ -379,15 +389,94 @@ private suspend fun renderFull(
     context: Context,
     source: Uri,
     geometry: Geometry,
-    finish: FinishEdits
+    finish: FinishEdits,
+    pixelsUnchanged: Boolean = false
 ): Bitmap {
     val full = decodeImage(context, source, maxSafeSide(context, source))
     val (width, height) = full.width to full.height
+    // An HDR photo's brightness map (Ultra HDR) has to match the picture exactly: turned and
+    // cropped with it when only those changed, and left out when the picture itself changed
+    // (an erased object would still glow on HDR screens).
+    val hdr = if (pixelsUnchanged && Build.VERSION.SDK_INT >= 34) full.gainmap?.let { transformedGainmap(it, geometry) } else null
     val turned = full.transformed(geometry)
     if (turned !== full) full.recycle()
     val result = finish(turned, width, height)
     if (result !== turned) turned.recycle()
+    if (Build.VERSION.SDK_INT >= 34 && (hdr != null || result.gainmap != null)) {
+        // Normal photos have no brightness map, so this only runs for HDR ones.
+        val target = if (result.isMutable) result else result.copy(Bitmap.Config.ARGB_8888, true).also { result.recycle() }
+        target.gainmap = hdr
+        return target
+    }
     return result
+}
+
+/** [gainmap] turned and cropped like the photo by [geometry], with the same settings. */
+@androidx.annotation.RequiresApi(34)
+private fun transformedGainmap(gainmap: android.graphics.Gainmap, geometry: Geometry): android.graphics.Gainmap {
+    val contents = gainmap.gainmapContents.transformed(geometry)
+    return android.graphics.Gainmap(contents).apply {
+        gainmap.ratioMin.let { setRatioMin(it[0], it[1], it[2]) }
+        gainmap.ratioMax.let { setRatioMax(it[0], it[1], it[2]) }
+        gainmap.gamma.let { setGamma(it[0], it[1], it[2]) }
+        gainmap.epsilonSdr.let { setEpsilonSdr(it[0], it[1], it[2]) }
+        gainmap.epsilonHdr.let { setEpsilonHdr(it[0], it[1], it[2]) }
+        displayRatioForFullHdr = gainmap.displayRatioForFullHdr
+        minDisplayRatioForHdrTransition = gainmap.minDisplayRatioForHdrTransition
+    }
+}
+
+/**
+ * A JPEG only turned or flipped: the original file's bytes with its orientation setting changed,
+ * so nothing is re-compressed (no quality lost, and an HDR photo's brightness map stays right).
+ * Null when it isn't a JPEG or can't be done this way.
+ */
+fun losslessTurn(context: Context, source: Uri, geometry: Geometry): ByteArray? = runCatching {
+    if (!geometry.crop.isFull) return null
+    val bytes = context.contentResolver.openInputStream(source)?.use { it.readBytes() } ?: return null
+    // JPEG files start with FF D8.
+    if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return null
+    val temp = File.createTempFile("turn", ".jpg", context.cacheDir)
+    try {
+        temp.writeBytes(bytes)
+        val exif = ExifInterface(temp.absolutePath)
+        val old = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        exif.setAttribute(ExifInterface.TAG_ORIENTATION, turnedOrientation(old, geometry).toString())
+        exif.saveAttributes()
+        temp.readBytes()
+    } finally {
+        temp.delete()
+    }
+}.getOrNull()
+
+/**
+ * The EXIF orientation after [geometry]'s flip (first) and quarter turns clockwise are applied to
+ * the photo as shown with [orientation]. Each orientation is a flip (or not) then turns.
+ */
+internal fun turnedOrientation(orientation: Int, geometry: Geometry): Int {
+    val (flip, turns) = when (orientation) {
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> true to 0
+        ExifInterface.ORIENTATION_ROTATE_180 -> false to 2
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> true to 2
+        ExifInterface.ORIENTATION_TRANSPOSE -> true to 3
+        ExifInterface.ORIENTATION_ROTATE_90 -> false to 1
+        ExifInterface.ORIENTATION_TRANSVERSE -> true to 1
+        ExifInterface.ORIENTATION_ROTATE_270 -> false to 3
+        else -> false to 0
+    }
+    // Flipping after a turn is the turn the other way after a flip.
+    val newFlip = flip xor geometry.flipped
+    val newTurns = (((if (geometry.flipped) -turns else turns) + geometry.quarterTurns) % 4 + 4) % 4
+    return when (newFlip to newTurns) {
+        (false to 0) -> ExifInterface.ORIENTATION_NORMAL
+        (false to 1) -> ExifInterface.ORIENTATION_ROTATE_90
+        (false to 2) -> ExifInterface.ORIENTATION_ROTATE_180
+        (false to 3) -> ExifInterface.ORIENTATION_ROTATE_270
+        (true to 0) -> ExifInterface.ORIENTATION_FLIP_HORIZONTAL
+        (true to 1) -> ExifInterface.ORIENTATION_TRANSVERSE
+        (true to 2) -> ExifInterface.ORIENTATION_FLIP_VERTICAL
+        else -> ExifInterface.ORIENTATION_TRANSPOSE
+    }
 }
 
 private fun copyExif(context: Context, from: Uri, to: Uri) {
@@ -409,3 +498,6 @@ private fun writeExif(original: ExifInterface, target: ExifInterface) {
     target.setAttribute(ExifInterface.TAG_SOFTWARE, "Viper Vision")
     target.saveAttributes()
 }
+
+/** Quality of edited photos saved as JPEG (high, so smooth skies don't band). */
+private const val JPEG_QUALITY = 97

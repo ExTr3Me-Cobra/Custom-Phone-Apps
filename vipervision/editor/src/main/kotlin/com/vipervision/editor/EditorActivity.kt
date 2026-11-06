@@ -354,7 +354,10 @@ class EditorActivity : ComposeActivity() {
         ViperLog.i("SAVE", "Saving over the original (${state.pixelSteps.size} AI/paint steps). ${ViperLog.memory()}")
         val bytes = runCatching {
             withContext(Dispatchers.IO) {
-                encodeForOverwrite(this@EditorActivity, source, realPath, state.geometry, finishFor(state), renderFrom, controller.needsPng)
+                encodeForOverwrite(
+                    this@EditorActivity, source, realPath, state.geometry, finishFor(state), renderFrom, controller.needsPng,
+                    pixelsUnchanged = state.pixelSteps.isEmpty() && state.adjustments.isIdentity
+                )
             }
         }.getOrElse {
             ViperLog.error("EDITOR", "save failed", it)
@@ -415,7 +418,8 @@ class EditorActivity : ComposeActivity() {
                     forcePng = forcePng,
                     encode = options?.encoder(imageCompressor),
                     keepMetadata = options?.keepMetadata ?: true,
-                    metadata = options?.metadataTags()
+                    metadata = options?.metadataTags(),
+                    pixelsUnchanged = state.pixelSteps.isEmpty() && state.adjustments.isIdentity
                 )
             }
         }.onSuccess {
