@@ -460,9 +460,8 @@ fun OneRmTestScreen(id: String) {
             // Developer trial: standard vs personal 1 Rep Max estimate, above the next set to do.
             val est = if (p.dev1rm && !squeeze && !reps) remember(workouts, id) { Personal1Rm.estimate(id, workouts, p) } else null
             val next = OneRm.rows.indexOfFirst { !it.done }
-            val devStar = devOneRmActive(id)
             OneRm.rows.forEachIndexed { i, s ->
-                if (est != null && i == next) PersonalEstimateCard(est, s.weight)
+                if (est != null && i == next) PersonalEstimateCard(est, s.weight, Standards.stackFactor(id))
                 val k = "$id:$i:$refresh"
                 // Ticking a set plays the effect picked in developer settings (it finishes even if you untick straight away).
                 val tfx = remember(k) { TickFx() }
@@ -474,11 +473,7 @@ fun OneRmTestScreen(id: String) {
                 }
                 val tickColor by animateColorAsState(if (s.done) Green else Card2, tween(160), label = "tick")
                 Row(Modifier.quakeRattle(rattle, 7 + i).tickRow(tfx), verticalAlignment = Alignment.CenterVertically) {
-                    Text(androidx.compose.ui.text.buildAnnotatedString {
-                        append("${i + 1}")
-                        // Developer trial: the enhanced 1 Rep Max estimate is learning from this exercise.
-                        if (devStar) withStyle(androidx.compose.ui.text.SpanStyle(color = Red, fontSize = 11.sp)) { append("★") }
-                    }, Modifier.weight(0.6f), color = Sub)
+                    Text("${i + 1}", Modifier.weight(0.6f), color = Sub)
                     if (!reps) NumField(Units.weight(s.weight), "0", "$k:w", Modifier.weight(1.4f).padding(end = 6.dp), outlined = true) { v ->
                         OneRm.rows[i] = OneRm.rows[i].copy(weight = v.toDoubleOrNull()?.let(Units::fromShown))
                     }
@@ -642,7 +637,7 @@ fun Modifier.emberBorder(h: Heat, width: androidx.compose.ui.unit.Dp, color: Col
 
 /** Developer trial: what the standard formula and the personal estimate each think your 1 Rep Max is. */
 @Composable
-private fun PersonalEstimateCard(e: Personal1Rm.Estimate, nextWeight: Double?) {
+private fun PersonalEstimateCard(e: Personal1Rm.Estimate, nextWeight: Double?, factor: Double = 1.0) {
     fun w(v: Double) = if (v > 0) "${Units.weight(v)} ${Units.w}" else "–"
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Card).padding(10.dp)) {
         Text("1 Rep Max estimate (developer trial)", color = Sub, fontSize = 12.sp)
@@ -651,8 +646,9 @@ private fun PersonalEstimateCard(e: Personal1Rm.Estimate, nextWeight: Double?) {
             Text("Enhanced: ${w(e.personal)}", Modifier.weight(1f), fontSize = 15.sp, color = Red, fontWeight = FontWeight.Bold)
         }
         // Reps each expects you to get to failure with the weight in the set below (updates as you type).
-        val fs = nextWeight?.let { Personal1Rm.failureReps(it, e.standard) }
-        val fp = nextWeight?.let { Personal1Rm.failureReps(it, e.personal, e.endurance) }
+        val nw = nextWeight?.let { it * factor }
+        val fs = nw?.let { Personal1Rm.failureReps(it, e.standard) }
+        val fp = nw?.let { Personal1Rm.failureReps(it, e.personal, e.endurance) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Reps to failure: ${fs ?: "–"}", Modifier.weight(1f), fontSize = 15.sp, color = Green, fontWeight = FontWeight.Bold)
             Text("Reps to failure: ${fp ?: "–"}", Modifier.weight(1f), fontSize = 15.sp, color = Red, fontWeight = FontWeight.Bold)

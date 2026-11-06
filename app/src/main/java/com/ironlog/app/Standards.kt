@@ -276,7 +276,7 @@ object Standards {
      * Cable moves: the standards are for a 1:1 pulley and the usual number of stacks. Your logged stack weight × your
      * stacks ÷ the usual stacks (both-arm moves), ÷ your pulley ratio (2:1 = you move half the stack).
      */
-    private fun stackFactor(id: String): Double {
+    fun stackFactor(id: String): Double {
         val e = Store.exercise(id) ?: return 1.0
         if (e.equipment != "Cable") return 1.0
         val p = Store.profile.value

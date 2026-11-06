@@ -95,6 +95,73 @@ object Stats {
         return out
     }
 
+    /** One line in the summary's What improved / What got worse: [label] went from [was] to [now]. */
+    class Change(val exercise: String, val label: String, val was: String, val now: String, val up: Boolean)
+
+    /**
+     * Compared with the last time you did each exercise (1 Rep Max tests never count as "last time"), using only the
+     * best single set each time, warm-ups left out: weighted = heaviest weight and best est. 1-rep max, bodyweight =
+     * most reps in a set, timed = longest hold. Exercises done for the first time aren't shown.
+     * Returns (improved, got worse), and whether anything could be compared at all.
+     */
+    fun changes(w: Workout, history: List<Workout>): Triple<List<Change>, List<Change>, Boolean> {
+        val up = mutableListOf<Change>(); val down = mutableListOf<Change>()
+        if (w.test) return Triple(up, down, false)
+        var compared = false
+        val before = history.filter { it.id != w.id && it.start < w.start && !it.test && it.end != null }
+        fun working(o: Workout, id: String) = o.items.filter { it.exerciseId == id }.flatMap { it.sets }.filter { it.done && !it.warmup }
+        for (id in w.items.map { it.exerciseId }.distinct()) {
+            val ex = Store.exercise(id) ?: continue
+            val now = working(w, id)
+            if (now.isEmpty()) continue
+            val last = before.sortedByDescending { it.start }.firstNotNullOfOrNull { o -> working(o, id).takeIf { it.isNotEmpty() } } ?: continue
+            compared = true
+            fun cmp(label: String, f: (List<DoneSet>) -> Double, show: (Double) -> String) {
+                val a = f(last); val b = f(now)
+                if (a <= 0 || b <= 0 || kotlin.math.abs(a - b) < 0.005) return
+                val c = Change(ex.name, label, show(a), show(b), b > a)
+                if (b > a) up += c else down += c
+            }
+            val wt: (List<DoneSet>) -> Double = { s -> s.maxOf { it.weight ?: 0.0 } }
+            val secs: (List<DoneSet>) -> Double = { s -> s.maxOf { it.seconds ?: 0 }.toDouble() }
+            when (ex.type) {
+                ExType.WEIGHT -> {
+                    cmp("Heaviest weight", wt, Units::weightU)
+                    cmp("Est. 1-rep max", { s -> s.maxOf { e1rm(it.weight, it.reps) } }) { Units.weightU(it) }
+                }
+                ExType.BODYWEIGHT -> cmp("Most reps", { s -> s.maxOf { it.reps ?: 0 }.toDouble() }) { "${it.toInt()} reps" }
+                ExType.TIMED -> cmp("Longest hold", secs) { Units.time(it.toInt()) }
+                ExType.WEIGHT_TIME -> { cmp("Heaviest weight", wt, Units::weightU); cmp("Longest time", secs) { Units.time(it.toInt()) } }
+                ExType.CARDIO -> cmp("Furthest", { s -> s.maxOf { it.distance ?: 0.0 } }) { "${Units.distance(it)} ${Units.dist}" }
+            }
+        }
+        return Triple(up, down, compared)
+    }
+
+    /**
+     * Each individual muscle's share of a workout, adding up to 100, largest first. Every exercise counts the same,
+     * however many sets, reps or pounds: each one's own split (as on its details page) is averaged.
+     */
+    fun muscleShares(w: Workout): List<Pair<String, Int>> {
+        val sum = HashMap<String, Double>()
+        val ids = w.items.filter { it.sets.any { s -> s.done } }.map { it.exerciseId }.distinct()
+        var n = 0
+        for (id in ids) {
+            val m = Store.exercise(id)?.muscles ?: continue
+            val total = m.values.sumOf { it.toDouble() }
+            if (total <= 0) continue
+            n++
+            m.forEach { (k, v) -> sum[k] = (sum[k] ?: 0.0) + v / total }
+        }
+        if (n == 0) return emptyList()
+        val list = sum.entries.sortedByDescending { it.value }
+        val raw = list.map { it.value / n * 100 }
+        val shares = raw.map { kotlin.math.floor(it).toInt() }.toIntArray()
+        // Largest remainders get the leftover points, so it adds up to exactly 100.
+        raw.indices.sortedByDescending { raw[it] - shares[it] }.take(100 - shares.sum()).forEach { shares[it]++ }
+        return list.indices.map { list[it].key to shares[it] }.filter { it.second > 0 }
+    }
+
     /** How hard each muscle worked in a workout: 0..1 (most-worked muscle = 1). */
     fun muscleLoad(w: Workout): Map<String, Float> {
         val load = HashMap<String, Float>()
@@ -128,7 +195,10 @@ object Units {
     fun distFromShown(v: Double) = if (kg) v / KM else v
 
     fun num(v: Double): String = if (v == Math.floor(v) && v < 1e7) v.toLong().toString() else "%.1f".format(v)
-    fun weight(lb: Double?): String = if (lb == null) "" else num((toShown(lb) * 10).roundToInt() / 10.0)
+    /** Up to two decimals, so quarter pounds (63.25) and 1.25 plates show exactly; trailing zeros are dropped. */
+    fun num2(v: Double): String = if (v == Math.floor(v) && v < 1e7) v.toLong().toString()
+        else "%.2f".format(Locale.US, v).trimEnd('0').trimEnd('.')
+    fun weight(lb: Double?): String = if (lb == null) "" else num2((toShown(lb) * 100).roundToInt() / 100.0)
     fun weightU(lb: Double) = "${weight(lb)} $w"
     fun distance(mi: Double?): String = if (mi == null) "" else "%.2f".format(distShown(mi)).trimEnd('0').trimEnd('.')
     fun time(sec: Int?): String {

@@ -187,6 +187,95 @@ fun ShareScreen() {
     }
 }
 
+/** A finished workout's Share (top left of its Summary): pick one or both pictures, then save or send them. */
+@Composable
+fun WorkoutShareScreen(id: String) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val w = Store.workouts.collectAsState().value.firstOrNull { it.id == id } ?: return closeScreen()
+    var pickSummary by rememberSaveable { mutableStateOf(true) }
+    var pickMuscles by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val layers = remember { mutableMapOf<Int, androidx.compose.ui.graphics.layer.GraphicsLayer>() }
+    Column(Modifier.fillMaxSize()) {
+        TopBar("Share workout")
+        Column(Modifier.fillMaxSize().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Pictures to make", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text("Each one you tick is its own picture.", color = Sub, fontSize = 13.sp)
+            val count = listOf(pickSummary, pickMuscles).count { it }
+            @Composable fun Pick(on: Boolean, label: String, set: (Boolean) -> Unit) {
+                val flip = { if (!on || count > 1) set(!on) }
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { flip() }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(on, { flip() })
+                    Text(label)
+                }
+            }
+            Pick(pickSummary, "Workout + muscles worked map") { pickSummary = it }
+            Pick(pickMuscles, "Muscle breakdown") { pickMuscles = it }
+            val picked = listOfNotNull("summary".takeIf { pickSummary }, "muscles".takeIf { pickMuscles })
+            Text(if (picked.size == 1) "Preview" else "Preview (${picked.size} pictures)", fontWeight = FontWeight.Bold, fontSize = 17.sp,
+                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+            picked.forEachIndexed { i, what -> androidx.compose.runtime.key(i, what) {
+                val layer = rememberGraphicsLayer()
+                layers[i] = layer
+                Box(Modifier.fillMaxWidth().padding(top = if (i > 0) 12.dp else 0.dp).drawWithContent {
+                    layer.record { this@drawWithContent.drawContent() }
+                    drawLayer(layer)
+                }) {
+                    CardFrame {
+                        Text(w.name, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(Units.date(w.start), color = Sub, modifier = Modifier.padding(bottom = 10.dp))
+                        if (what == "summary") {
+                            WorkoutStats(w)
+                            Box(Modifier.padding(top = 10.dp)) { WorkoutHeatmap(w) }
+                        } else MuscleBreakdown(w)
+                    }
+                }
+            } }
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                fun make(then: suspend (List<Bitmap>) -> Unit) {
+                    if (busy) return
+                    busy = true
+                    scope.launch {
+                        runCatching {
+                            val bmps = picked.indices.map { layers.getValue(it).toImageBitmap().asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false) }
+                            then(bmps)
+                        }.onFailure { Toast.makeText(context, "Couldn't make the picture: ${it.message}", Toast.LENGTH_LONG).show() }
+                        busy = false
+                    }
+                }
+                GreyButton("⬇  Save to gallery", Modifier.weight(1f)) {
+                    make { bmps ->
+                        val saved = withContext(Dispatchers.IO) { bmps.count { ShareImage.save(context, it) } }
+                        Toast.makeText(context, if (saved == bmps.size) "Saved to Pictures/Loadout" else "Couldn't save ${bmps.size - saved} of the pictures",
+                            Toast.LENGTH_SHORT).show()
+                    }
+                }
+                BigButton("Share", modifier = Modifier.weight(1f)) {
+                    make { bmps ->
+                        val files = withContext(Dispatchers.IO) { ShareImage.files(context, bmps) }
+                        ShareImage.send(context, files, "Share your workout")
+                    }
+                }
+            }
+            Spacer(30)
+        }
+    }
+}
+
+/** A 9:16 share picture: [content] fills it (shrunk to fit if needed), with the Loadout logo at the bottom. */
+@Composable
+private fun CardFrame(content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().aspectRatio(9f / 16f).background(Color(0xFF0B0B0D)).padding(16.dp)) {
+        FitInside(Modifier.weight(1f).fillMaxWidth()) { Column(Modifier.fillMaxWidth()) { content() } }
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Image(painterResource(R.drawable.ic_launcher_fg), null, Modifier.size(64.dp))
+            Text("Loadout", fontWeight = FontWeight.Bold, fontSize = 26.sp)
+        }
+    }
+}
+
 /** The picture itself: a 9:16 card (story-sized) with the one thing you picked, and the Loadout logo at the bottom. */
 @Composable
 private fun ShareCard(ranks: Map<String, Ranks.Ranked>, profile: Profile, overall: Double, what: String, exerciseId: String?) {
@@ -289,12 +378,12 @@ object ShareImage {
     }
 
     /** Android's share menu with every JPG attached, sent together. */
-    fun send(context: Context, files: List<File>) {
+    fun send(context: Context, files: List<File>, title: String = "Share your ranks") {
         val uris = files.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) }
         val send = if (uris.size == 1) Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
             else Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
         send.setType("image/jpeg").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         send.clipData = ClipData.newRawUri("Loadout", uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
-        context.startActivity(Intent.createChooser(send, "Share your ranks"))
+        context.startActivity(Intent.createChooser(send, title))
     }
 }

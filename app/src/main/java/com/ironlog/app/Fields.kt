@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
@@ -58,9 +59,14 @@ fun NumField(
     outlined: Boolean = false,
     /** A duration: type digits only and the colons appear as you go (130 → 1:30, 12345 → 1:23:45). */
     time: Boolean = false,
+    /** Tapping in empties the box so you can type straight away; leave it empty and the old number comes back. */
+    clearOnFocus: Boolean = false,
+    /** A stopwatch running for this box: shown in place of the number, in the accent colour, counting up. */
+    running: String? = null,
     onChange: (String) -> Unit,
 ) {
     var text by remember(key) { mutableStateOf(if (time) initial.filter { it.isDigit() }.trimStart('0') else initial) }
+    var before by remember(key) { mutableStateOf<String?>(null) }
     val shape = RoundedCornerShape(if (outlined) 10.dp else 6.dp)
     Box(
         modifier.typing().clip(shape).background(background)
@@ -69,6 +75,10 @@ fun NumField(
         contentAlignment = if (outlined) Alignment.Center else Alignment.CenterStart,
     ) {
         val align = if (outlined) TextAlign.Center else TextAlign.Start
+        if (running != null) {
+            Text(running, color = Blue, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = align, modifier = if (outlined) Modifier.fillMaxWidth() else Modifier)
+            return@Box
+        }
         if (text.isEmpty()) Text(placeholder, color = Sub, fontSize = 17.sp, textAlign = align, modifier = if (outlined) Modifier.fillMaxWidth() else Modifier)
         BasicTextField(
             value = text,
@@ -88,7 +98,16 @@ fun NumField(
             textStyle = TextStyle(color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium, textAlign = align),
             cursorBrush = SolidColor(Blue),
             keyboardOptions = KeyboardOptions(keyboardType = if (time) KeyboardType.Number else keyboard),
-            modifier = if (outlined) Modifier.fillMaxWidth() else Modifier,
+            modifier = (if (outlined) Modifier.fillMaxWidth() else Modifier).then(
+                if (!clearOnFocus) Modifier else Modifier.onFocusChanged { f ->
+                    if (f.isFocused && before == null) { before = text; text = "" }
+                    else if (!f.isFocused && before != null) {
+                        // Nothing typed: put the old number back (the set never lost it).
+                        if (text.isEmpty()) text = before!!
+                        before = null
+                    }
+                }
+            ),
         )
     }
 }

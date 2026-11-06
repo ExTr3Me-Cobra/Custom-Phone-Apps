@@ -85,7 +85,7 @@ fun LockScreen() {
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
         androidx.compose.material3.Text("🔒", fontSize = 48.sp)
         androidx.compose.material3.Text("Loadout is locked", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        androidx.compose.material3.Text("Unlock", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
-            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Blue).clickable { AppLock.unlock(a) }.padding(horizontal = 28.dp, vertical = 12.dp))
+        OutlinedLabel("Unlock", 16.sp, Modifier.clip(RoundedCornerShape(12.dp)).background(Blue).clickable { AppLock.unlock(a) }.padding(horizontal = 28.dp, vertical = 12.dp),
+            FontWeight.Medium)
     }
 }

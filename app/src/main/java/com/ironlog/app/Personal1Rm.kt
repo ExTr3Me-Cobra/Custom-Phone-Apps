@@ -108,8 +108,10 @@ object Personal1Rm {
     fun estimate(id: String, workouts: List<Workout>, p: Profile, now: Long = System.currentTimeMillis()): Estimate? {
         if (Standards.isReps(id) || Standards.isTimed(id) || Standards.isFlat(id) || Standards.isOneLeg(id)) return null
         val done = workouts.filter { it.end != null }
+        // Cable moves: every weight is read as the load you really move (stack × stacks ÷ pulley ratio), as ranks do.
+        val k = Standards.stackFactor(id)
         fun setsOf(w: Workout) = w.items.withIndex().filter { it.value.exerciseId == id }
-            .flatMap { (i, it) -> it.sets.withIndex().filter { (_, s) -> s.done && !s.warmup && (s.weight ?: 0.0) > 0 && (s.reps ?: 0) > 0 }.map { (j, s) -> S(w, i, j, s) } }
+            .flatMap { (i, it) -> it.sets.withIndex().filter { (_, s) -> s.done && !s.warmup && (s.weight ?: 0.0) > 0 && (s.reps ?: 0) > 0 }.map { (j, s) -> S(w, i, j, if (k == 1.0) s else s.copy(weight = s.weight!! * k)) } }
 
         // Anchors: your 1–3 rep sets in each 1 Rep Max test. A double or triple is turned into a max with the curve
         // being learned (stretch [s]), so the method agrees with itself about your tests.
@@ -216,7 +218,11 @@ object Personal1Rm {
                 else after.maxOfOrNull { it.w.start }?.let { latest -> after.filter { it.w.start >= latest - DAY }.maxOf(value) }
             return maxOf(testValue ?: 0.0, fromWorkouts ?: 0.0)
         }
-        val standard = current({ fromReps(it.s.weight!!, it.s.reps!!.toDouble()) }) { w -> Standards.testValue(id, w.items.filter { it.exerciseId == id }.flatMap { it.sets }) }
+        val standard = current({ fromReps(it.s.weight!!, it.s.reps!!.toDouble()) }) { w ->
+            // A test's result (heaviest single, else best set), from the same load-adjusted sets.
+            val xs = setsOf(w); val singles = xs.filter { it.s.reps == 1 }
+            if (singles.isNotEmpty()) singles.maxOf { it.s.weight!! } else xs.maxOfOrNull { fromReps(it.s.weight!!, it.s.reps!!.toDouble()) } ?: 0.0
+        }
         val personal = current(::personalSet) { w ->
             // Same rule as a test result (heaviest single, else best set), read with your curve.
             val xs = setsOf(w); val singles = xs.filter { it.s.reps == 1 }
@@ -238,8 +244,10 @@ fun DevOneRmBadge(exId: String, fWeight: Double?, modifier: Modifier = Modifier)
     val workouts = Store.workouts.collectAsState().value
     val e = remember(workouts, exId, p) { Personal1Rm.estimate(exId, workouts, p) } ?: return
     fun w(v: Double) = if (v > 0) Units.weight(v) else "–"
-    val fs = fWeight?.takeIf { e.standard > 0 }?.let { Personal1Rm.failureReps(it, e.standard) }
-    val fp = fWeight?.takeIf { e.personal > 0 }?.let { Personal1Rm.failureReps(it, e.personal, e.endurance) }
+    // The F set's weight as the load you really move (pulley ratio, stacks), like the estimates.
+    val fw = fWeight?.let { it * Standards.stackFactor(exId) }
+    val fs = fw?.takeIf { e.standard > 0 }?.let { Personal1Rm.failureReps(it, e.standard) }
+    val fp = fw?.takeIf { e.personal > 0 }?.let { Personal1Rm.failureReps(it, e.personal, e.endurance) }
     Column(modifier, horizontalAlignment = Alignment.End) {
         Row {
             Text("1RM ${w(e.standard)}", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)

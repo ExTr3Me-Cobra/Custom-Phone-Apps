@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -79,8 +80,41 @@ object Workouts {
     }
 
     fun update(change: (Workout) -> Workout) {
+        touched()
         val w = Store.active.value ?: return
         Store.setActive(change(w))
+    }
+
+    /** Idle this long and the time after it isn't counted in the saved duration (the first 5 minutes still are). */
+    const val IDLE_MS = 5 * 60 * 1000L
+
+    /**
+     * A tap, scroll or swipe anywhere in the app (or typing): ends any idle stretch. Screen off, app in the background
+     * or closed all count as idle, because only the time since your last touch matters.
+     */
+    fun touched(at: Long = System.currentTimeMillis()) {
+        val w = Store.active.value ?: return
+        val last = if (w.lastTouch > 0) w.lastTouch else w.start
+        // Saved at most every 10 s (a gap that short can't be over 5 minutes).
+        if (at - last < 10_000) return
+        Store.setActive(w.copy(lastTouch = at, idleMs = w.idleMs + (at - last - IDLE_MS).coerceAtLeast(0)))
+    }
+
+    /** Stopwatches running in timed sets: set key -> when it started. Kept here so scrolling away doesn't stop them. */
+    val timers = androidx.compose.runtime.mutableStateMapOf<String, Long>()
+    /** Sets whose stopwatch has already chimed for passing last time. */
+    val chimed = mutableSetOf<String>()
+    /** Last time's hold for each running stopwatch (seconds), to chime when you pass it. */
+    val timerTargets = HashMap<String, Int>()
+    /** Ticks while a workout is open, for the stopwatches. */
+    var clock by androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis())
+
+    /** Checks every running stopwatch: passing last time's hold plays the level-up chime, once per set. */
+    fun checkTimers(c: Context, now: Long) {
+        for ((k, started) in timers) {
+            val target = timerTargets[k] ?: continue
+            if (target > 0 && k !in chimed && (now - started) / 1000 > target) { chimed += k; Chime.play(c) }
+        }
     }
 
     fun updateItem(i: Int, change: (WorkoutItem) -> WorkoutItem) = update { w ->
@@ -99,11 +133,15 @@ object Workouts {
 
     /** Ends the workout: keeps finished sets, saves it, and returns its id (null if nothing was done). */
     fun finish(c: Context): String? {
+        val now = System.currentTimeMillis()
+        touched(now)
         val w = Store.active.value ?: return null
         Rest.stop(c)
         WorkoutService.stop(c)
+        timers.clear(); chimed.clear()
         val kept = w.copy(
-            end = System.currentTimeMillis(),
+            // The saved duration is your active time: long idle stretches (beyond 5 minutes each) are left out.
+            end = (now - w.idleMs).coerceAtLeast(w.start),
             items = w.items.map { it.copy(sets = it.sets.filter { s -> s.done }) }.filter { it.sets.isNotEmpty() },
         )
         Store.setActive(null)
@@ -117,6 +155,7 @@ object Workouts {
         Store.active.value?.takeIf { w -> w.items.any { i -> i.sets.any { it.done } } }?.let { RecycleBin.discarded(it) }
         Rest.stop(c)
         WorkoutService.stop(c)
+        timers.clear(); chimed.clear()
         Store.setActive(null)
     }
 }
@@ -130,26 +169,34 @@ fun ActiveWorkoutScreen() {
     if (w == null) { closeScreen(); return }
     val workouts by Store.workouts.collectAsState()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(500) } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis(); Workouts.clock = now
+            Workouts.checkTimers(context, now)
+            delay(250)
+        }
+    }
     var restFor by remember { mutableStateOf<Int?>(null) }
     var confirmEnd by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        // Top bar: timer, reference weights, Discard, Finish (the phone's back button leaves the workout running).
+        // Top bar: calculator, reference weights, Discard, Finish (the phone's back button leaves the workout running).
         var bigMap by remember { mutableStateOf(false) }
+        var calc by remember { mutableStateOf(false) }
         Row(Modifier.fillMaxWidth().background(Card).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(Units.clock(now - w.start), color = Blue, fontSize = 24.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            Box(Modifier.weight(1f)) {
+                CalculatorIcon(Modifier.clip(RoundedCornerShape(8.dp)).clickable { calc = true }.padding(horizontal = 8.dp, vertical = 6.dp))
+            }
             ReferenceButton()
             HSpacer(8)
-            Text("Discard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Red).clickable { confirmDiscard = true }
-                    .padding(horizontal = 14.dp, vertical = 9.dp))
+            OutlinedLabel("Discard", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Red).clickable { confirmDiscard = true }
+                .padding(horizontal = 14.dp, vertical = 9.dp))
             HSpacer(8)
-            Text("Finish", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Blue).clickable { confirmEnd = true }
-                    .padding(horizontal = 18.dp, vertical = 9.dp))
+            OutlinedLabel("Finish", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Blue).clickable { confirmEnd = true }
+                .padding(horizontal = 18.dp, vertical = 9.dp))
         }
+        if (calc) Calculator { calc = false }
         // Stats row with the live muscle map (tap it to enlarge).
         val doneSets = w.items.flatMap { it.sets }.filter { it.done }
         val load = remember(w.items) { Stats.muscleLoad(w) }
@@ -209,9 +256,10 @@ fun ActiveWorkoutScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { RestLine(item.restSec) { restFor = i } }
                     if (ex != null) StackChip(ex, Modifier.padding(end = 16.dp))
-                    // Developer trial: 1 Rep Max estimates and reps to failure at the weight in your F set.
-                    if (ex != null) DevOneRmBadge(ex.id, item.sets.lastOrNull { it.failure }?.weight, Modifier.padding(end = 16.dp))
                 }
+                // Developer trial: 1 Rep Max estimates and reps to failure at the weight in your F set (own line, so the
+                // rest timer always fits).
+                if (ex != null) DevOneRmBadge(ex.id, item.sets.lastOrNull { it.failure }?.weight, Modifier.fillMaxWidth().padding(end = 16.dp))
                 if (ex != null) {
                     val prev = remember(workouts, ex.id) { Stats.previous(ex.id, workouts) }
                     val cols = columnsFor(ex.type, true)
@@ -244,8 +292,6 @@ fun ActiveWorkoutScreen() {
                     item.sets.forEachIndexed { n, s ->
                         ActiveSetRow(ex, i, n, s, prev.getOrNull(n) ?: prev.lastOrNull(), cols, item.restSec, w.id, crown = n == crown)
                     }
-                    Text("Tap a set number to mark it W (warm-up – never counts for ranks) or F (to failure). Long-press ✓ to delete a set.", color = Sub, fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     GreyButton("+ Add Set", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                         Workouts.updateItem(i) { it.copy(sets = it.sets + (it.sets.lastOrNull()?.copy(done = false) ?: DoneSet())) }
                     }
@@ -301,7 +347,7 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                 contentAlignment = Alignment.Center,
             ) {
                 val item = Store.active.value?.items?.getOrNull(i)
-                SetLabel(setNumber(item?.sets?.map { it.warmup } ?: emptyList(), n).coerceAtLeast(0), s.failure, Modifier, s.warmup, devOneRmActive(ex.id))
+                SetLabel(setNumber(item?.sets?.map { it.warmup } ?: emptyList(), n).coerceAtLeast(0), s.failure, Modifier, s.warmup)
             }
             // Grip dynamometer: squeezes take turns, right then left.
             if (Standards.isFlat(ex.id)) Standards.hands(Store.active.value?.items?.getOrNull(i)?.sets.orEmpty()).getOrNull(n)?.let { right ->
@@ -311,7 +357,10 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
             if (crown) Text("👑", fontSize = 15.sp, modifier = Modifier.align(Alignment.TopStart).offset(x = 30.dp, y = (-6).dp))
             // Developer trial: only the last set of an exercise can be F.
             val lastSet = n == (Store.active.value?.items?.getOrNull(i)?.sets?.lastIndex ?: n)
-            SetTypeMenu(typeMenu, { typeMenu = false }, s.warmup, s.failure, !Store.profile.value.dev1rm || lastSet) { w, f ->
+            SetTypeMenu(typeMenu, { typeMenu = false }, s.warmup, s.failure, !Store.profile.value.dev1rm || lastSet, onDelete = {
+                Workouts.updateItem(i) { it.copy(sets = it.sets.toMutableList().also { l -> if (n in l.indices) l.removeAt(n) }) }
+                Store.active.value?.let { if (s.done) Ranks.onSetUndone(context, it, ex.id) }
+            }) { w, f ->
                 Workouts.updateSet(i, n) { it.copy(warmup = w, failure = f) }
                 // A set that's already ticked changes what counts for ranks.
                 Store.active.value?.let { if (s.done) { if (w) Ranks.onSetUndone(context, it, ex.id) else Ranks.onSetDone(it, ex.id) } }
@@ -329,28 +378,31 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
         )
         // Refreshes the boxes when numbers are filled in for you (not while you type).
         val vk = "$k:${Workouts.refresh}:${s.done}"
+        // A running stopwatch counts up from 0:00 inside the time box.
+        val tk = "$wid:$i:$n"
+        val running = Workouts.timers[tk]?.let { Units.time(((Workouts.clock - it) / 1000).toInt().coerceAtLeast(0)) }
         when (ex.type) {
             ExType.BODYWEIGHT -> NumField(s.reps?.toString() ?: "", prev?.reps?.toString() ?: if (s.failure) "max" else "0", "$vk:r",
-                Modifier.weight(cols[2].second).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
+                Modifier.weight(cols[2].second).padding(end = 6.dp), KeyboardType.Number, outlined = true, clearOnFocus = true) { v ->
                 Workouts.updateSet(i, n) { it.copy(reps = v.toIntOrNull(), weight = null) }
             }
             ExType.WEIGHT -> {
                 NumField(Units.weight(s.weight).takeIf { s.weight != null } ?: "", prev?.weight?.let { Units.weight(it) } ?: "0", "$vk:w",
-                    Modifier.weight(cols[2].second).padding(end = 6.dp), outlined = true) { v ->
+                    Modifier.weight(cols[2].second).padding(end = 6.dp), outlined = true, clearOnFocus = true) { v ->
                     Workouts.updateSet(i, n) { it.copy(weight = v.toDoubleOrNull()?.let(Units::fromShown)) }
                 }
                 NumField(s.reps?.toString() ?: "", prev?.reps?.toString() ?: if (s.failure) "max" else "0", "$vk:r",
-                    Modifier.weight(cols[3].second).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
+                    Modifier.weight(cols[3].second).padding(end = 6.dp), KeyboardType.Number, outlined = true, clearOnFocus = true) { v ->
                     Workouts.updateSet(i, n) { it.copy(reps = v.toIntOrNull()) }
                 }
             }
             ExType.TIMED -> {
                 Row(Modifier.weight(cols[2].second), verticalAlignment = Alignment.CenterVertically) {
                     NumField(Units.time(s.seconds), prev?.seconds?.let { Units.time(it) } ?: "0:30", "$vk:t",
-                        Modifier.weight(1f).padding(end = 6.dp), outlined = true, time = true) { v ->
+                        Modifier.weight(1f).padding(end = 6.dp), outlined = true, time = true, running = running) { v ->
                         Workouts.updateSet(i, n) { it.copy(seconds = Units.parseTime(v)) }
                     }
-                    Stopwatch { sec -> Workouts.updateSet(i, n) { it.copy(seconds = sec) } }
+                    Stopwatch(tk, prev?.seconds) { sec -> Workouts.updateSet(i, n) { it.copy(seconds = sec) }; Workouts.refresh++ }
                 }
             }
             ExType.WEIGHT_TIME -> {
@@ -360,10 +412,10 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                 }
                 Row(Modifier.weight(cols[3].second), verticalAlignment = Alignment.CenterVertically) {
                     NumField(Units.time(s.seconds), prev?.seconds?.let { Units.time(it) } ?: "0:30", "$vk:t",
-                        Modifier.weight(1f).padding(end = 6.dp), outlined = true, time = true) { v ->
+                        Modifier.weight(1f).padding(end = 6.dp), outlined = true, time = true, running = running) { v ->
                         Workouts.updateSet(i, n) { it.copy(seconds = Units.parseTime(v)) }
                     }
-                    Stopwatch { sec -> Workouts.updateSet(i, n) { it.copy(seconds = sec) } }
+                    Stopwatch(tk, prev?.seconds) { sec -> Workouts.updateSet(i, n) { it.copy(seconds = sec) }; Workouts.refresh++ }
                 }
             }
             ExType.CARDIO -> {
@@ -377,7 +429,6 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                 }
             }
         }
-        var del by remember { mutableStateOf(false) }
         // Finishing a set sends a small green ring out from the ✓.
         val ring = remember { androidx.compose.animation.core.Animatable(0f) }
         val ringScope = rememberCoroutineScope()
@@ -389,7 +440,7 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                     center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx() * (1.5f - b)))
             }.clip(RoundedCornerShape(10.dp)).background(if (s.done) Green else Card2)
-                .combinedClickableCompat(
+                .clickable(
                     onClick = {
                         if (!s.done) {
                             // Empty boxes take the greyed-out numbers (last time's).
@@ -418,36 +469,35 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                             Store.active.value?.let { Ranks.onSetUndone(context, it, ex.id) }
                         }
                     },
-                    onLongClick = { del = true },
                 )
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
-        ) { Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-        if (del) ConfirmText("Delete set ${n + 1}?", {
-            del = false
-            Workouts.updateItem(i) { it.copy(sets = it.sets.toMutableList().also { l -> l.removeAt(n) }) }
-        }, { del = false }, "Delete")
+        ) { if (s.done) OutlinedLabel("✓", 18.sp) else Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-private fun Modifier.combinedClickableCompat(onClick: () -> Unit, onLongClick: () -> Unit) =
-    this.combinedClickable(onClick = onClick, onLongClick = onLongClick)
-
-/** A start/stop button that counts seconds for timed holds. */
+/**
+ * Start/stop for a timed hold: ▶ starts the count (shown in the time box), ■ stops it and keeps the time. Passing
+ * [previous] (last time's hold, seconds) plays the level-up chime once.
+ */
 @Composable
-private fun Stopwatch(onStop: (Int) -> Unit) {
-    var startedAt by remember { mutableLongStateOf(0L) }
-    var now by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(startedAt) { while (startedAt > 0) { now = System.currentTimeMillis(); delay(250) } }
-    val running = startedAt > 0
+private fun Stopwatch(key: String, previous: Int?, onStop: (Int) -> Unit) {
+    val started = Workouts.timers[key]
     Text(
-        if (running) Units.time(((now - startedAt) / 1000).toInt()) else "▶",
-        color = if (running) Green else Blue, fontWeight = FontWeight.Bold,
-        modifier = Modifier.clickable {
-            if (running) { onStop(((System.currentTimeMillis() - startedAt) / 1000).toInt()); startedAt = 0 }
-            else startedAt = System.currentTimeMillis().also { now = it }
-        }.padding(horizontal = 6.dp),
+        if (started != null) "■" else "▶",
+        color = if (started != null) Red else Blue, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+            val now = System.currentTimeMillis()
+            if (started != null) {
+                Workouts.timers.remove(key); Workouts.timerTargets.remove(key)
+                onStop(((now - started) / 1000).toInt())
+            } else {
+                Workouts.chimed.remove(key)
+                Workouts.timerTargets[key] = previous ?: 0
+                Workouts.timers[key] = now
+                Workouts.clock = now
+            }
+        }.padding(horizontal = 6.dp, vertical = 4.dp),
     )
 }
 
@@ -478,62 +528,126 @@ private fun RestBar() {
 
 // ---------------- After the workout ----------------
 
-private val CHEERS = listOf("Great job! 💪", "Workout complete! 🔥", "Nice work! 🏆", "Crushed it! 💥", "Another one done! ✅")
-
 @Composable
 fun SummaryScreen(id: String) {
     val w = Store.workouts.collectAsState().value.firstOrNull { it.id == id } ?: return closeScreen()
     val history by Store.workouts.collectAsState()
     val profile by Store.profile.collectAsState()
-    val cheer = remember(id) { CHEERS.random() }
-    val improvements = remember(id, history) { Stats.improvements(w, history) }
+    val context = LocalContext.current
+    val cheer = androidx.compose.runtime.saveable.rememberSaveable(id) { Cheers.pick(context) }
+    val changes = remember(id, history) { Stats.changes(w, history) }
     Column(Modifier.fillMaxSize()) {
-        TopBar("Summary", back = false, action = "Done") { Nav.home(0) }
+        TopBar("Summary", back = false, action = "Done", lead = "Share", onLead = { Nav.go(Route.ShareWorkout(id)) }) { Nav.home(0) }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(cheer, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text(cheer, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp)
             Text("${w.name} · ${Units.date(w.start)}", color = Sub)
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
-                StatBox("Duration", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
-                StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
-                StatBox("Sets", "${w.doneSets}", Modifier.weight(1f))
-            }
+            WorkoutStats(w)
             WorkoutHeatmap(w)
-            Text("What improved", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            if (improvements.isEmpty()) Text("No new records this time – consistency is what builds them. Keep going!", color = Sub)
-            improvements.groupBy { it.first }.forEach { (name, lines) ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(12.dp)) {
-                    Text(name, color = Blue, fontWeight = FontWeight.Medium)
-                    lines.forEach { Text("🏅 " + it.second) }
-                }
+            MuscleBreakdown(w)
+            // Compared with last time (best set each time); first-time exercises aren't shown.
+            val (up, down, compared) = changes
+            if (compared) {
+                ChangePanel("What improved", up, "Nothing beat last time today – it happens. Next time.")
+                ChangePanel("What got worse", down, "Nothing dropped since last time. 👌")
             }
-            val ranked = w.items.distinctBy { it.exerciseId }.mapNotNull { Store.exercise(it.exerciseId) }.filter { Standards.covers(it.id, profile) }
-            if (ranked.isNotEmpty()) {
-                Text("Your ranks", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                if (profile.bodyweight == null) {
-                    Text("Add your body weight (and age) in Settings to see how you rank against other lifters.", color = Sub)
-                    GreyButton("Open Profile") { Nav.home(2) }
-                }
-                ranked.forEach { e ->
-                    val sets = w.items.filter { it.exerciseId == e.id }.flatMap { it.sets }
-                    val pct = Standards.percentile(e.id, Standards.bestValue(e.id, sets), profile)
-                    if (pct != null) Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RankBadge(Tier.of(pct), 48.dp)
-                        HSpacer(12)
-                        Column {
-                            NameText(starredName(e), color = Blue, fontWeight = FontWeight.Medium)
-                            Text(rankText(pct), color = Color(Tier.of(pct).color))
-                        }
-                    }
-                }
-                Text("Ranks compare you with people who lift of your body weight, sex and age, using standards built from published research.",
-                    color = Sub, fontSize = 12.sp)
-            }
+            RankChanges(w, history, profile)
             BigButton("Done") { Nav.home(0) }
             Spacer(24)
         }
+    }
+}
+
+/** Duration, volume and sets in one box. */
+@Composable
+fun WorkoutStats(w: Workout) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
+        StatBox("Duration", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
+        StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
+        StatBox("Sets", "${w.doneSets}", Modifier.weight(1f))
+    }
+}
+
+/** What improved / what got worse since last time: one card per exercise, each line "was → now". */
+@Composable
+private fun ChangePanel(title: String, lines: List<Stats.Change>, empty: String) {
+    Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    if (lines.isEmpty()) Text(empty, color = Sub)
+    lines.groupBy { it.exercise }.forEach { (name, ls) ->
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(12.dp)) {
+            Text(name, color = Blue, fontWeight = FontWeight.Medium)
+            ls.forEach { c ->
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    append("${c.label}: ${c.was} ")
+                    withStyle(androidx.compose.ui.text.SpanStyle(color = if (c.up) Green else Red, fontWeight = FontWeight.Bold)) { append("→") }
+                    append(" ${c.now}")
+                }, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+    }
+}
+
+/** Only ranks this workout changed: "old → new" (green arrow up, red down), or "New" for a first rank. */
+@Composable
+private fun RankChanges(w: Workout, history: List<Workout>, profile: Profile) {
+    val ranked = w.items.map { it.exerciseId }.distinct().filter { Standards.covers(it, profile) }
+    if (ranked.isEmpty()) return
+    if (profile.bodyweight == null) {
+        Text("Your ranks", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("Add your body weight (and age) in Settings to see how you rank against other lifters.", color = Sub)
+        GreyButton("Open Profile") { Nav.home(2) }
+        return
+    }
+    val rows = remember(w.id, history, profile) {
+        val before = Ranks.all(history.filter { it.id != w.id && it.start < w.start }, profile)
+        val after = Ranks.all(history.filter { it.id == w.id || it.start < w.start }, profile)
+        ranked.mapNotNull { id ->
+            val a = after[id] ?: return@mapNotNull null
+            val b = before[id]
+            if (b != null && b.tier == a.tier) null else Triple(a.exercise, b?.tier, a.tier)
+        }
+    }
+    if (rows.isEmpty()) return
+    Text("Rank changes", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    rows.forEach { (e, from, to) ->
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            RankBadge(to, 44.dp)
+            HSpacer(12)
+            Column(Modifier.weight(1f)) {
+                NameText(starredName(e), color = Blue, fontWeight = FontWeight.Medium)
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    if (from == null) {
+                        append("New: ")
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = Color(to.color), fontWeight = FontWeight.Bold)) { append(to.label) }
+                    } else {
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = Color(from.color), fontWeight = FontWeight.Bold)) { append(from.label) }
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = if (to.ordinal > from.ordinal) Green else Red, fontWeight = FontWeight.Bold)) { append("  →  ") }
+                        withStyle(androidx.compose.ui.text.SpanStyle(color = Color(to.color), fontWeight = FontWeight.Bold)) { append(to.label) }
+                    }
+                })
+            }
+        }
+    }
+}
+
+/** Every individual muscle's share of the workout (adds up to 100%), each exercise counting the same. */
+@Composable
+fun MuscleBreakdown(w: Workout) {
+    val shares = remember(w.id, w.items) { Stats.muscleShares(w) }
+    if (shares.isEmpty()) return
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(14.dp)) {
+        Text("Muscle breakdown", fontWeight = FontWeight.Bold)
+        val top = shares.first().second.coerceAtLeast(1)
+        shares.forEach { (m, pct) ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(Muscles.label(m), Modifier.weight(1f), fontSize = 14.sp)
+                Box(Modifier.size(width = 70.dp, height = 8.dp).clip(RoundedCornerShape(4.dp)).background(Card2)) {
+                    Box(Modifier.fillMaxWidth(pct.toFloat() / top).fillMaxHeight().background(Color(BodyMap.heat(pct.toFloat() / top))))
+                }
+                Text("$pct%", Modifier.size(width = 48.dp, height = 20.dp), textAlign = TextAlign.End, fontSize = 14.sp)
+            }
+        }
+        Text("Each muscle's share of the whole workout. Every exercise counts the same, however many sets.",
+            color = Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

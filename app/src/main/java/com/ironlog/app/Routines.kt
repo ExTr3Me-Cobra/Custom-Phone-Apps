@@ -207,10 +207,9 @@ fun RoutineViewScreen(id: String) {
                 val ex = Store.exercise(item.exerciseId)
                 ExerciseHeader(ex)
                 if (item.note.isNotBlank()) Text(item.note, color = Sub, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { RestLine(item.restSec, null) }
-                    if (ex != null) DevOneRmBadge(ex.id, item.sets.lastOrNull { it.failure }?.weight, Modifier.padding(end = 16.dp))
-                }
+                RestLine(item.restSec, null)
+                // Developer trial: on its own line so the rest timer always fits.
+                if (ex != null) DevOneRmBadge(ex.id, item.sets.lastOrNull { it.failure }?.weight, Modifier.fillMaxWidth().padding(end = 16.dp))
                 if (ex != null) {
                     TableHeader(columnsFor(ex.type, false))
                     item.sets.forEachIndexed { n, s -> PlanRowView(ex.type, n, s) }
@@ -245,11 +244,9 @@ fun RestLine(sec: Int, onClick: (() -> Unit)?) {
 }
 
 @Composable
-fun SetLabel(n: Int, failure: Boolean, modifier: Modifier, warmup: Boolean = false, devStar: Boolean = false) = Text(
+fun SetLabel(n: Int, failure: Boolean, modifier: Modifier, warmup: Boolean = false) = Text(
     buildAnnotatedString {
         append(when { warmup -> "W"; failure -> "F"; else -> "${n + 1}" })
-        // Developer trial: the enhanced 1 Rep Max estimate is learning from this exercise.
-        if (devStar) withStyle(SpanStyle(color = Red, fontSize = 11.sp)) { append("★") }
     },
     color = when { warmup -> Orange; failure -> Red; else -> Color.White }, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = modifier,
 )
@@ -259,12 +256,12 @@ val Orange = Color(0xFFFF9F0A)
 /** Working-set number: warm-ups (W) aren't counted, so the first working set is 1. */
 fun setNumber(warmups: List<Boolean>, n: Int) = warmups.take(n + 1).count { !it } - 1
 
-/** Tap a set number: choose Warm-up (W), Failure (F) or a normal set. */
+/** Tap a set number: choose Warm-up (W), Failure (F) or a normal set, or delete the set. */
 @Composable
-fun SetTypeMenu(open: Boolean, onDismiss: () -> Unit, warmup: Boolean, failure: Boolean, allowFailure: Boolean = true, onChoose: (warmup: Boolean, failure: Boolean) -> Unit) {
+fun SetTypeMenu(open: Boolean, onDismiss: () -> Unit, warmup: Boolean, failure: Boolean, allowFailure: Boolean = true, onDelete: (() -> Unit)? = null, onChoose: (warmup: Boolean, failure: Boolean) -> Unit) {
     androidx.compose.material3.DropdownMenu(open, onDismiss) {
         androidx.compose.material3.DropdownMenuItem(
-            { Text(buildAnnotatedString { withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.Bold)) { append("W  ") }; append("Warm-up set (never counts for ranks)") }) },
+            { Text(buildAnnotatedString { withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.Bold)) { append("W  ") }; append("Warm-up set") }) },
             { onDismiss(); onChoose(!warmup, false) },
             trailingIcon = { if (warmup) Text("✓") },
         )
@@ -274,6 +271,7 @@ fun SetTypeMenu(open: Boolean, onDismiss: () -> Unit, warmup: Boolean, failure: 
             trailingIcon = { if (failure) Text("✓") },
         )
         if (warmup || failure) androidx.compose.material3.DropdownMenuItem({ Text("Normal set") }, { onDismiss(); onChoose(false, false) })
+        if (onDelete != null) androidx.compose.material3.DropdownMenuItem({ Text("Delete set", color = Red, fontWeight = FontWeight.Bold) }, { onDismiss(); onDelete() })
     }
 }
 
@@ -407,7 +405,8 @@ fun RoutineEditScreen(id: String?) {
                             Box(Modifier.weight(cols[0].second)) {
                                 var menu by remember { mutableStateOf(false) }
                                 SetLabel(setNumber(item.sets.map { it.warmup }, n), s.failure, Modifier.clickable { menu = true }.padding(vertical = 6.dp, horizontal = 4.dp), s.warmup)
-                                SetTypeMenu(menu, { menu = false }, s.warmup, s.failure, !Store.profile.value.dev1rm || n == item.sets.lastIndex) { w, f ->
+                                SetTypeMenu(menu, { menu = false }, s.warmup, s.failure, !Store.profile.value.dev1rm || n == item.sets.lastIndex,
+                                    onDelete = { updateItem(i) { it.copy(sets = it.sets.toMutableList().also { l -> l.removeAt(n) }) } }) { w, f ->
                                     updateItem(i) { it.copy(sets = it.sets.toMutableList().also { l -> l[n] = l[n].copy(warmup = w, failure = f) }) }
                                 }
                             }
@@ -451,8 +450,6 @@ fun RoutineEditScreen(id: String?) {
                             }.padding(6.dp))
                         }
                     }
-                    Text("Tap a set number to mark it as a warm-up (W) or failure set (F).", color = Sub, fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     GreyButton("+ Add Set", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                         updateItem(i) { it.copy(sets = it.sets + (it.sets.lastOrNull()?.copy() ?: PlanSet())) }
                     }

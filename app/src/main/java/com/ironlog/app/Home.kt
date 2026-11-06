@@ -185,7 +185,6 @@ fun WorkoutDetailScreen(id: String) {
                     HSpacer(12)
                     NameText(starredName(ex), color = Blue, fontSize = 17.sp)
                 }
-                if (ex != null) DevOneRmBadge(ex.id, item.sets.lastOrNull { it.failure }?.weight, Modifier.fillMaxWidth().padding(bottom = 4.dp))
                 item.sets.forEachIndexed { n, s ->
                     Row(Modifier.fillMaxWidth().background(if (n % 2 == 1) Card else Bg).padding(horizontal = 8.dp, vertical = 8.dp)) {
                         SetLabel(setNumber(item.sets.map { it.warmup }, n), s.failure, Modifier.height(22.dp).padding(end = 24.dp), s.warmup)

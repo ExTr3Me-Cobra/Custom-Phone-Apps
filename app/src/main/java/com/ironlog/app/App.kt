@@ -97,6 +97,7 @@ sealed interface Route {
     data class EditExercise(val id: String?, val copyOf: String? = null) : Route
     data object Active : Route
     data class Summary(val id: String) : Route
+    data class ShareWorkout(val id: String) : Route
     data class WorkoutDetail(val id: String) : Route
     data object Settings : Route
     data object Library : Route
@@ -143,6 +144,12 @@ object Nav {
 }
 
 class MainActivity : ComponentActivity() {
+    // Any touch in the app (tap, scroll, swipe) counts as activity for the workout's active time.
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN || ev.actionMasked == android.view.MotionEvent.ACTION_MOVE) Workouts.touched()
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onStart() { super.onStart(); AppLock.onStart() }
     override fun onStop() { super.onStop(); AppLock.onStop() }
     override fun onNewIntent(intent: android.content.Intent) {
@@ -260,6 +267,7 @@ private fun RouteScreen(route: Route) {
         is Route.EditExercise -> EditExerciseScreen(route.id, route.copyOf)
         Route.Active -> ActiveWorkoutScreen()
         is Route.Summary -> SummaryScreen(route.id)
+        is Route.ShareWorkout -> WorkoutShareScreen(route.id)
         is Route.WorkoutDetail -> WorkoutDetailScreen(route.id)
         Route.Settings -> SettingsScreen()
         Route.Library -> PickerScreen(null)
@@ -406,7 +414,22 @@ fun BigButton(text: String, color: Color = Blue, modifier: Modifier = Modifier.f
         interactionSource = press.source,
         colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false) }
+    ) { OutlinedLabel(text, fontSize = 16.sp) }
+}
+
+/**
+ * White text with a thin black outline, for labels on coloured buttons (accent, green, red), so it stays easy to
+ * read whatever the colour.
+ */
+@Composable
+fun OutlinedLabel(text: String, fontSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier, fontWeight: FontWeight = FontWeight.Bold,
+                  color: Color = Color.White) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black,
+            style = androidx.compose.material3.LocalTextStyle.current.copy(drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round)))
+        Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
+    }
 }
 
 @Composable
