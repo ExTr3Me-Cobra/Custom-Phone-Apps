@@ -47,7 +47,31 @@ object Log {
         }.onFailure { e("reading screens", it) }
         i("Drawing: skiko.renderApi=${System.getProperty("skiko.renderApi") ?: "(default)"}")
         Thread.setDefaultUncaughtExceptionHandler { th, t -> e("uncaught on thread ${th.name}", t) }
+        // A normal close writes this; if a start isn't preceded by it, the app crashed last time.
+        Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing") })
+        crashReports()
     }
+
+    /**
+     * If Java itself crashed, it leaves an hs_err_pid*.log file (in the program's folder or the
+     * temp folder). Copy the important part of any new one into this log, once.
+     */
+    private fun crashReports() = runCatching {
+        val seenFile = File(dataDir, "crashes-seen.txt")
+        val seen = runCatching { seenFile.readLines().toSet() }.getOrDefault(emptySet())
+        val places = listOfNotNull(
+            System.getProperty("user.dir"), System.getProperty("java.io.tmpdir"),
+            System.getProperty("jpackage.app-path")?.let { File(it).parent }, dataDir.path,
+        ).map(::File).distinct()
+        val found = places.flatMap { d -> d.listFiles { f -> f.name.startsWith("hs_err_pid") && f.name.endsWith(".log") }.orEmpty().toList() }
+            .filter { it.path !in seen && System.currentTimeMillis() - it.lastModified() < 14L * 24 * 3600 * 1000 }
+        for (f in found) {
+            val lines = f.readLines()
+            val important = lines.take(40) + listOf("…") + lines.filter { it.startsWith("Current thread") || it.contains("Problematic frame") || it.startsWith("C  [") || it.startsWith("j  ") }.take(30)
+            i("CRASH REPORT found from an earlier run: ${f.path}\n" + important.joinToString("\n"))
+            seenFile.appendText(f.path + "\n")
+        }
+    }.onFailure { e("looking for crash reports", it) }
 
     fun text(): String = runCatching { file.readText() }.getOrDefault("(no log yet)")
 

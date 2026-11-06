@@ -68,4 +68,5 @@ tasks.register<JavaExec>("selfTest") {
     mainClass.set("mammyframe.SelfTestKt")
     args = (project.findProperty("testArgs") as String? ?: "").split(" ").filter { it.isNotBlank() }
     jvmArgs("-Xmx3g")
+    listOf("folderX", "folderY", "clicks").forEach { k -> (project.findProperty(k) as String?)?.let { systemProperty(k, it) } }
 }

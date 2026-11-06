@@ -170,10 +170,12 @@ private fun windowTest(out: File) {
     Thread.sleep(1500); snap("w2-dev.png")
     val (fx, fy) = (System.getProperty("folderX") ?: "500").toInt() to (System.getProperty("folderY") ?: "500").toInt()
     click(fx, fy)
-    Thread.sleep(4000); snap("w3-folder-window.png")
-    // Cancel the folder window (Escape), then check the app is still fine.
-    robot.keyPress(java.awt.event.KeyEvent.VK_ESCAPE); robot.keyRelease(java.awt.event.KeyEvent.VK_ESCAPE)
-    Thread.sleep(2000); snap("w4-after-cancel.png")
+    Thread.sleep(2500); snap("w3-picker.png")
+    // More clicks from -Dclicks="x,y;x,y", with a picture after each.
+    (System.getProperty("clicks") ?: "").split(";").filter { it.contains(",") }.forEachIndexed { i, c ->
+        val (x, y) = c.split(",").map { it.trim().toInt() }
+        click(x, y); Thread.sleep(2500); snap("w${4 + i}-click.png")
+    }
     println("----- log -----")
     println(Log.text().takeLast(3000))
     exitProcess(0)

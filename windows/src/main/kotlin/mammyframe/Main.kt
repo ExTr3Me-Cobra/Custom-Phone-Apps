@@ -35,8 +35,6 @@ import java.awt.GraphicsEnvironment
 import java.awt.Point
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
-import javax.swing.JFileChooser
-import javax.swing.SwingUtilities
 import javax.swing.UIManager
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,6 +71,9 @@ private val blankPointer: PointerIcon by lazy {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    // Don't wait for each screen refresh. With screens of different speeds (e.g. a 30 Hz TV next
+    // to 60 Hz monitors) that held drawing to the slowest one. Set MAMMYFRAME_VSYNC=1 to wait again.
+    if (System.getenv("MAMMYFRAME_VSYNC") != "1") System.setProperty("skiko.vsync.enabled", "false")
     Log.startup(args)
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
         .onFailure { Log.e("look and feel", it) }
@@ -93,7 +94,17 @@ fun main(args: Array<String>) {
         ) {
             LaunchedEffect(Unit) {
                 Log.i("Window open: drawing with ${runCatching { window.renderApi }.getOrNull()}, " +
-                    "size ${window.width}x${window.height}")
+                    "size ${window.width}x${window.height}, vsync ${System.getProperty("skiko.vsync.enabled") ?: "on"}")
+                // Which screen the window is on (and how fast that screen refreshes), whenever it changes.
+                var lastScreen: String? = null
+                while (true) {
+                    val here = runCatching {
+                        val m = window.graphicsConfiguration.device.displayMode
+                        "${window.graphicsConfiguration.device.iDstring} ${m.width}x${m.height} @ ${m.refreshRate} Hz"
+                    }.getOrNull()
+                    if (here != lastScreen) { Log.i("Window is on screen $here"); lastScreen = here }
+                    delay(5_000)
+                }
             }
             // Photos and the black screen fill the whole screen; the menus are a normal window.
             LaunchedEffect(screen) {
@@ -156,6 +167,7 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
     }
 
     fun update(s: Settings) {
+        if (s.developer != settings.developer) Log.i("Developer settings ${if (s.developer) "on" else "off"}")
         val scheduleChanged = s.scheduleOn != settings.scheduleOn ||
             s.startMinute != settings.startMinute || s.endMinute != settings.endMinute
         settings = s
@@ -163,26 +175,11 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
         if (scheduleChanged) lastPhase = Schedule.phaseNow(s)
     }
 
+    // The photos folder is chosen inside Mammy Frame (Windows' own folder window could crash it).
+    var picking by remember { mutableStateOf(false) }
     fun chooseFolder() {
-        Log.i("Choose folder: opening the folder window")
-        // Opened just after the click has finished, on top of (and attached to) the Mammy Frame window.
-        SwingUtilities.invokeLater {
-            try {
-                val chooser = JFileChooser(settings.folder).apply {
-                    fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                    dialogTitle = "Choose the photos folder"
-                    isAcceptAllFileFilterUsed = false
-                }
-                val result = chooser.showOpenDialog(window)
-                Log.i("Choose folder: result=$result, chosen=${chooser.selectedFile}")
-                if (result == JFileChooser.APPROVE_OPTION && chooser.selectedFile != null) {
-                    update(settings.copy(folder = chooser.selectedFile.absolutePath))
-                }
-            } catch (t: Throwable) {
-                Log.e("Choose folder", t)
-            }
-            lastTouch = AiRotate.now()
-        }
+        Log.i("Choose folder: opening the folder picker")
+        picking = true
     }
 
     // Opened at startup: straight into the slideshow, or black, as the schedule says.
@@ -209,8 +206,8 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
     }
 
     // Outside the schedule's hours, the menu goes back to black after a minute of not being used.
-    LaunchedEffect(screen, dialog, lastTouch, settings) {
-        if (screen != Screen.HOME || dialog != HomeDialog.NONE) return@LaunchedEffect
+    LaunchedEffect(screen, dialog, lastTouch, settings, picking) {
+        if (screen != Screen.HOME || dialog != HomeDialog.NONE || picking) return@LaunchedEffect
         if (Schedule.phaseNow(settings) != Phase.OFF) return@LaunchedEffect
         val wait = BLACK_RETURN_MS - (AiRotate.now() - lastTouch)
         if (wait > 0) delay(wait)
@@ -273,7 +270,7 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
                     settings = settings,
                     photoCount = settings.folder?.let { counts[it] },
                     dialog = dialog,
-                    onDialog = { dialog = it; lastTouch = AiRotate.now() },
+                    onDialog = { Log.i("Home: ${if (it == HomeDialog.NONE) "closed the box" else "opened $it"}"); dialog = it; lastTouch = AiRotate.now() },
                     onChooseFolder = ::chooseFolder,
                     aiText = aiText,
                     onOpenAiRotate = { setScreen(Screen.ROTATE) },
@@ -309,6 +306,16 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
                                 setScreen(Screen.HOME)
                             }
                         }
+                )
+            }
+            if (picking && screen == Screen.HOME) {
+                FolderPicker(
+                    start = settings.folder,
+                    onPick = {
+                        Log.i("Choose folder: chose $it")
+                        update(settings.copy(folder = it)); picking = false; lastTouch = AiRotate.now()
+                    },
+                    onCancel = { Log.i("Choose folder: cancelled"); picking = false; lastTouch = AiRotate.now() },
                 )
             }
         }
