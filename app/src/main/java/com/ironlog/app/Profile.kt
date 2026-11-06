@@ -89,6 +89,10 @@ fun SettingsScreen() {
                             withContext(Dispatchers.Main) { Nav.go(Route.HevyMatch) }
                             return@runCatching "Choose what to import from Hevy…"
                         }
+                        if (Store.lastFull) {
+                            scope.launch(Dispatchers.Main) { kotlinx.coroutines.delay(1500); Store.restartApp(context) }
+                            return@runCatching "Backup restored exactly – restarting Loadout…"
+                        }
                         Store.lastImported?.let {
                             "Imported $it workout${if (it == 1) "" else "s"}" + (if (Store.lastHevy) " from Hevy" else "") + " (any already here were skipped)."
                         }
@@ -275,7 +279,7 @@ fun SettingsScreen() {
 
             Spacer(8)
             Text("Backup", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Saves your routines, workouts, your own exercises, profile and every picture you've added to one .zip file. Restore it on any phone to get everything back.", color = Sub, fontSize = 13.sp)
+            Text("Saves an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – to one .zip file. Restoring it replaces what's here with that copy and restarts the app. (Your OpenAI key stays on this phone.)", color = Sub, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GreyButton("Save backup", Modifier.weight(1f)) { export.launch("loadout-backup.zip") }
                 GreyButton("Restore", Modifier.weight(1f)) { import.launch(arrayOf("application/zip", "application/json", "*/*")) }

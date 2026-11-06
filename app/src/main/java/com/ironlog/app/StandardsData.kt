@@ -72,6 +72,10 @@ object StandardsData {
         v2 = load(c, "standards_v2.json")
         personal = load(c, "personal/standards_personal.json") // PERSONAL-USE (removable)
         purged = load(c, "personal/standards_purged.json") // PERSONAL-USE (removable)
+        // The other tables only change numbers; anything one of them leaves out keeps its regular standard, so
+        // switching tables never takes a rank away (the purged table had no Grip Dynamometer Test).
+        fun filled(t: List<Std>) = if (t.isEmpty()) t else t + normal.filter { s -> t.none { it.id == s.id } }
+        gemini = filled(gemini); v2 = filled(v2); personal = filled(personal); purged = filled(purged)
     }
 
     private fun load(c: Context, file: String): List<Std> =

@@ -74,7 +74,11 @@ object Store {
     fun writeFile(name: String, text: String) = write(name, text)
 
     private fun read(name: String): String? = runCatching { File(dir, name).takeIf { it.exists() }?.readText() }.getOrNull()
+    /** Set while a full restore swaps files in: nothing still in memory may write over the restored copy. */
+    @Volatile private var frozen = false
+
     private fun write(name: String, text: String) {
+        if (frozen) return
         runCatching {
             val tmp = File(dir, "$name.tmp")
             tmp.writeText(text)
@@ -186,6 +190,7 @@ object Store {
     // ----- workouts -----
     fun setActive(w: Workout?) {
         _active.value = w
+        if (frozen) return
         if (w == null) File(dir, "active.json").delete() else write("active.json", Json.workout(w).toString())
     }
 
@@ -236,9 +241,16 @@ object Store {
     /** Small settings files included in backups: Hevy match choices, the 1 Rep Max list. */
     private val BACKUP_FILES = listOf("hevy_map.json", "onerm_list.json", "own_photos.json")
 
+    /** App settings kept by Android (the heading history etc.); the picture-making queue is left out on purpose. */
+    private fun prefsDir() = File(dir.parentFile, "shared_prefs")
+    private val SKIP_PREFS = setOf("gen_queue.xml")
+
     /**
-     * Full backup as a zip: backup.json (routines, workouts, your exercises, profile without the API key)
-     * plus every picture you added or made (pictures/<exercise>.jpg). Built-in pictures aren't needed.
+     * Full backup as a zip, an exact copy of everything the app keeps: data/ holds every file in the app's data
+     * folder (workouts, the workout in progress, routines, profile and every setting, your exercise changes, text
+     * edits, reference weights and photos, the 1 Rep Max list, chart and animation choices, the Recycle Bin, pictures)
+     * and prefs/ Android's small settings files. Only the OpenAI key (kept apart on this phone) and this phone's
+     * backup status are left out. backup.json and pictures/ are kept too, so older versions can still read it.
      * Returns how many pictures went in.
      */
     fun writeBackup(out: java.io.OutputStream): Int {
@@ -256,9 +268,29 @@ object Store {
                 f.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }
+            // The exact copy. Pictures already went in above, so images/ isn't stored twice.
+            val root = dir.canonicalFile
+            dir.walkTopDown().filter { it.isFile && !it.name.endsWith(".tmp") }.forEach { f ->
+                val rel = f.canonicalFile.relativeTo(root).invariantSeparatorsPath
+                if (rel.startsWith("images/")) return@forEach
+                zip.putNextEntry(java.util.zip.ZipEntry("data/$rel"))
+                f.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+            prefsDir().listFiles { f -> f.isFile && f.name.endsWith(".xml") && f.name !in SKIP_PREFS }?.forEach { f ->
+                zip.putNextEntry(java.util.zip.ZipEntry("prefs/" + f.name))
+                f.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+            zip.putNextEntry(java.util.zip.ZipEntry("full.txt"))
+            zip.write("Loadout full backup 2".toByteArray())
+            zip.closeEntry()
         }
         return pics.size
     }
+
+    /** The last restore was a full (exact copy) backup: the app restarts to load it. */
+    var lastFull = false
 
     /** Restores a backup zip (or an older .json backup). Returns how many pictures were restored. */
     fun readBackup(input: java.io.InputStream): Int {
@@ -274,8 +306,14 @@ object Store {
             }
             restore(text); return 0
         }
+        lastFull = false
         var json: String? = null
         var pics = 0
+        // A full backup replaces everything with the exact copy it holds.
+        val names = java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            generateSequence { zip.nextEntry }.map { it.name }.toList()
+        }
+        if ("full.txt" in names) return restoreFull(bytes)
         java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
@@ -295,6 +333,56 @@ object Store {
         restore(json ?: error("No backup.json in the zip"))
         imageChanged()
         return pics
+    }
+
+    /**
+     * Restores a full backup: clears the app's data folder and settings, writes back every file exactly as it was, and
+     * keeps the OpenAI key that's on this phone. The app then restarts so every part of it loads the restored copy.
+     */
+    private fun restoreFull(bytes: ByteArray): Int {
+        val root = dir.canonicalFile
+        val staging = File(dir.parentFile, "restore_tmp").apply { deleteRecursively(); mkdirs() }
+        val stagingPrefs = File(staging, "__prefs").apply { mkdirs() }
+        var pics = 0
+        // Unpack into a side folder first, so a broken zip changes nothing.
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            while (true) {
+                val e = zip.nextEntry ?: break
+                if (!e.isDirectory) {
+                    val target = when {
+                        e.name.startsWith("data/") -> File(staging, e.name.removePrefix("data/"))
+                        e.name.startsWith("pictures/") -> File(staging, "images/" + File(e.name).name).also { pics++ }
+                        e.name.startsWith("prefs/") -> File(stagingPrefs, File(e.name).name)
+                        else -> null
+                    }
+                    // Only inside the side folder: a name with ../ can't write anywhere else.
+                    if (target != null && target.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { zip.copyTo(it) }
+                    }
+                }
+                zip.closeEntry()
+            }
+        }
+        if (!File(staging, "profile.json").exists() && !File(staging, "workouts.json").exists()) {
+            staging.deleteRecursively(); error("Not a Loadout backup")
+        }
+        // Swap it in: everything old goes, the copy takes its place. Until the restart nothing else is saved.
+        frozen = true
+        root.listFiles()?.forEach { it.deleteRecursively() }
+        staging.listFiles()?.filter { it.name != "__prefs" }?.forEach { f -> f.copyRecursively(File(root, f.name), overwrite = true) }
+        prefsDir().apply { mkdirs() }.listFiles { f -> f.name !in SKIP_PREFS }?.forEach { it.delete() }
+        stagingPrefs.listFiles()?.forEach { it.copyTo(File(prefsDir(), it.name), overwrite = true) }
+        staging.deleteRecursively()
+        lastFull = true
+        return pics
+    }
+
+    /** Starts the app again from scratch (after a full restore), so nothing old stays in memory. */
+    fun restartApp(c: Context) {
+        val i = c.packageManager.getLaunchIntentForPackage(c.packageName) ?: return
+        c.startActivity(android.content.Intent.makeRestartActivityTask(i.component))
+        Runtime.getRuntime().exit(0)
     }
 
     /** The last restore was a Hevy CSV. */
