@@ -120,7 +120,11 @@ fun Onboarding() {
                         color = if (ok) Blue else Card2, modifier = Modifier.weight(2f),
                     ) {
                         if (!ok) return@BigButton
-                        if (page < pageCount - 1) page++ else Store.setProfile(Store.profile.value.copy(onboarded = true))
+                        if (page < pageCount - 1) page++ else {
+                            Store.setProfile(Store.profile.value.copy(onboarded = true))
+                            // Hevy history picked during setup: match its exercises now.
+                            if (HevyImport.pending != null) Nav.go(Route.HevyMatch)
+                        }
                     }
                 }
             }
@@ -212,7 +216,7 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
                 runCatching {
                     val n = Store.restoreFiles(context, uris)
                     when {
-                        n == -1 -> { HevyImport.pending = null; "That's a Hevy file. Finish setting up, then import it in Settings → Import Hevy App data." }
+                        n == -1 -> "Hevy history ready ✓ – right after setup you'll choose how its exercises match Loadout's."
                         Store.lastFull -> {
                             scope.launch(kotlinx.coroutines.Dispatchers.Main) { kotlinx.coroutines.delay(1500); Store.restartApp(context) }
                             "Restored ✓ – restarting Loadout…"
@@ -224,6 +228,23 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
         }
     }
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(AutoSave.OpenBackups()) { uris -> restoreUris(uris) }
+    // Hevy: read now, matched right after setup (the matching screen needs the app open).
+    val hevy = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        msg = "Reading…"
+        scope.launch {
+            msg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val text = context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+                    if (!HevyImport.looksLikeHevy(text)) return@runCatching "That isn't a Hevy export. In Hevy: Profile → Settings → Export & Import Data → Export Workouts."
+                    HevyImport.pending = HevyImport.prepare(text)
+                    "Hevy history ready ✓ – right after setup you'll choose how its exercises match Loadout's."
+                }.getOrElse { "Couldn't read that file." }
+            }
+        }
+    }
     Title("Are you new to Loadout?")
     @Composable fun Choice(value: Boolean, icon: String, title: String, text: String) {
         val on = importing == value
@@ -243,10 +264,11 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
         }
     }
     Choice(false, "👋", "I'm new to Loadout", "Set up from scratch.")
-    Choice(true, "📦", "I have Loadout data to import", "From auto-save or a backup you saved, e.g. moving to a new phone.")
+    Choice(true, "📦", "I have data to import", "A Loadout backup (auto-save or one you saved, e.g. moving to a new phone), or your Hevy history.")
     if (importing == true) {
         RestoreButton("Find my backup", Modifier.fillMaxWidth(), big = true, show = { msg = it },
             pickManually = { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }) { restoreUris(it) }
+        GreyButton("Import from Hevy (.csv)") { hevy.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }
     }
     msg?.let { Text(it, color = Blue, fontSize = 14.sp) }
 }
