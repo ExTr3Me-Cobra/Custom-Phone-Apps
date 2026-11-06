@@ -67,7 +67,7 @@ class CloudBackup : BackupAgent() {
     override fun onBackup(oldState: ParcelFileDescriptor?, data: BackupDataOutput?, newState: ParcelFileDescriptor?) {}
     override fun onRestore(data: BackupDataInput?, appVersionCode: Int, newState: ParcelFileDescriptor?) {}
 
-
+    companion object {
         /** A short record of what Android's backup did with Loadout (newest last), for Developer settings. */
         fun log(c: Context, msg: String) {
             runCatching {
@@ -80,9 +80,5 @@ class CloudBackup : BackupAgent() {
 
         fun readLog(c: Context): List<String> =
             runCatching { File(c.noBackupFilesDir, "backup_log.txt").readLines() }.getOrDefault(emptyList())
-
-.getOrNull()
-
-
     }
 }
