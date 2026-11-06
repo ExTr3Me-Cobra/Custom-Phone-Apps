@@ -258,8 +258,8 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(text, color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
             }
-            Box(Modifier.size(22.dp).clip(CircleShape).background(if (on) Blue else Card2), contentAlignment = Alignment.Center) {
-                if (on) OutlinedLabel("✓", 13.sp)
+            Box(Modifier.size(22.dp).clip(CircleShape).background(if (on) btnBg(Blue) else Card2), contentAlignment = Alignment.Center) {
+                if (on) OutlinedLabel("✓", 13.sp, bg = btnBg(Blue))
             }
         }
     }

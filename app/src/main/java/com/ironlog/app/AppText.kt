@@ -222,7 +222,7 @@ fun AppTextPill() {
             .clickable { AppText.paused = !AppText.paused; AppText.editing = null }.padding(horizontal = 12.dp, vertical = 6.dp)
         if (AppText.paused) androidx.compose.material3.Text("⏸ Text editing paused · tap to edit", color = Color.White, fontSize = 11.sp,
             fontWeight = FontWeight.Medium, modifier = pill)
-        else OutlinedLabel("✏️ Tap any text (${AppText.count} changed) · tap here to pause", 11.sp, pill, FontWeight.Medium, editable = false)
+        else OutlinedLabel("✏️ Tap any text (${AppText.count} changed) · tap here to pause", 11.sp, pill, FontWeight.Medium, editable = false, bg = Blue)
     }
     AppText.editing?.takeIf { AppText.active }?.let { TextEditorPanel(it, AppText.editingText) }
 }

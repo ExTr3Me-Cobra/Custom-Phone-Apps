@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -415,29 +416,31 @@ fun BigButton(text: String, color: Color = Blue, modifier: Modifier = Modifier.f
     Button(
         onClick = onClick, modifier = Modifier.pressScale(press).then(modifier).height(50.dp), shape = RoundedCornerShape(10.dp),
         interactionSource = press.source,
-        colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+        colors = ButtonDefaults.buttonColors(containerColor = btnBg(color), contentColor = Color.White),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-    ) { OutlinedLabel(text, fontSize = 16.sp) }
+    ) { OutlinedLabel(text, fontSize = 16.sp, bg = btnBg(color)) }
 }
 
+/** Coloured buttons: the colour behind the label (a deeper shade with the "Darker buttons" style). */
+fun btnBg(c: Color): Color = if (Store.profile.value.btnStyle == "dark")
+    androidx.compose.ui.graphics.lerp(c, Color.Black, 0.38f) else c
+
 /**
- * White text with a thin black outline, for labels on coloured buttons (accent, green, red), so it stays easy to
- * read whatever the colour.
+ * A label on a coloured button, kept easy to read in the style picked in developer settings: black or white text by
+ * how bright [bg] is (the default), white on a deeper shade, or white with a soft shadow. [bg] is the button's colour
+ * as shown (after [btnBg]).
  */
 @Composable
 fun OutlinedLabel(text: String, fontSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier, fontWeight: FontWeight = FontWeight.Bold,
-                  color: Color = Color.White, editable: Boolean = true) {
-    val stroke = androidx.compose.material3.LocalTextStyle.current.copy(drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f,
-        join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                  color: Color = Color.White, editable: Boolean = true, bg: Color = Blue) {
+    val style = Store.profile.collectAsState().value.btnStyle
+    val tint = if (style == "auto" && color == Color.White && bg.luminance() > 0.45f) Color(0xFF111114) else color
+    val base = androidx.compose.material3.LocalTextStyle.current
+    val st = if (style == "shadow") base.copy(shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.75f),
+        androidx.compose.ui.geometry.Offset(0f, 2f), 8f)) else base
     Box(modifier, contentAlignment = Alignment.Center) {
-        if (editable) {
-            Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black, style = stroke)
-            Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
-        } else {
-            // Outside the app's text editing (e.g. its own controls).
-            androidx.compose.material3.Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black, style = stroke)
-            androidx.compose.material3.Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
-        }
+        if (editable) Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = tint, style = st)
+        else androidx.compose.material3.Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = tint, style = st)
     }
 }
 

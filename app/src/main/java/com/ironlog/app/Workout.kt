@@ -223,10 +223,10 @@ fun ActiveWorkoutScreen() {
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             CalculatorIcon(Modifier.clip(RoundedCornerShape(8.dp)).clickable { calc = true }.padding(horizontal = 8.dp, vertical = 6.dp))
             ReferenceButton()
-            OutlinedLabel("Discard", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Red).clickable { confirmDiscard = true }
-                .padding(horizontal = 14.dp, vertical = 9.dp))
-            OutlinedLabel("Finish", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Blue).clickable { confirmEnd = true }
-                .padding(horizontal = 18.dp, vertical = 9.dp))
+            OutlinedLabel("Discard", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(btnBg(Red)).clickable { confirmDiscard = true }
+                .padding(horizontal = 14.dp, vertical = 9.dp), bg = btnBg(Red))
+            OutlinedLabel("Finish", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(btnBg(Blue)).clickable { confirmEnd = true }
+                .padding(horizontal = 18.dp, vertical = 9.dp), bg = btnBg(Blue))
         }
         if (calc) Calculator { calc = false }
         // Stats row with the live muscle map (tap it to enlarge).
@@ -477,7 +477,7 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                 if (b > 0f && b < 1f) drawCircle(Green.copy(alpha = 1f - b), radius = size.minDimension / 2 * (1f + b * 1.8f),
                     center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx() * (1.5f - b)))
-            }.clip(RoundedCornerShape(10.dp)).background(if (s.done) Green else Card2)
+            }.clip(RoundedCornerShape(10.dp)).background(if (s.done) btnBg(Green) else Card2)
                 .clickable(
                     onClick = {
                         if (!s.done) {
@@ -510,7 +510,7 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                 )
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
-        ) { if (s.done) OutlinedLabel("✓", 18.sp) else Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+        ) { if (s.done) OutlinedLabel("✓", 18.sp, bg = btnBg(Green)) else Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
     }
 }
 
