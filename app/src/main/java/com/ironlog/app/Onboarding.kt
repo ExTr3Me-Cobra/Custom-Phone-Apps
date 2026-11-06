@@ -26,6 +26,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +60,9 @@ fun Onboarding() {
     val p by Store.profile.collectAsState()
     if (p.onboarded) return
     var page by rememberSaveable { mutableStateOf(0) }
-    val pages = listOf("welcome", "you", "data", "ranks", "ready")
+    val pages = listOf("welcome", "start", "you", "data", "ranks", "ready")
+    // New to Loadout, or bringing data over (null until you pick).
+    var importing by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val pageCount = pages.size
     if (page >= pageCount) page = pageCount - 1
     val focus = LocalFocusManager.current
@@ -92,6 +95,7 @@ fun Onboarding() {
             ) {
                 when (pages[page]) {
                     "welcome" -> WelcomePage()
+                    "start" -> StartPage(importing) { importing = it }
                     "you" -> AboutYouPage(p)
                     "data" -> YourDataPage(p) {
                         Store.setProfile(Store.profile.value.copy(cloud = "local"))
@@ -102,6 +106,7 @@ fun Onboarding() {
                 }
             }
             val missing = when (pages[page]) {
+                "start" -> if (importing == null) "Choose one to continue." else null
                 "you" -> biometricsMissing(p)
                 else -> null
             }
@@ -191,6 +196,64 @@ private fun AboutYouPage(p: Profile) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
     }
     BodyFatPicker(p) { set(Store.profile.value.copy(bodyFat = it)) }
+}
+
+/** First thing after the welcome: start fresh, or restore your data (from auto-save or a backup file). */
+@Composable
+private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var msg by remember { mutableStateOf<String?>(null) }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        msg = "Restoring…"
+        scope.launch {
+            msg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val n = Store.restoreFiles(context, uris)
+                    when {
+                        n == -1 -> { HevyImport.pending = null; "That's a Hevy file. Finish setting up, then import it in Settings → Import Hevy App data." }
+                        Store.lastFull -> {
+                            scope.launch(kotlinx.coroutines.Dispatchers.Main) { kotlinx.coroutines.delay(1500); Store.restartApp(context) }
+                            "Restored ✓ – restarting Loadout…"
+                        }
+                        else -> "Restored ✓"
+                    }
+                }.getOrElse { "That file isn't a Loadout backup. Pick loadout-autosave-A.zip and -B.zip (or a backup you saved)." }
+            }
+        }
+    }
+    Title("Are you new to Loadout?")
+    @Composable fun Choice(value: Boolean, icon: String, title: String, text: String) {
+        val on = importing == value
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (on) Blue.copy(alpha = 0.18f) else Card)
+                .clickable { set(value) }.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(icon, fontSize = 26.sp)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(text, color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Box(Modifier.size(22.dp).clip(CircleShape).background(if (on) Blue else Card2), contentAlignment = Alignment.Center) {
+                if (on) OutlinedLabel("✓", 13.sp)
+            }
+        }
+    }
+    Choice(false, "👋", "I'm new to Loadout", "Set up from scratch.")
+    Choice(true, "📦", "I have Loadout data to import", "From auto-save or a backup you saved, e.g. moving to a new phone.")
+    if (importing == true) {
+        InfoCard {
+            Text("Select both files", fontWeight = FontWeight.Bold)
+            Text("Loadout auto-saves two files that take turns: loadout-autosave-A.zip and loadout-autosave-B.zip (or loadout-drive-autosave-A/B.zip in Google Drive). " +
+                "Select both – Loadout restores the newer one. A single backup file you saved yourself works too.", color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        BigButton("Choose backup files") { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }
+    }
+    msg?.let { Text(it, color = Blue, fontSize = 14.sp) }
 }
 
 @Composable

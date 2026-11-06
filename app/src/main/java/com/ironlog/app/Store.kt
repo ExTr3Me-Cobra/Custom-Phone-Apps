@@ -293,6 +293,12 @@ object Store {
         return pics.size
     }
 
+    /** Restores from one or more picked files (e.g. auto-save A and B): the newest one is used. Same result as [readBackup]. */
+    fun restoreFiles(c: Context, uris: List<android.net.Uri>): Int {
+        val files = uris.map { u -> c.contentResolver.openInputStream(u)!!.use { it.readBytes() } }
+        return readBackup(files.maxByOrNull { savedAt(it) ?: 0L }!!.inputStream())
+    }
+
     /** When a backup zip was saved (from its full.txt), or null for older backups. */
     fun savedAt(bytes: ByteArray): Long? = runCatching {
         java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->

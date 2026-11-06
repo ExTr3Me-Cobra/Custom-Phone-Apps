@@ -86,6 +86,35 @@ object AutoSave {
         return null
     }
 
+    /**
+     * This phone: you picked a folder. Loadout makes (or reuses) its two files there, named for you, and keeps
+     * permission to the folder. Returns a problem to show, or null.
+     */
+    fun chosenFolder(c: Context, tree: Uri): String? {
+        if (isDrive(tree)) return "For Google Drive, use the Google Drive auto-save below."
+        return runCatching {
+            c.contentResolver.takePersistableUriPermission(tree, RW)
+            val r = c.contentResolver
+            val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+            val kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getDocumentId(parent))
+            val have = HashMap<String, Uri>()
+            r.query(kids, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cur ->
+                while (cur.moveToNext()) have[cur.getString(1)] = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, cur.getString(0))
+            }
+            val uris = Slot.PHONE.names.map { n ->
+                (have[n] ?: android.provider.DocumentsContract.createDocument(r, parent, "application/zip", n) ?: error("couldn't make $n")).toString()
+            }
+            states[Slot.PHONE]?.uris?.filterNotNull()?.filter { it !in uris }?.forEach { u -> runCatching { r.releasePersistableUriPermission(Uri.parse(u), RW) } }
+            states[Slot.PHONE] = State(uris, listOf(null, null), true, null)
+            save(c)
+            null
+        }.getOrElse { "Couldn't use that folder: ${it.message}" }
+    }
+
+    /** The reminder shown wherever you pick where to save, or restore. */
+    const val TWO_FILES = "Loadout saves two backup files that take turns (A and B), so one is always a good copy if a save is cut short. " +
+        "To restore, select both files – Loadout uses the newer one."
+
     fun setOn(c: Context, s: Slot, on: Boolean) {
         val st = states[s] ?: return
         states[s] = State(st.uris, st.lasts, on, st.error); save(c)
@@ -175,6 +204,21 @@ fun AutoSaveSettings(show: (String) -> Unit) {
             }
         }
     }
+    val folder = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { tree ->
+        if (tree == null) return@rememberLauncherForActivityResult
+        val problem = AutoSave.chosenFolder(context, tree)
+        if (problem != null) { show(problem); return@rememberLauncherForActivityResult }
+        show("Saving…")
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val ok = AutoSave.write(context, AutoSave.Slot.PHONE)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                show(if (ok) "On this phone: auto-save set up and saved ✓ (loadout-autosave-A.zip and -B.zip)" else "On this phone: couldn't save – ${AutoSave.states[AutoSave.Slot.PHONE]?.error}")
+            }
+        }
+    }
+    Text("⚠️ " + AutoSave.TWO_FILES, color = Sub, fontSize = 13.sp)
     androidx.compose.runtime.LaunchedEffect(next) {
         next?.let { (s, i) -> next = null; picking = s to i; pick.launch(s.names[i]) }
     }
@@ -190,9 +234,8 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                     val last = st?.last
                     Text(
                         when {
-                            st == null || !st.ready -> (if (s == AutoSave.Slot.PHONE) "Not set up. Pick a folder such as Documents – the files stay even if Loadout is uninstalled."
-                                else "Not set up. Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive. Keeps a copy if you lose the phone.") +
-                                " You'll save two files (A and B); saves take turns, so one is always a good copy."
+                            st == null || !st.ready -> if (s == AutoSave.Slot.PHONE) "Not set up. Pick a folder such as Documents; Loadout names the two files for you. They stay even if Loadout is uninstalled."
+                                else "Not set up. Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive, then tap Save twice (the names are filled in). Keeps a copy if you lose the phone."
                             st.error != null -> "⚠️ ${st.error}"
                             !st.on -> "Off"
                             last != null -> "✓ Last saved ${fmt.format(java.util.Date(last))}"
@@ -205,7 +248,10 @@ fun AutoSaveSettings(show: (String) -> Unit) {
             }
             androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(top = 8.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                GreyButton(if (st?.ready == true) "Change files" else "Choose files", androidx.compose.ui.Modifier.weight(1f)) { next = s to 0 }
+                GreyButton(when { s == AutoSave.Slot.PHONE -> if (st?.ready == true) "Change folder" else "Choose folder"
+                    st?.ready == true -> "Change files"; else -> "Choose files" }, androidx.compose.ui.Modifier.weight(1f)) {
+                    if (s == AutoSave.Slot.PHONE) folder.launch(null) else next = s to 0
+                }
                 if (st?.uris?.any { it != null } == true) GreyButton("Stop using", androidx.compose.ui.Modifier.weight(1f), Red) { AutoSave.forget(context, s) }
             }
         }
