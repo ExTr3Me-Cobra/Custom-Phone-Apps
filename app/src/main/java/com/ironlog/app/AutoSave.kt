@@ -73,6 +73,16 @@ object AutoSave {
     }
 
     fun isDrive(uri: Uri) = uri.authority?.contains("com.google.android.apps.docs") == true
+
+    /** Google Drive through sign-in: the two "files" are names in your Drive's Loadout folder, not picked files. */
+    const val SIGNED_IN = "drive-signin:"
+    private fun signedIn(u: String?) = u?.startsWith(SIGNED_IN) == true
+
+    /** You signed in to Google Drive: Drive auto-save is on and saves straight away. */
+    fun driveSignedIn(c: Context) {
+        states[Slot.DRIVE] = State(Slot.DRIVE.names.map { SIGNED_IN + it }, listOf(null, null), true, null)
+        save(c)
+    }
     private const val RW = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
     /**
@@ -167,6 +177,10 @@ object AutoSave {
                         android.provider.DocumentsContract.getTreeDocumentId(tree)), null, null, null, null)?.use { it.moveToFirst() } == true
                 }.getOrDefault(false)
                 if (!ok) lost(c, s, "Loadout can't reach the folder it auto-saves to on this phone any more (the folder was deleted, or Android took back access).")
+            } else if (states[s]?.uris?.any(::signedIn) == true) {
+                // Signed in: Google can still give a token without asking you.
+                if (DriveSync.authorize(c) !is DriveSync.Auth.Token) lost(c, s, "Google needs you to sign in to Drive again" +
+                    (DriveSync.account?.let { " ($it)" } ?: "") + ".")
             } else if (missing(c, s).isNotEmpty() || states[s]?.uris?.any { it !in held } == true) {
                 lost(c, s, "Loadout can't reach its auto-save files in Google Drive any more (they were deleted or moved, or Android took back access).")
             }
@@ -174,7 +188,8 @@ object AutoSave {
     }
 
     /** Which of a place's files are missing (deleted, moved to the trash…). */
-    fun missing(c: Context, s: Slot): List<Int> = states[s]?.takeIf { it.ready }?.uris?.withIndex()?.filter { !exists(c, it.value) }?.map { it.index }.orEmpty()
+    fun missing(c: Context, s: Slot): List<Int> = states[s]?.takeIf { it.ready }?.uris?.withIndex()
+        ?.filter { !signedIn(it.value) && !exists(c, it.value) }?.map { it.index }.orEmpty()
 
     /** The phone's Documents folder, where the pickers open (a suggestion: you can still go anywhere). */
     val DOCUMENTS: Uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
@@ -229,6 +244,7 @@ object AutoSave {
      */
     fun turnOff(c: Context, s: Slot) {
         val st = states[s] ?: return
+        if (st.uris.any(::signedIn)) { DriveSync.deleteBackups(c); DriveSync.signOut(c); forget(c, s); return }
         st.uris.filterNotNull().forEach { u -> runCatching { android.provider.DocumentsContract.deleteDocument(c.contentResolver, Uri.parse(u)) } }
         if (s == Slot.PHONE && phoneTree != null) { states[s] = State(st.uris, listOf(null, null), false, null); save(c) }
         else forget(c, s)
@@ -271,6 +287,14 @@ object AutoSave {
         }
         // A remade (empty) file is filled first; otherwise the older of A and B.
         val i = gone.firstOrNull() ?: if ((st.lasts[0] ?: 0) <= (st.lasts[1] ?: 0)) 0 else 1
+        if (signedIn(st.uris[i])) {
+            val e = runCatching { DriveSync.upload(c, s.names[i]) }.exceptionOrNull()
+            if (e is SecurityException) { lost(c, s, "Google needs you to sign in to Drive again" + (DriveSync.account?.let { " ($it)" } ?: "") + "."); return false }
+            states[s] = State(st.uris, st.lasts.toMutableList().also { if (e == null) it[i] = System.currentTimeMillis() }, st.on,
+                e?.let { if (it is java.io.IOException) "No internet – it'll save to Drive next time." else (it.message ?: "couldn't upload") })
+            save(c)
+            return e == null
+        }
         val err = runCatching {
             // "wt": replace what's in that file (it's overwritten, never added to). The other file is left alone.
             c.contentResolver.openOutputStream(Uri.parse(st.uris[i]), "wt")?.use { Store.writeBackup(it) } ?: error("couldn't open the file")
@@ -366,6 +390,48 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
             }
         }
     }
+    // Google Drive: sign in with Google (no picker). Until the Google side is set up, it falls back to the file picker.
+    val activity = context as? android.app.Activity
+    fun finishDrive(token: String) {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val problem = DriveSync.finishSignIn(context, token)
+            val msg = if (problem != null) "Google Drive: couldn't sign in – $problem" else {
+                AutoSave.driveSignedIn(context)
+                if (AutoSave.write(context, AutoSave.Slot.DRIVE)) "Google Drive: signed in as ${DriveSync.account} – saved ✓"
+                else "Google Drive: signed in, but couldn't save yet – ${AutoSave.states[AutoSave.Slot.DRIVE]?.error}"
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(msg) }
+        }
+    }
+    val signIn = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
+    ) { res ->
+        val a = activity ?: return@rememberLauncherForActivityResult
+        when (val auth = DriveSync.fromScreen(a, res.data)) {
+            is DriveSync.Auth.Token -> finishDrive(auth.token)
+            is DriveSync.Auth.Failed -> show("Google Drive: ${auth.why}")
+            else -> {}
+        }
+    }
+    var driveFallback by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    fun startDrive() {
+        show("Signing in to Google…")
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val auth = DriveSync.authorize(context)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                when (auth) {
+                    is DriveSync.Auth.Token -> finishDrive(auth.token)
+                    is DriveSync.Auth.NeedsYou -> signIn.launch(androidx.activity.result.IntentSenderRequest.Builder(auth.intent).build())
+                    is DriveSync.Auth.Failed -> {
+                        show("Google Drive: ${auth.why}")
+                        // Sign-in not set up yet (or no Google Play services): use the file picker instead.
+                        if (auth.why.contains("isn't set up") || auth.why.contains("Play")) driveFallback = true
+                    }
+                }
+            }
+        }
+    }
+
     // Switching off deletes the backup files: asked first.
     var confirmOff by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AutoSave.Slot?>(null) }
     confirmOff?.let { s ->
@@ -381,6 +447,7 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
     }
     // The A/B explanation pops up before each picker; OK opens it.
     var explain by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AutoSave.Slot?>(null) }
+    if (driveFallback) { driveFallback = false; explain = AutoSave.Slot.DRIVE }
     explain?.let { s ->
         TwoFilesDialog(if (s == AutoSave.Slot.PHONE) "Pick a folder such as Documents: Loadout makes a Loadout folder in it, names both files for you, and remakes them if they're ever deleted."
             else "Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive, then tap Save twice – the names are filled in.",
@@ -412,13 +479,15 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
                     when {
                         !want -> confirmOff = s
                         st?.ready == true && AutoSave.turnOn(context, s) -> show("${s.title}: auto-save on – saving…")
+                        s == AutoSave.Slot.DRIVE -> startDrive()
                         else -> explain = s
                     }
                 })
             }
             // When it last saved there (updates as soon as a save finishes).
             val last = st?.last
-            if (on && last != null) Text("Last saved " + java.text.SimpleDateFormat("EEE, MMM d · h:mm a", java.util.Locale.getDefault()).format(java.util.Date(last)),
+            if (on && last != null) Text("Last saved " + java.text.SimpleDateFormat("EEE, MMM d · h:mm a", java.util.Locale.getDefault()).format(java.util.Date(last)) +
+                    (if (s == AutoSave.Slot.DRIVE && st?.uris?.any { it?.startsWith(AutoSave.SIGNED_IN) == true } == true) DriveSync.account?.let { " · $it" } ?: "" else ""),
                 color = Sub, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 2.dp))
             // Only problems are shown (e.g. a Drive file was deleted).
             st?.error?.takeIf { st.ready }?.let { Text("⚠️ $it", color = Red, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 4.dp)) }
@@ -454,10 +523,28 @@ fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Bo
             }
         }
     }
+    var driveConfirm by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val onClick = {
         val own = AutoSave.ownFiles()
-        if (own.isNotEmpty()) confirm = own else folder.launch(AutoSave.DOCUMENTS)
+        val drive = DriveSync.signedIn && AutoSave.states[AutoSave.Slot.DRIVE]?.uris?.any { it?.startsWith(AutoSave.SIGNED_IN) == true } == true
+        when {
+            own.isNotEmpty() -> confirm = own
+            drive -> driveConfirm = true
+            else -> folder.launch(AutoSave.DOCUMENTS)
+        }
     }
+    if (driveConfirm) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { driveConfirm = false },
+        text = { Text("Restore from your Google Drive auto-save (${DriveSync.account})? Everything in Loadout is replaced with that copy.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+            driveConfirm = false; show("Restoring from Google Drive…")
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val msg = DriveRestore.run(context)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(msg) }
+            }
+        }) { Text("Restore", color = Blue, fontWeight = FontWeight.Bold) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { driveConfirm = false; manual = true }) { Text("Pick another file", color = Sub) } },
+    )
     if (big) BigButton(label, modifier = modifier) { onClick() } else GreyButton(label, modifier) { onClick() }
     confirm?.let { files ->
         val last = AutoSave.states[AutoSave.Slot.PHONE]?.last
@@ -507,4 +594,55 @@ fun AutoSaveProblem() {
         },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { AutoSave.problem.value = null }) { Text(if (msg?.contains("✓") == true) "Done" else "Later") } },
     )
+}
+
+/** Restores the newest auto-save from your Google Drive (signing in first if needed); [done] gets what happened. */
+object DriveRestore {
+    /** Downloads and restores. Off the main thread. A full backup then restarts the app. */
+    fun run(c: Context): String = runCatching {
+        val bytes = DriveSync.newestBackup(c) ?: return "No Loadout auto-save in your Google Drive yet."
+        Store.readBackup(bytes.inputStream())
+        if (Store.lastFull) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ Store.restartApp(c) }, 1500)
+            "Restored from Google Drive ✓ – restarting Loadout…"
+        } else "Restored from Google Drive ✓"
+    }.getOrElse { if (it is SecurityException) "Google needs you to sign in again." else "Couldn't restore from Drive: ${it.message}" }
+}
+
+/** First setup on a new phone: sign in with Google and restore the newest auto-save from Drive. */
+@androidx.compose.runtime.Composable
+fun DriveRestoreButton(show: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun restoreWith(token: String) {
+        show("Restoring from Google Drive…")
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val problem = DriveSync.finishSignIn(context, token)
+            val msg = problem?.let { "Couldn't sign in – $it" } ?: DriveRestore.run(context)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(msg) }
+        }
+    }
+    val signIn = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
+    ) { res ->
+        val a = context as? android.app.Activity ?: return@rememberLauncherForActivityResult
+        when (val auth = DriveSync.fromScreen(a, res.data)) {
+            is DriveSync.Auth.Token -> restoreWith(auth.token)
+            is DriveSync.Auth.Failed -> show(auth.why)
+            else -> {}
+        }
+    }
+    GreyButton("☁️  Restore from Google Drive") {
+        show("Signing in to Google…")
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val auth = DriveSync.authorize(context)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                when (auth) {
+                    is DriveSync.Auth.Token -> restoreWith(auth.token)
+                    is DriveSync.Auth.NeedsYou -> signIn.launch(androidx.activity.result.IntentSenderRequest.Builder(auth.intent).build())
+                    is DriveSync.Auth.Failed -> show(auth.why + if (auth.why.contains("isn't set up")) " (Use Find my backup and pick the Drive files.)" else "")
+                }
+            }
+        }
+    }
 }

@@ -163,6 +163,7 @@ class MainActivity : ComponentActivity() {
         OneRm.init(this)
         Store.load(this)
         AutoSave.load(this)
+        DriveSync.load(this)
         BodyMap.init(this)
         Rest.ensureChannel(this)
         WorkoutService.start(this)

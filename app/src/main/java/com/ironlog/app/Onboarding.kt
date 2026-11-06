@@ -268,6 +268,7 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
     if (importing == true) {
         RestoreButton("Find my backup", Modifier.fillMaxWidth(), big = true, show = { msg = it },
             pickManually = { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }) { restoreUris(it) }
+        DriveRestoreButton { msg = it }
         GreyButton("Import from Hevy (.csv)") { hevy.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }
     }
     msg?.let { Text(it, color = Blue, fontSize = 14.sp) }
