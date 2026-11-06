@@ -455,8 +455,8 @@ fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Bo
             onDismissRequest = { confirm = null },
             text = { Text("Restore from this phone's auto-save" + (last?.let { " (saved ${fmt.format(java.util.Date(it))})" } ?: "") +
                 "? Everything in Loadout is replaced with that copy.") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; restore(files) }) { Text("Restore", color = Red) } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; manual = true }) { Text("Pick another file") } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; restore(files) }) { Text("Restore", color = Blue, fontWeight = FontWeight.Bold) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; manual = true }) { Text("Pick another file", color = Sub) } },
         )
     }
 }
