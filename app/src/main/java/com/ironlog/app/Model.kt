@@ -184,8 +184,6 @@ data class Profile(
     val appLock: Boolean = false,
     /** App accent colour (ARGB); the light blue by default. */
     val accent: Int = 0xFF2D8CFF.toInt(),
-    /** Developer: how text on coloured buttons stays readable: "auto" (black or white text by the colour), "dark" (deeper button colour), "shadow". */
-    val btnStyle: String = "auto",
     /** Both-arm cable moves: how many stacks you use (1 or 2), by exercise id; missing = the exercise's usual number. */
     val stacks: Map<String, Int> = emptyMap(),
     /** Cable moves: the pulley ratio you use (2 = 2:1, the load you feel is half the stack), by exercise id; missing = 1:1. */
@@ -262,7 +260,7 @@ object Json {
         .put("restSound", p.restSound).put("restVibrate", p.restVibrate).put("rankMode", p.rankMode)
         .put("dev", p.devUnlocked).put("devAi", p.devAi).put("range", p.homeRange).put("onb", p.onboarded).put("bk", p.cloud).put("cmp", p.compareAll).put("sort", p.exerciseSort).put("grip", p.gripRank)
         .put("gp", JSONObject(p.groupPicks.mapValues { JSONArray(it.value) } as Map<*, *>))
-        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dper", p.devPersonal).put("dpg", p.devPurged).put("dpgd", true).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent).put("btn", p.btnStyle)
+        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dper", p.devPersonal).put("dpg", p.devPurged).put("dpgd", true).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent)
         .put("lay", JSONObject(p.layouts.mapValues { JSONArray(it.value) } as Map<*, *>))
         .put("stk", JSONObject(p.stacks as Map<*, *>))
         .put("pul", JSONObject(p.pulleys as Map<*, *>))
@@ -288,7 +286,6 @@ object Json {
         bodyFat = o.optIntOrNull("bf")?.takeIf { it in 1..5 },
         appLock = o.optBoolean("lock"),
         accent = o.optInt("acc", 0xFF2D8CFF.toInt()),
-        btnStyle = o.optString("btn", "auto"),
         layouts = o.optJSONObject("lay")?.let { g -> g.keys().asSequence().associateWith { k -> g.getJSONArray(k).let { a -> List(a.length()) { a.getString(it) } } } } ?: emptyMap(),
         stacks = o.optJSONObject("stk")?.let { g -> g.keys().asSequence().associateWith { k -> g.getInt(k) } } ?: emptyMap(),
         pulleys = o.optJSONObject("pul")?.let { g -> g.keys().asSequence().associateWith { k -> g.getInt(k) } } ?: emptyMap(),

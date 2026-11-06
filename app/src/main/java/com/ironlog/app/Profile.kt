@@ -323,14 +323,6 @@ fun SettingsScreen() {
             if (p.devUnlocked) {
                 Spacer(8)
                 Text("Developer settings", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Red)
-                // How text on coloured buttons stays readable.
-                androidx.compose.material3.Text("Button text")
-                androidx.compose.material3.Text("How text on coloured buttons stays easy to read.", color = Sub, fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("auto" to "Auto colour", "dark" to "Darker buttons", "shadow" to "Shadow").forEach { (k, label) ->
-                        FilterChip(p.btnStyle == k, { set(p.copy(btnStyle = k)) }, { androidx.compose.material3.Text(label) })
-                    }
-                }
                 // Edit any text in the app where it's shown, then export the changes to have them built in.
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

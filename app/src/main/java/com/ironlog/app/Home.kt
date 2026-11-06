@@ -63,9 +63,9 @@ fun HomeScreen() {
                         // Tap to switch between today, this week and all time (remembered).
                         Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Card2)) {
                             listOf("today" to "Today", "week" to "This week", "all" to "All time").forEach { (v, label) ->
-                                val m = Modifier.clip(RoundedCornerShape(16.dp)).background(if (range == v) btnBg(Blue) else Color.Transparent)
+                                val m = Modifier.clip(RoundedCornerShape(16.dp)).background(if (range == v) Blue else Color.Transparent)
                                     .clickable { Store.setProfile(profile.copy(homeRange = v)) }.padding(horizontal = 12.dp, vertical = 6.dp)
-                                if (range == v) OutlinedLabel(label, 13.sp, m, FontWeight.Normal, bg = btnBg(Blue)) else Text(label, fontSize = 13.sp, color = Sub, modifier = m)
+                                if (range == v) OutlinedLabel(label, 13.sp, m, FontWeight.Normal, bg = Blue) else Text(label, fontSize = 13.sp, color = Sub, modifier = m)
                             }
                         }
                         androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
@@ -237,11 +237,11 @@ fun WorkoutCalendar(workouts: List<Workout>) {
                             val logged = date in days
                             Box(
                                 Modifier.fillMaxSize().clip(CircleShape)
-                                    .background(if (logged) btnBg(Blue) else Color.Transparent)
+                                    .background(if (logged) Blue else Color.Transparent)
                                     .then(if (date == today && !logged) Modifier.border(1.dp, Blue, CircleShape) else Modifier),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (logged) OutlinedLabel("$n", 14.sp, bg = btnBg(Blue)) else Text("$n", fontSize = 14.sp, fontWeight = FontWeight.Normal)
+                                if (logged) OutlinedLabel("$n", 14.sp, bg = Blue) else Text("$n", fontSize = 14.sp, fontWeight = FontWeight.Normal)
                             }
                         }
                     }

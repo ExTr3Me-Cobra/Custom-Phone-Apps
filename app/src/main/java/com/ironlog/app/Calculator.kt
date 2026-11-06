@@ -93,10 +93,10 @@ fun Calculator(onClose: () -> Unit) {
                                 val op = k in setOf("⌫", "%", "÷", "×", "−", "+", "( )")
                                 Box(
                                     Modifier.weight(1f).aspectRatio(1.35f).clip(RoundedCornerShape(50))
-                                        .background(if (k == "=") btnBg(Blue) else Card2).clickable { press(k) },
+                                        .background(if (k == "=") Blue else Card2).clickable { press(k) },
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (k == "=") OutlinedLabel("=", 30.sp, bg = btnBg(Blue))
+                                    if (k == "=") OutlinedLabel("=", 30.sp, bg = Blue)
                                     else Text(k, fontSize = if (k == "( )") 24.sp else 30.sp, fontWeight = FontWeight.Medium,
                                         color = when { k == "C" -> Red; op -> Blue; else -> Color.White })
                                 }
