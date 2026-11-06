@@ -239,6 +239,7 @@ private fun Root() {
     RankUpOverlay()
     AppTextPill()
     WipedScreen()
+    AutoSaveProblem()
     LockScreen()
 }
 

@@ -146,6 +146,33 @@ object AutoSave {
         c.contentResolver.query(Uri.parse(uri), arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { it.moveToFirst() } == true
     }.getOrDefault(false)
 
+    /** A place that lost access (shown as a pop-up as soon as the app is open): which one, and what happened. */
+    val problem = androidx.compose.runtime.mutableStateOf<Pair<Slot, String>?>(null)
+
+    /** That place can't be reached: switch it off (it needs setting up again) and say so straight away. */
+    private fun lost(c: Context, s: Slot, why: String) {
+        forget(c, s)
+        problem.value = s to why
+    }
+
+    /** On opening the app: can every auto-save place still be reached? (Missing phone files are just remade.) */
+    fun checkAccess(c: Context) {
+        val held = c.contentResolver.persistedUriPermissions.filter { it.isWritePermission }.map { it.uri.toString() }.toSet()
+        for (s in active()) {
+            if (s == Slot.PHONE) {
+                val t = phoneTree
+                val ok = t != null && t in held && runCatching {
+                    val tree = Uri.parse(t)
+                    c.contentResolver.query(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,
+                        android.provider.DocumentsContract.getTreeDocumentId(tree)), null, null, null, null)?.use { it.moveToFirst() } == true
+                }.getOrDefault(false)
+                if (!ok) lost(c, s, "Loadout can't reach the folder it auto-saves to on this phone any more (the folder was deleted, or Android took back access).")
+            } else if (missing(c, s).isNotEmpty() || states[s]?.uris?.any { it !in held } == true) {
+                lost(c, s, "Loadout can't reach its auto-save files in Google Drive any more (they were deleted or moved, or Android took back access).")
+            }
+        }
+    }
+
     /** Which of a place's files are missing (deleted, moved to the trash…). */
     fun missing(c: Context, s: Slot): List<Int> = states[s]?.takeIf { it.ready }?.uris?.withIndex()?.filter { !exists(c, it.value) }?.map { it.index }.orEmpty()
 
@@ -228,15 +255,11 @@ object AutoSave {
             if (s == Slot.PHONE && tree != null) {
                 // Deleted? Make them again (and the Loadout folder, if that went too), then save into them.
                 val remade = runCatching { phoneFiles(c, Uri.parse(tree), gone) }.getOrNull()
-                if (remade == null) {
-                    states[s] = State(st.uris, st.lasts, st.on, "The auto-save folder is gone or Loadout lost access – choose a folder again.")
-                    save(c); return false
-                }
+                if (remade == null) { lost(c, s, "Loadout can't reach the folder it auto-saves to on this phone any more (the folder was deleted, or Android took back access)."); return false }
                 st = State(remade, st.lasts.mapIndexed { i, l -> if (i in gone) null else l }, st.on, null)
                 states[s] = st; save(c)
             } else {
-                states[s] = State(st.uris, st.lasts, st.on, "An auto-save file was deleted – choose the files again (Loadout can't remake files in Drive).")
-                save(c); return false
+                lost(c, s, "An auto-save file in Google Drive was deleted or moved, and Loadout can't make files in Drive by itself."); return false
             }
         }
         // A remade (empty) file is filled first; otherwise the older of A and B.
@@ -245,9 +268,12 @@ object AutoSave {
             // "wt": replace what's in that file (it's overwritten, never added to). The other file is left alone.
             c.contentResolver.openOutputStream(Uri.parse(st.uris[i]), "wt")?.use { Store.writeBackup(it) } ?: error("couldn't open the file")
         }.exceptionOrNull()
-        val msg = err?.let {
-            if (it is SecurityException) "Loadout lost permission to a file – choose the files again." else (it.message ?: "couldn't write the file")
+        if (err is SecurityException) {
+            lost(c, s, if (s == Slot.PHONE) "Android took back Loadout's access to its auto-save folder on this phone."
+                else "Android took back Loadout's access to its auto-save files in Google Drive.")
+            return false
         }
+        val msg = err?.let { it.message ?: "couldn't write the file" }
         val lasts = st.lasts.toMutableList().also { if (err == null) it[i] = System.currentTimeMillis() }
         states[s] = State(st.uris, lasts, st.on, msg)
         save(c)
@@ -282,6 +308,7 @@ object AutoSave {
         val ctx = c.applicationContext
         if (!onlyIfDue) handler.removeCallbacks(later)
         Thread {
+            if (onlyIfDue) checkAccess(ctx)
             for (s in active()) {
                 // On opening the app: save if it's been a day, or straight away if a file has gone missing.
                 if (!onlyIfDue || System.currentTimeMillis() - (states[s]?.last ?: 0) > DAY || missing(ctx, s).isNotEmpty()) write(ctx, s)
@@ -292,7 +319,7 @@ object AutoSave {
 
 /** Settings → Backup: the two auto-save places, each with its two files, status and an on/off switch. */
 @androidx.compose.runtime.Composable
-fun AutoSaveSettings(show: (String) -> Unit) {
+fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // The file being picked: which place, and A (0) or B (1).
@@ -359,7 +386,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
     androidx.compose.runtime.LaunchedEffect(next) {
         next?.let { (s, i) -> next = null; picking = s to i; pick.launch(s.names[i]) }
     }
-    for (s in AutoSave.Slot.entries) {
+    for (s in AutoSave.Slot.entries.filter { only == null || it == only }) {
         val st = AutoSave.states[s]
         val on = st?.ready == true && st.on
         androidx.compose.foundation.layout.Column(
@@ -439,5 +466,30 @@ fun TwoFilesDialog(extra: String? = null, onDismiss: () -> Unit, ok: () -> Unit)
         text = { Text(AutoSave.TWO_FILES + (extra?.let { "\n\n$it" } ?: "")) },
         confirmButton = { androidx.compose.material3.TextButton(onClick = ok) { Text("OK") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Pops up as soon as the app is open if an auto-save place lost access: what happened, and its setup to fix it. */
+@androidx.compose.runtime.Composable
+fun AutoSaveProblem() {
+    val (s, why) = AutoSave.problem.value ?: return
+    // Not over the lock screen or first setup: it shows once you're in.
+    if ((Store.profile.value.appLock && AppLock.locked) || !Store.profile.value.onboarded) return
+    var msg by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    // Set up again: done.
+    if (AutoSave.states[s]?.let { it.ready && it.on } == true && msg?.contains("✓") == true) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(1200); AutoSave.problem.value = null }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Auto-save stopped") },
+        text = {
+            androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                Text("$why Your data is safe in Loadout, but it isn't being backed up there. Switch it back on to set it up again.")
+                AutoSaveSettings(only = s) { msg = it }
+                msg?.let { Text(it, color = Blue, fontSize = 13.sp) }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { AutoSave.problem.value = null }) { Text(if (msg?.contains("✓") == true) "Done" else "Later") } },
     )
 }
