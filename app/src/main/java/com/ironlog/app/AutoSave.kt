@@ -403,17 +403,24 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(msg) }
         }
     }
+    var driveFallback by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Google sign-in didn't work (it isn't set up yet, or anything else): choose the Drive files by hand instead.
+    // Only cancelling it yourself or having no internet leaves it at that.
+    fun driveFailed(why: String) {
+        if (why.contains("cancel", true) || why.contains("internet", true)) { show("Google Drive: $why"); return }
+        show("Google sign-in isn't ready yet, so choose the Drive files by hand.")
+        driveFallback = true
+    }
     val signIn = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
     ) { res ->
         val a = activity ?: return@rememberLauncherForActivityResult
         when (val auth = DriveSync.fromScreen(a, res.data)) {
             is DriveSync.Auth.Token -> finishDrive(auth.token)
-            is DriveSync.Auth.Failed -> show("Google Drive: ${auth.why}")
+            is DriveSync.Auth.Failed -> driveFailed(auth.why)
             else -> {}
         }
     }
-    var driveFallback by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     fun startDrive() {
         show("Signing in to Google…")
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -422,11 +429,7 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
                 when (auth) {
                     is DriveSync.Auth.Token -> finishDrive(auth.token)
                     is DriveSync.Auth.NeedsYou -> signIn.launch(androidx.activity.result.IntentSenderRequest.Builder(auth.intent).build())
-                    is DriveSync.Auth.Failed -> {
-                        show("Google Drive: ${auth.why}")
-                        // Sign-in not set up yet (or no Google Play services): use the file picker instead.
-                        if (auth.why.contains("isn't set up") || auth.why.contains("Play")) driveFallback = true
-                    }
+                    is DriveSync.Auth.Failed -> driveFailed(auth.why)
                 }
             }
         }
