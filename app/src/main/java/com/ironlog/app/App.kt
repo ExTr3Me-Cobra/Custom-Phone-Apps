@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    override fun onStart() { super.onStart(); AppLock.onStart() }
+    override fun onStart() { super.onStart(); AppLock.onStart(); if (Store.loaded) AutoSave.soon(this, onlyIfDue = true) }
     override fun onStop() { super.onStop(); AppLock.onStop() }
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
         StandardsData.init(this)
         OneRm.init(this)
         Store.load(this)
+        AutoSave.load(this)
         BodyMap.init(this)
         Rest.ensureChannel(this)
         WorkoutService.start(this)

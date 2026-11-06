@@ -59,8 +59,7 @@ fun Onboarding() {
     val p by Store.profile.collectAsState()
     if (p.onboarded) return
     var page by rememberSaveable { mutableStateOf(0) }
-    // The backup check page only appears if you chose Google backup.
-    val pages = listOfNotNull("welcome", "you", "data", "backup".takeIf { p.cloud == "google" }, "ranks", "ready")
+    val pages = listOf("welcome", "you", "data", "ranks", "ready")
     val pageCount = pages.size
     if (page >= pageCount) page = pageCount - 1
     val focus = LocalFocusManager.current
@@ -98,14 +97,12 @@ fun Onboarding() {
                         Store.setProfile(Store.profile.value.copy(cloud = "local"))
                         page++
                     }
-                    "backup" -> BackupCheckPage()
                     "ranks" -> RanksPage(p)
                     else -> ReadyPage()
                 }
             }
             val missing = when (pages[page]) {
                 "you" -> biometricsMissing(p)
-                "data" -> if (p.cloud.isEmpty()) "Choose one to continue." else null
                 else -> null
             }
             val ok = missing == null
@@ -199,8 +196,12 @@ private fun AboutYouPage(p: Profile) {
 @Composable
 private fun YourDataPage(p: Profile, skip: () -> Unit) {
     Title("Your data")
-    Body("Loadout keeps everything on this phone unless you choose Google backup. You can change this any time in Settings.")
-    DataChoice(p, showStatus = false)
+    Body("Loadout keeps everything on this phone. To keep a copy safe, set up auto-save: it saves an exact copy of your data to a file on this phone, Google Drive, or both, after every workout.")
+    LaunchedEffect(Unit) { if (Store.profile.value.cloud.isEmpty()) Store.setProfile(Store.profile.value.copy(cloud = "local")) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    AutoSaveSettings { msg = it }
+    msg?.let { Text(it, color = Blue, fontSize = 13.sp) }
+    Text("You can set this up or change it any time in Settings → Backup.", color = Sub, fontSize = 13.sp)
 }
 
 @Composable

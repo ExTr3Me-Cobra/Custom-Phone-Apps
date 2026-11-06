@@ -147,6 +147,8 @@ object Workouts {
         Store.setActive(null)
         if (kept.items.isEmpty()) return null
         Store.saveWorkout(kept)
+        // Auto-save (Settings → Backup) after every finished workout.
+        AutoSave.soon(c)
         return kept.id
     }
 

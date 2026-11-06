@@ -16,7 +16,8 @@ import java.io.File
  * Android runs it about once a day while the phone is charging on Wi-Fi, and puts everything back
  * automatically when you install Loadout on a phone signed in to the same Google account.
  *
- * Only runs if you chose Google backup. The OpenAI key is never included (it lives in a folder
+ * Google backup was replaced by auto-save (AutoSave.kt), so it no longer sends anything to Google; a phone-to-phone
+ * transfer still copies Loadout's data. Only ran if you chose Google backup. The OpenAI key is never included (it lives in a folder
  * Android never backs up). Google allows 25 MB per app, so your workouts and settings go first and
  * your own pictures fill what's left.
  */

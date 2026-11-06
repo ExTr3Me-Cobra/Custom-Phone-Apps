@@ -15,7 +15,8 @@ object Store {
     private lateinit var safeDir: File
     /** Files Android never backs up (API key, backup status). */
     fun noBackupDir(): File = safeDir
-    private var loaded = false
+    var loaded = false
+        private set
     private var assets: android.content.res.AssetManager? = null
     /** Pictures built into the app (assets/pictures/<name>.jpg). */
     private var bundled: Set<String> = emptySet()
@@ -59,7 +60,8 @@ object Store {
         val p = read("profile.json")?.let { runCatching { Json.profile(JSONObject(it)) }.getOrNull() } ?: Profile()
         val keyFile = File(safeDir, "api_key.txt")
         val savedKey = runCatching { keyFile.takeIf { it.exists() }?.readText() }.getOrNull()
-        _profile.value = p.copy(apiKey = savedKey ?: p.apiKey)
+        // Google backup was replaced by auto-save (Settings → Backup): nothing goes to Google any more.
+        _profile.value = p.copy(apiKey = savedKey ?: p.apiKey, cloud = if (p.cloud == "google") "local" else p.cloud)
         Accent.color = androidx.compose.ui.graphics.Color(p.accent)
         // Older versions kept the key inside profile.json; move it to the never-backed-up folder.
         if (savedKey == null && p.apiKey.isNotEmpty()) setProfile(_profile.value)

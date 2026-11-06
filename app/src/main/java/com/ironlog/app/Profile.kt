@@ -274,16 +274,23 @@ fun SettingsScreen() {
             }
 
             Spacer(8)
-            Text("Where your data is kept", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            DataChoice(p)
-
-            Spacer(8)
             Text("Backup", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Saves an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – to one .zip file. Restoring it replaces what's here with that copy and restarts the app. (Your OpenAI key stays on this phone.)", color = Sub, fontSize = 13.sp)
+            Text("Auto-save keeps an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – in one .zip file, overwritten after every finished workout and at least once a day. Restore puts that copy back (on this phone or a new one) and restarts the app. Your OpenAI key stays on this phone.", color = Sub, fontSize = 13.sp)
+            AutoSaveSettings { message = it }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GreyButton("Save backup", Modifier.weight(1f)) { export.launch("loadout-backup.zip") }
+                GreyButton("Save backup now", Modifier.weight(1f)) {
+                    if (AutoSave.active().isEmpty()) export.launch("loadout-backup.zip")
+                    else {
+                        message = "Saving…"
+                        scope.launch { message = withContext(Dispatchers.IO) { AutoSave.saveNow(context) } }
+                    }
+                }
                 GreyButton("Restore", Modifier.weight(1f)) { import.launch(arrayOf("application/zip", "application/json", "*/*")) }
             }
+            if (AutoSave.active().isNotEmpty()) Text("Save a one-off copy somewhere else", color = Blue, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { export.launch("loadout-backup.zip") }.padding(vertical = 4.dp))
+            Text("📂 Open the folder where Loadout's data is stored", color = Blue, fontSize = 13.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { DataFiles.open(context) }.padding(vertical = 4.dp))
             Spacer(4)
             Text("Recycle Bin", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("Deleted routines, workouts, exercises and pictures wait here for 30 days, so you can put them back.", color = Sub, fontSize = 13.sp)
