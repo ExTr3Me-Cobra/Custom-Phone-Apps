@@ -150,34 +150,14 @@ private fun Screen() {
     // agree across both are much more likely right.
     val photoFiles = remember { File(context.cacheDir, "photos").apply { mkdirs() }.let { listOf(File(it, "rings.jpg"), File(it, "rings2.jpg")) } }
     val photoUris = remember { photoFiles.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) } }
-    var launchedAt by remember { mutableStateOf(0L) }
-    var shot by remember { mutableStateOf(0) }          // which picture the camera is taking (0 = first, 1 = second)
-    var askSecond by remember { mutableStateOf(false) }  // first picture taken: ask for the second
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        // Some camera apps save the picture but don't say so: use it if it's fresh.
-        val f = photoFiles[shot]
-        val fresh = f.exists() && f.length() > 0 && f.lastModified() >= launchedAt - 2_000
-        when {
-            !(ok || fresh) && shot == 0 -> message = "No picture taken."
-            !(ok || fresh) -> readImage(photoUris[0])   // skipped the second: read the first on its own
-            shot == 0 -> askSecond = true
-            else -> readImage(photoUris[0], photoUris[1])
-        }
-    }
-    fun launchShot(i: Int) {
-        shot = i
-        photoFiles[i].delete()
-        launchedAt = System.currentTimeMillis()
-        camera.launch(photoUris[i])
-    }
-    fun takePicture() = launchShot(0)
-    if (askSecond) AlertDialog(
-        onDismissRequest = { askSecond = false; readImage(photoUris[0]) },
-        title = { Text("Now one more") },
-        text = { Text("Take a second picture of the same rings from a slightly different angle (tilt or step to the side). Reading both makes mistakes much less likely.") },
-        confirmButton = { Button(onClick = { askSecond = false; launchShot(1) }) { Text("📷  Second picture") } },
-        dismissButton = { TextButton(onClick = { askSecond = false; readImage(photoUris[0]) }) { Text("Use just the first") } },
-    )
+    // Clock Out's own camera: one window for one or both pictures (Settings → Pictures per scan).
+    var cameraOpen by remember { mutableStateOf(false) }
+    fun takePicture() { cameraOpen = true }
+    if (cameraOpen) RingCamera(photoFiles, if (s.twoPhotos) 2 else 1, onDone = { fs ->
+        cameraOpen = false
+        val uris = fs.map { photoUris[photoFiles.indexOf(it)] }
+        readImage(*uris.toTypedArray())
+    }, onCancel = { cameraOpen = false })
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) readImage(uri) }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Reminder.update(context) }
     // Puts the "Clock out at …" notification back if it's missing (e.g. after the phone restarted the app).
@@ -357,6 +337,14 @@ private fun SettingsPanel(s: Settings) {
     val context = LocalContext.current
     fun set(new: Settings) = Store.setSettings(context, new)
     Text("Settings", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+    Text("Pictures per scan")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(selected = !s.twoPhotos, onClick = { set(s.copy(twoPhotos = false)) }, label = { Text("One") })
+        FilterChip(selected = s.twoPhotos, onClick = { set(s.copy(twoPhotos = true)) }, label = { Text("Two (more reliable)") })
+    }
+    if (s.twoPhotos) Text("Take the second from a slightly different angle; rings both agree on are much more likely right.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
     Text("Times on my clock screen look like")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

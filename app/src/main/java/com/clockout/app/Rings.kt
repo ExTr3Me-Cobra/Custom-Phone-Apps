@@ -288,6 +288,8 @@ data class Settings(
     val decimal: Boolean = false,
     /** Codes that make no difference to time on the clock (job moves): left out entirely. */
     val ignoreCodes: Set<String> = setOf("MV"),
+    /** Take two pictures per scan (from different angles) instead of one. */
+    val twoPhotos: Boolean = false,
 )
 
 /** Saved rings and settings. */
@@ -317,6 +319,7 @@ object Store {
             remindBefore = p.getInt("remindBefore", 5),
             decimal = p.getBoolean("decimal", false),
             ignoreCodes = p.getString("ignore", "MV")!!.split(",").map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet(),
+            twoPhotos = p.getBoolean("two", false),
         )
     }
 
@@ -347,7 +350,7 @@ object Store {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
             .putLong("target", s.targetSeconds).putString("off", s.offCodes.joinToString(","))
             .putBoolean("remind", s.remind).putInt("remindBefore", s.remindBefore)
-            .putBoolean("decimal", s.decimal).putString("ignore", s.ignoreCodes.joinToString(",")).apply()
+            .putBoolean("decimal", s.decimal).putString("ignore", s.ignoreCodes.joinToString(",")).putBoolean("two", s.twoPhotos).apply()
         Reminder.update(c)
     }
 }

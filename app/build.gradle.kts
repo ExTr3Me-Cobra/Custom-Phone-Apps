@@ -72,4 +72,8 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     // On-device AI (Gemini Nano through Android's AICore) that reads the photo like a person would.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
+    // The in-app camera (both pictures in one window).
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
 }
