@@ -366,7 +366,7 @@ fun OneRmTestScreen(id: String) {
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableStateOf(0) }
     val gold = Color(0xFFC9A94E)
-    fun fmt(v: Double) = if (reps) Standards.format(id, v) else Units.weightU(v)
+    fun fmt(v: Double) = if (reps) Standards.format(id, v) else Units.estU(v)
 
     // Leaving with a ticked set asks first (the test isn't saved until you finish it).
     // Rank-downs wait until Finish Test.
@@ -638,7 +638,7 @@ fun Modifier.emberBorder(h: Heat, width: androidx.compose.ui.unit.Dp, color: Col
 /** Developer trial: what the standard formula and the personal estimate each think your 1 Rep Max is. */
 @Composable
 private fun PersonalEstimateCard(e: Personal1Rm.Estimate, nextWeight: Double?, factor: Double = 1.0) {
-    fun w(v: Double) = if (v > 0) "${Units.weight(v)} ${Units.w}" else "–"
+    fun w(v: Double) = if (v > 0) Units.estU(v) else "–"
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Card).padding(10.dp)) {
         Text("1 Rep Max estimate (developer trial)", color = Sub, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -10,7 +10,6 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,6 +108,39 @@ object Workouts {
     /** Ticks while a workout is open, for the stopwatches. */
     var clock by androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis())
 
+    /**
+     * A set (or, with [set] null, a whole exercise) was removed: stopwatches move with their own set rather than
+     * jumping to whichever set slides into its place; the removed one's stopwatch stops.
+     */
+    fun shiftTimers(wid: String, item: Int, set: Int?) {
+        fun parse(k: String): Triple<String, Int, Int>? {
+            val p = k.split(":"); if (p.size != 3) return null
+            return Triple(p[0], p[1].toIntOrNull() ?: return null, p[2].toIntOrNull() ?: return null)
+        }
+        fun remap(m: MutableMap<String, *>) = m.keys.toList().mapNotNull { k -> parse(k)?.let { k to it } }.filter { it.second.first == wid }
+        val moves = remap(timers).mapNotNull { (k, t) ->
+            val (_, i, n) = t
+            val to = when {
+                set == null && i == item -> null
+                set == null && i > item -> "$wid:${i - 1}:$n"
+                set != null && i == item && n == set -> null
+                set != null && i == item && n > set -> "$wid:$i:${n - 1}"
+                else -> k
+            }
+            Triple(k, to, timers[k])
+        }
+        val targets = HashMap(timerTargets)
+        val wasChimed = chimed.toSet()
+        moves.forEach { (k, _, _) -> timers.remove(k); timerTargets.remove(k); chimed.remove(k) }
+        moves.forEach { (k, to, started) ->
+            if (to != null && started != null) {
+                timers[to] = started
+                targets[k]?.let { timerTargets[to] = it }
+                if (k in wasChimed) chimed += to
+            }
+        }
+    }
+
     /** Checks every running stopwatch: passing last time's hold plays the level-up chime, once per set. */
     fun checkTimers(c: Context, now: Long) {
         for ((k, started) in timers) {
@@ -186,15 +218,13 @@ fun ActiveWorkoutScreen() {
         // Top bar: calculator, reference weights, Discard, Finish (the phone's back button leaves the workout running).
         var bigMap by remember { mutableStateOf(false) }
         var calc by remember { mutableStateOf(false) }
-        Row(Modifier.fillMaxWidth().background(Card).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
-                CalculatorIcon(Modifier.clip(RoundedCornerShape(8.dp)).clickable { calc = true }.padding(horizontal = 8.dp, vertical = 6.dp))
-            }
+        // The four buttons spaced evenly across the bar.
+        Row(Modifier.fillMaxWidth().background(Card).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            CalculatorIcon(Modifier.clip(RoundedCornerShape(8.dp)).clickable { calc = true }.padding(horizontal = 8.dp, vertical = 6.dp))
             ReferenceButton()
-            HSpacer(8)
             OutlinedLabel("Discard", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Red).clickable { confirmDiscard = true }
                 .padding(horizontal = 14.dp, vertical = 9.dp))
-            HSpacer(8)
             OutlinedLabel("Finish", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Blue).clickable { confirmEnd = true }
                 .padding(horizontal = 18.dp, vertical = 9.dp))
         }
@@ -204,7 +234,7 @@ fun ActiveWorkoutScreen() {
         val load = remember(w.items) { Stats.muscleLoad(w) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1.2f)) { Text("Duration", color = Sub, fontSize = 13.sp); Text(Units.clock(now - w.start), color = Blue, fontSize = 17.sp) }
-            StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1.3f))
+            StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1.3f))
             StatBox("Sets", "${doneSets.size}", Modifier.weight(0.8f))
             StatBox("Reps", "${doneSets.sumOf { it.reps ?: 0 }}", Modifier.weight(0.8f))
             Box(Modifier.size(width = 64.dp, height = 56.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black).clickable { bigMap = !bigMap }) {
@@ -230,11 +260,16 @@ fun ActiveWorkoutScreen() {
                             DropdownMenuItem({ Text("Replace exercise") }, {
                                 menu = false
                                 Nav.go(Route.Picker("Replace Exercise", false) { ids ->
-                                    ids.firstOrNull()?.let { id -> Workouts.updateItem(i) { it.copy(exerciseId = id) } }
+                                    ids.firstOrNull()?.let { id ->
+                                        // A different exercise: its stopwatches stop.
+                                        Workouts.timers.keys.filter { it.startsWith("${w.id}:$i:") }.forEach { Workouts.timers.remove(it) }
+                                        Workouts.updateItem(i) { it.copy(exerciseId = id) }
+                                    }
                                 })
                             })
                             DropdownMenuItem({ Text("Remove exercise", color = Red) }, {
                                 menu = false
+                                Workouts.shiftTimers(w.id, i, null)
                                 Workouts.update { ww -> ww.copy(items = ww.items.toMutableList().also { it.removeAt(i) }) }
                             })
                         }
@@ -360,6 +395,7 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
             // Developer trial: only the last set of an exercise can be F.
             val lastSet = n == (Store.active.value?.items?.getOrNull(i)?.sets?.lastIndex ?: n)
             SetTypeMenu(typeMenu, { typeMenu = false }, s.warmup, s.failure, !Store.profile.value.dev1rm || lastSet, onDelete = {
+                Workouts.shiftTimers(wid, i, n)
                 Workouts.updateItem(i) { it.copy(sets = it.sets.toMutableList().also { l -> if (n in l.indices) l.removeAt(n) }) }
                 Store.active.value?.let { if (s.done) Ranks.onSetUndone(context, it, ex.id) }
             }) { w, f ->
@@ -564,7 +600,7 @@ fun SummaryScreen(id: String) {
 fun WorkoutStats(w: Workout) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
         StatBox("Duration", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
-        StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
+        StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
         StatBox("Sets", "${w.doneSets}", Modifier.weight(1f))
     }
 }

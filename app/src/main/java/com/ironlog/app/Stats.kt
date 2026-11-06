@@ -68,32 +68,6 @@ object Stats {
     fun previous(exId: String, workouts: List<Workout>, exclude: String? = null): List<DoneSet> =
         sessions(exId, workouts.filter { it.id != exclude }).lastOrNull()?.sets ?: emptyList()
 
-    /** Things that went better than before, one line each. */
-    fun improvements(w: Workout, history: List<Workout>): List<Pair<String, String>> {
-        val out = mutableListOf<Pair<String, String>>()
-        val before = history.filter { it.id != w.id && it.start < w.start }
-        for (item in w.items.distinctBy { it.exerciseId }) {
-            val ex = Store.exercise(item.exerciseId) ?: continue
-            val sets = w.items.filter { it.exerciseId == item.exerciseId }.flatMap { it.sets }.filter { it.done }
-            if (sets.isEmpty()) continue
-            val past = sessions(item.exerciseId, before)
-            if (past.isEmpty()) {
-                out += ex.name to "First time logged – this is your starting point."
-                continue
-            }
-            val last = past.last().sets
-            for (m in metricsFor(ex.type)) {
-                val now = value(m, sets) ?: continue
-                val best = past.mapNotNull { value(m, it.sets) }.maxOrNull()
-                val prev = value(m, last)
-                when {
-                    best != null && now > best + 0.01 -> out += ex.name to "New best ${m.label.lowercase()}: ${Units.metric(m, now)} (was ${Units.metric(m, best)})"
-                    prev != null && now > prev + 0.01 -> out += ex.name to "${m.label} up from ${Units.metric(m, prev)} to ${Units.metric(m, now)}"
-                }
-            }
-        }
-        return out
-    }
 
     /** One line in the summary's What improved / What got worse: [label] went from [was] to [now]. */
     class Change(val exercise: String, val label: String, val was: String, val now: String, val up: Boolean)
@@ -127,7 +101,7 @@ object Stats {
             when (ex.type) {
                 ExType.WEIGHT -> {
                     cmp("Heaviest weight", wt, Units::weightU)
-                    cmp("Est. 1-rep max", { s -> s.maxOf { e1rm(it.weight, it.reps) } }) { Units.weightU(it) }
+                    cmp("Est. 1-rep max", { s -> s.maxOf { e1rm(it.weight, it.reps) } }) { Units.estU(it) }
                 }
                 ExType.BODYWEIGHT -> cmp("Most reps", { s -> s.maxOf { it.reps ?: 0 }.toDouble() }) { "${it.toInt()} reps" }
                 ExType.TIMED -> cmp("Longest hold", secs) { Units.time(it.toInt()) }
@@ -200,6 +174,11 @@ object Units {
         else "%.2f".format(Locale.US, v).trimEnd('0').trimEnd('.')
     fun weight(lb: Double?): String = if (lb == null) "" else num2((toShown(lb) * 100).roundToInt() / 100.0)
     fun weightU(lb: Double) = "${weight(lb)} $w"
+    /** A worked-out weight (estimated maxes, adjusted loads): one decimal at most. Logged weights keep two. */
+    fun est(lb: Double?): String = if (lb == null) "" else num((toShown(lb) * 10).roundToInt() / 10.0)
+    fun estU(lb: Double) = "${est(lb)} $w"
+    /** Volume: a whole number. */
+    fun volume(lb: Double): String = Math.round(toShown(lb)).toString()
     fun distance(mi: Double?): String = if (mi == null) "" else "%.2f".format(distShown(mi)).trimEnd('0').trimEnd('.')
     fun time(sec: Int?): String {
         if (sec == null) return ""
@@ -214,7 +193,7 @@ object Units {
     }
 
     fun metric(m: Stats.Metric, v: Double): String = when (m.unit) {
-        "w" -> weightU(v)
+        "w" -> when (m) { Stats.Metric.VOLUME -> "${volume(v)} $w"; Stats.Metric.E1RM -> estU(v); else -> weightU(v) }
         "reps" -> "${v.toInt()} reps"
         "s" -> time(v.toInt())
         else -> "${distance(v)} $dist"

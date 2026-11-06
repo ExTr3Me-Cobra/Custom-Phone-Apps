@@ -67,19 +67,6 @@ class CloudBackup : BackupAgent() {
     override fun onBackup(oldState: ParcelFileDescriptor?, data: BackupDataOutput?, newState: ParcelFileDescriptor?) {}
     override fun onRestore(data: BackupDataInput?, appVersionCode: Int, newState: ParcelFileDescriptor?) {}
 
-    companion object {
-        /** Opens the phone's backup settings (Google's page if it can, otherwise general settings). */
-        fun openSettings(c: Context) {
-            val tries = listOf(
-                Intent().setClassName("com.google.android.gms", "com.google.android.gms.backup.component.BackupSettingsActivity"),
-                Intent("android.settings.BACKUP_AND_RESET_SETTINGS"),
-                Intent(Settings.ACTION_PRIVACY_SETTINGS),
-                Intent(Settings.ACTION_SETTINGS),
-            )
-            for (i in tries) {
-                if (runCatching { c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return
-            }
-        }
 
         /** A short record of what Android's backup did with Loadout (newest last), for Developer settings. */
         fun log(c: Context, msg: String) {
@@ -94,11 +81,8 @@ class CloudBackup : BackupAgent() {
         fun readLog(c: Context): List<String> =
             runCatching { File(c.noBackupFilesDir, "backup_log.txt").readLines() }.getOrDefault(emptyList())
 
-        /** When a Google backup last ran (since you chose Google backup), or null. */
-        fun lastBackup(c: Context): Long? =
-            runCatching { File(c.noBackupFilesDir, "last_backup.txt").readText().trim().toLong() }.getOrNull()
+.getOrNull()
 
-        fun resetStatus() { runCatching { File(Store.noBackupDir(), "last_backup.txt").delete() } }
 
     }
 }

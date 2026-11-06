@@ -135,7 +135,7 @@ fun ResearchScreen() {
             "Saved ${results.values.count { it.tests.isNotEmpty() }} tested exercises."
         }.getOrElse { "Couldn't save: ${it.message}" }
     }
-    fun fmt(id: String, v: Double) = if (Standards.isReps(id) || Standards.isTimed(id)) Standards.format(id, v) else Units.weightU(v)
+    fun fmt(id: String, v: Double) = if (Standards.isReps(id) || Standards.isTimed(id)) Standards.format(id, v) else Units.estU(v)
     val exercises by Store.exercises.collectAsState()
     val sections = remember(exercises) { Research.exercises() }
     val done = results.values.count { it.tests.isNotEmpty() }

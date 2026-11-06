@@ -76,7 +76,7 @@ fun HomeScreen() {
                     Row {
                         StatBox("Workouts", "${shown.size}", Modifier.weight(1f))
                         StatBox("Time", Units.duration(shown.sumOf { (it.end ?: it.start) - it.start }), Modifier.weight(1f))
-                        StatBox("Volume", "${Units.weight(shown.sumOf { Stats.volume(it) })} ${Units.w}", Modifier.weight(1f))
+                        StatBox("Volume", "${Units.volume(shown.sumOf { Stats.volume(it) })} ${Units.w}", Modifier.weight(1f))
                     }
                     Reveal(calendar) { WorkoutCalendar(workouts) }
                 }
@@ -131,7 +131,7 @@ fun WorkoutCard(w: Workout) {
         Spacer(8)
         Row {
             StatBox("Time", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
-            StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
+            StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
             StatBox("Sets", "${w.doneSets}", Modifier.weight(1f))
         }
         Spacer(8)
@@ -170,7 +170,7 @@ fun WorkoutDetailScreen(id: String) {
             Spacer(10)
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
                 StatBox("Duration", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
-                StatBox("Volume", "${Units.weight(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
+                StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
                 StatBox("Sets", "${w.doneSets}", Modifier.weight(1f))
             }
             Spacer(10)

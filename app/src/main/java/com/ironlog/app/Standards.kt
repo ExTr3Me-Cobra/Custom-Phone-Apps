@@ -85,7 +85,7 @@ object Standards {
             else -> "age ${p.age} (standards × ${"%.2f".format(f)})"
         }
         val weightText = if (bw == bw0) "your body weight of ${Units.weightU(bw)}"
-            else "a body weight of ${Units.weightU(bw)} (your ${Units.weightU(bw0)}, adjusted for body fat ${BodyFat.label(p)})"
+            else "a body weight of ${Units.estU(bw)} (your ${Units.weightU(bw0)}, adjusted for body fat ${BodyFat.label(p)})"
         val compared = "Compared with $sex at $weightText ($near), $age." + (s.noteFor(p.male)?.takeIf { !p.devPersonal }?.let { " $it" } ?: "")
         return Fit(rows, problems, compared)
     }

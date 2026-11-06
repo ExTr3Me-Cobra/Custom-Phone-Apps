@@ -243,7 +243,7 @@ fun DevOneRmBadge(exId: String, fWeight: Double?, modifier: Modifier = Modifier)
     if (!p.dev1rm || !Standards.covers(exId, p)) return
     val workouts = Store.workouts.collectAsState().value
     val e = remember(workouts, exId, p) { Personal1Rm.estimate(exId, workouts, p) } ?: return
-    fun w(v: Double) = if (v > 0) Units.weight(v) else "–"
+    fun w(v: Double) = if (v > 0) Units.est(v) else "–"
     // The F set's weight as the load you really move (pulley ratio, stacks), like the estimates.
     val fw = fWeight?.let { it * Standards.stackFactor(exId) }
     val fs = fw?.takeIf { e.standard > 0 }?.let { Personal1Rm.failureReps(it, e.standard) }

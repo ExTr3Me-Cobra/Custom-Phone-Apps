@@ -299,9 +299,6 @@ fun SettingsScreen() {
             RecycleBinButton()
             Spacer(4)
             Text("Import from the Hevy app", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text("Bring in your workout history from the Hevy app. In Hevy: Profile → Settings → Export & Import Data → " +
-                "Export Workouts, then pick that .csv file here. You'll match each Hevy exercise to a Loadout exercise and can turn your " +
-                "Hevy workouts into Loadout routines.", color = Sub, fontSize = 13.sp)
             GreyButton("Import Hevy App data (.csv)") { import.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }
             message?.let { Text(it, color = Blue) }
             val info = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull() }

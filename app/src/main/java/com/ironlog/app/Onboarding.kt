@@ -285,14 +285,6 @@ private fun YourDataPage(p: Profile, skip: () -> Unit) {
     Text("You can set this up or change it any time in Settings → Backup.", color = Sub, fontSize = 13.sp)
 }
 
-@Composable
-private fun BackupCheckPage() {
-    Title("Make sure your data is backing up")
-    Body("Make sure \"Back up data\" is on in your phone's backup settings. Loadout is included automatically.")
-    val c = androidx.compose.ui.platform.LocalContext.current
-    GreyButton("Open backup settings") { CloudBackup.openSettings(c) }
-    Text("You can check that Loadout is backing up any time in Settings.", color = Sub, fontSize = 13.sp)
-}
 
 @Composable
 private fun RanksPage(p: Profile) {
@@ -342,103 +334,4 @@ private fun ReadyPage() {
         lineHeight = 22.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 }
 
-/** "Keep on this phone" / "Back up to my Google account" – used in the welcome and in Settings. */
-@Composable
-fun DataChoice(p: Profile, showStatus: Boolean = true) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Leaving Google backup asks first: the copy in your Google account gets replaced with nothing.
-    var confirmLocal by remember { mutableStateOf(false) }
-    if (confirmLocal) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { confirmLocal = false },
-        title = { Text("Switch to this phone only?") },
-        text = {
-            Text("Are you sure? Your Loadout data that's backed up to your Google account will be deleted the next time Android " +
-                "backs up, and nothing will be saved there from now on.\n\nIt will be your sole responsibility to keep a copy of " +
-                "your app data safe – use Settings → Backup → Save backup and keep that file somewhere other than this phone.")
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                confirmLocal = false
-                Store.setProfile(Store.profile.value.copy(cloud = "local"))
-                // Ask Android to back up soon, so the empty backup replaces the old one.
-                runCatching { android.app.backup.BackupManager(context).dataChanged() }
-            }) { Text("Keep my data locally on my device", color = Red) }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmLocal = false }) { Text("Keep Google backup") } },
-    )
-    @Composable
-    fun Option(value: String, icon: String, title: String, text: String) {
-        val on = p.cloud == value
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (on) Blue.copy(alpha = 0.18f) else Card)
-                .clickable {
-                    if (value == "local" && p.cloud == "google") { confirmLocal = true; return@clickable }
-                    // Switching to Google starts the check over, so the green tick means a backup since then.
-                    if (value == "google" && p.cloud != "google") CloudBackup.resetStatus()
-                    Store.setProfile(Store.profile.value.copy(cloud = value))
-                }
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(icon, fontSize = 26.sp)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(text, color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
-            }
-            Box(Modifier.size(22.dp).clip(CircleShape).background(if (on) Blue else Card2), contentAlignment = Alignment.Center) {
-                if (on) OutlinedLabel("✓", 13.sp)
-            }
-        }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Option("local", "📱", "Keep my data locally on my device", "Nothing leaves your phone.")
-        if (showStatus) Text("📂 Open the folder where Loadout's data is stored", color = Blue, fontSize = 13.sp,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { DataFiles.open(context) }.padding(horizontal = 4.dp, vertical = 4.dp))
-        Option("google", "☁️", "Back up to my Google account", "Restores automatically on a new phone or if you reinstall.")
-        if (showStatus && p.cloud == "google") {
-            Text("Make sure your data is backing up", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
-            BackupStatus()
-        }
-    }
-}
 
-/** Is Google backup working? Green tick once a backup has run since you chose it. */
-@Composable
-fun BackupStatus() {
-    val c = androidx.compose.ui.platform.LocalContext.current
-    var tick by remember { mutableStateOf(0) }
-    // Re-check every few seconds (e.g. after coming back from the phone's settings).
-    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); tick++ } }
-    val last = remember(tick) { CloudBackup.lastBackup(c) }
-    val green = Color(0xFF34C759)
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val (icon, color) = when {
-                last != null -> "✓" to green
-                else -> "…" to Card2
-            }
-            Box(Modifier.size(34.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-                if (last != null) OutlinedLabel(icon, 18.sp) else Text(icon, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            }
-            Column(Modifier.padding(start = 12.dp)) {
-                when {
-                    last != null -> {
-                        Text("Backup is working", fontWeight = FontWeight.Bold, color = green)
-                        Text("Last backed up " + java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(last)),
-                            color = Sub, fontSize = 13.sp)
-                    }
-                    else -> {
-                        Text("Waiting for the first backup", fontWeight = FontWeight.Bold)
-                        Text("A green tick shows here once Loadout has been backed up.", color = Sub, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-        Text("Your phone backs up on its own when idle. To do it now, open backup settings and tap Back up now, then come back here.",
-            color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
-        GreyButton("Open backup settings") { CloudBackup.openSettings(c) }
-    }
-}
