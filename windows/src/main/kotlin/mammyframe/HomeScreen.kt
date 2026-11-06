@@ -76,6 +76,7 @@ fun HomeScreen(
     onOpenAiRotate: () -> Unit,
     onPlay: () -> Unit,
     onChange: (Settings) -> Unit,
+    onCopyLog: () -> Unit = {},
 ) {
     Box(
         Modifier
@@ -131,8 +132,13 @@ fun HomeScreen(
             val devOff: @Composable () -> Unit = {
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
-                    OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
-                        Text("Turn off developer settings", fontSize = 16.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
+                            Text("Turn off developer settings", fontSize = 16.sp)
+                        }
+                        OutlinedButton(onClick = { onCopyLog(); note = "Measuring, then copying the diagnostic log…" }) {
+                            Text("Copy diagnostic log", fontSize = 16.sp)
+                        }
                     }
                 }
             }

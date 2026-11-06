@@ -36,7 +36,16 @@ import java.awt.Point
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
 import javax.swing.JFileChooser
+import javax.swing.SwingUtilities
 import javax.swing.UIManager
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
+import androidx.compose.ui.window.WindowExceptionHandler
+import androidx.compose.ui.window.WindowExceptionHandlerFactory
+import kotlinx.coroutines.launch
 
 enum class Screen { HOME, SLIDESHOW, BLACK, ROTATE, REVIEW }
 
@@ -62,19 +71,30 @@ private val blankPointer: PointerIcon by lazy {
     }.getOrDefault(PointerIcon.Default)
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    Log.startup(args)
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
+        .onFailure { Log.e("look and feel", it) }
     // Opened by Windows at startup: behave like a photo frame straight away.
     val fromStartup = "--startup" in args
     application {
         val windowState = rememberWindowState(placement = WindowPlacement.Maximized, size = DpSize(1280.dp, 820.dp))
         var screen by remember { mutableStateOf(Screen.HOME) }
+        // If something goes wrong while drawing: write it in the log and start again from the home
+        // screen, instead of closing (gives up if it keeps happening).
+        var restarts by remember { mutableIntStateOf(0) }
+        var recent by remember { mutableStateOf(listOf<Long>()) }
         Window(
             onCloseRequest = ::exitApplication,
             title = "Mammy Frame",
             state = windowState,
             icon = painterResource("icon.png"),
         ) {
+            LaunchedEffect(Unit) {
+                Log.i("Window open: drawing with ${runCatching { window.renderApi }.getOrNull()}, " +
+                    "size ${window.width}x${window.height}")
+            }
             // Photos and the black screen fill the whole screen; the menus are a normal window.
             LaunchedEffect(screen) {
                 val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
@@ -86,22 +106,43 @@ fun main(args: Array<String>) {
                     window.requestFocus()
                 }
             }
-            App(
-                screen = screen,
-                setScreen = { screen = it },
-                fromStartup = fromStartup,
-            )
+            CompositionLocalProvider(
+                LocalWindowExceptionHandlerFactory provides WindowExceptionHandlerFactory {
+                    WindowExceptionHandler { t ->
+                        Log.e("while drawing the screen (${screen})", t)
+                        val now = AiRotate.now()
+                        recent = (recent + now).filter { now - it < 15_000 }
+                        if (recent.size > 3) {
+                            Log.i("Too many errors in a row; closing.")
+                            exitApplication()
+                        } else {
+                            screen = Screen.HOME
+                            restarts++
+                        }
+                    }
+                }
+            ) {
+                key(restarts) {
+                    App(
+                        screen = screen,
+                        setScreen = { Log.i("Screen: $screen -> $it"); screen = it },
+                        fromStartup = fromStartup,
+                        window = window,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolean) {
+private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolean, window: java.awt.Window) {
     var settings by remember { mutableStateOf(Prefs.load()) }
     var dialog by remember { mutableStateOf(HomeDialog.NONE) }
     var slideshowRun by remember { mutableIntStateOf(0) }
     var lastTouch by remember { mutableLongStateOf(AiRotate.now()) }
-    var lastMove by remember { mutableLongStateOf(AiRotate.now()) }
+    // Not a screen state on purpose: the mouse moves constantly and nothing needs redrawing for it.
+    val lastMove = remember { longArrayOf(AiRotate.now()) }
     var lastPhase by remember { mutableStateOf(Schedule.phaseNow(settings)) }
     val aiStatus by AiRotate.status.collectAsState()
 
@@ -123,15 +164,25 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
     }
 
     fun chooseFolder() {
-        val chooser = JFileChooser(settings.folder).apply {
-            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-            dialogTitle = "Choose the photos folder"
-            isAcceptAllFileFilterUsed = false
+        Log.i("Choose folder: opening the folder window")
+        // Opened just after the click has finished, on top of (and attached to) the Mammy Frame window.
+        SwingUtilities.invokeLater {
+            try {
+                val chooser = JFileChooser(settings.folder).apply {
+                    fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                    dialogTitle = "Choose the photos folder"
+                    isAcceptAllFileFilterUsed = false
+                }
+                val result = chooser.showOpenDialog(window)
+                Log.i("Choose folder: result=$result, chosen=${chooser.selectedFile}")
+                if (result == JFileChooser.APPROVE_OPTION && chooser.selectedFile != null) {
+                    update(settings.copy(folder = chooser.selectedFile.absolutePath))
+                }
+            } catch (t: Throwable) {
+                Log.e("Choose folder", t)
+            }
+            lastTouch = AiRotate.now()
         }
-        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-            update(settings.copy(folder = chooser.selectedFile.absolutePath))
-        }
-        lastTouch = AiRotate.now()
     }
 
     // Opened at startup: straight into the slideshow, or black, as the schedule says.
@@ -179,15 +230,19 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
         }
     }
 
-    // Hide the mouse pointer over photos once it's been still for a moment.
+    // Hide the mouse pointer over photos once it's been still for a moment (checked twice a second).
     var pointerHidden by remember { mutableStateOf(false) }
-    LaunchedEffect(screen, lastMove) {
+    LaunchedEffect(screen) {
         pointerHidden = false
         if (screen != Screen.SLIDESHOW && screen != Screen.BLACK) return@LaunchedEffect
-        delay(POINTER_HIDE_MS)
-        pointerHidden = true
+        while (true) {
+            val hide = AiRotate.now() - lastMove[0] > POINTER_HIDE_MS
+            if (hide != pointerHidden) pointerHidden = hide
+            delay(500)
+        }
     }
 
+    val scope = rememberCoroutineScope()
     var aiText by remember { mutableStateOf("") }
     LaunchedEffect(aiStatus.revision, aiStatus.running, aiStatus.done, settings.folder) {
         aiText = aiSummary(aiStatus, AiRotate.recordsIn(settings.folder))
@@ -205,8 +260,8 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
                         while (true) {
                             val e = awaitPointerEvent(PointerEventPass.Initial)
                             when (e.type) {
-                                PointerEventType.Press -> { lastTouch = AiRotate.now(); lastMove = lastTouch }
-                                PointerEventType.Move -> lastMove = AiRotate.now()
+                                PointerEventType.Press -> { lastTouch = AiRotate.now(); lastMove[0] = lastTouch }
+                                PointerEventType.Move -> lastMove[0] = AiRotate.now()
                                 else -> {}
                             }
                         }
@@ -224,6 +279,20 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
                     onOpenAiRotate = { setScreen(Screen.ROTATE) },
                     onPlay = { slideshowRun++; setScreen(Screen.SLIDESHOW) },
                     onChange = ::update,
+                    onCopyLog = {
+                        scope.launch {
+                            val fps = measureDrawing()
+                            val text = Log.report(
+                                "Screen: $screen, drawing ${"%.0f".format(fps.first)} frames/s (slowest ${fps.second} ms), " +
+                                    "folder: ${settings.folder}, photos: ${settings.folder?.let { counts[it] }}, " +
+                                    "memory used ${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1_048_576} MB, " +
+                                    "AI: ${aiStatus.copy(message = aiStatus.message)}"
+                            )
+                            java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                                .setContents(java.awt.datatransfer.StringSelection(text), null)
+                            Log.i("Diagnostic log copied (${text.length} characters)")
+                        }
+                    },
                 )
                 Screen.SLIDESHOW -> key(slideshowRun) {
                     SlideshowScreen(settings) { setScreen(Screen.HOME) }
@@ -244,4 +313,22 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
             }
         }
     }
+}
+
+/**
+ * How smoothly the screen draws: asks for frames for 2 seconds and counts them.
+ * Returns (frames per second, slowest frame in ms).
+ */
+private suspend fun measureDrawing(): Pair<Double, Long> {
+    var first = 0L
+    var last = 0L
+    var frames = 0
+    var worst = 0L
+    while (true) {
+        val t = withFrameNanos { it }
+        if (first == 0L) first = t else { worst = maxOf(worst, (t - last) / 1_000_000); frames++ }
+        last = t
+        if (t - first > 2_000_000_000L) break
+    }
+    return frames / ((last - first) / 1e9) to worst
 }

@@ -17,6 +17,7 @@ fun main(args: Array<String>) {
         "exif" -> exifTest(File(args[1]))
         "shots" -> shots(File(args[1]))
         "e2e" -> e2e(File(args[1]), File(args[2]))
+        "window" -> { windowTest(File(args[1])); return }
         else -> println("usage: ai <folder> [n] | exif <jpg> | shots <folder>")
     }
     exitProcess(0)
@@ -147,4 +148,33 @@ private fun e2e(src: File, out: File) {
     live("e2e-rotate.png", 1280, 800) { RotateScreen(settings, onBack = {}, onReview = {}) }
     live("e2e-review.png", 1280, 800) { ReviewScreen(settings, onBack = {}) }
     live("e2e-slideshow.png", 1280, 800) { SlideshowScreen(settings, onExit = {}) }
+}
+
+/** The real app window, driven by simulated clicks, with a screenshot after each step. */
+private fun windowTest(out: File) {
+    out.mkdirs()
+    Thread { Class.forName("mammyframe.MainKt").getMethod("main", Array<String>::class.java).invoke(null, emptyArray<String>()) }.apply { isDaemon = true }.start()
+    val robot = java.awt.Robot()
+    fun snap(name: String) {
+        val size = java.awt.Toolkit.getDefaultToolkit().screenSize
+        ImageIO.write(robot.createScreenCapture(java.awt.Rectangle(size)), "png", File(out, name))
+        println("snap $name")
+    }
+    fun click(x: Int, y: Int) {
+        robot.mouseMove(x, y)
+        robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+        robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+    }
+    Thread.sleep(6000); snap("w1-home.png")
+    repeat(10) { click(640, 270); Thread.sleep(150) }
+    Thread.sleep(1500); snap("w2-dev.png")
+    val (fx, fy) = (System.getProperty("folderX") ?: "500").toInt() to (System.getProperty("folderY") ?: "500").toInt()
+    click(fx, fy)
+    Thread.sleep(4000); snap("w3-folder-window.png")
+    // Cancel the folder window (Escape), then check the app is still fine.
+    robot.keyPress(java.awt.event.KeyEvent.VK_ESCAPE); robot.keyRelease(java.awt.event.KeyEvent.VK_ESCAPE)
+    Thread.sleep(2000); snap("w4-after-cancel.png")
+    println("----- log -----")
+    println(Log.text().takeLast(3000))
+    exitProcess(0)
 }
