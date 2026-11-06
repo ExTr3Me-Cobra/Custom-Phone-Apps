@@ -179,6 +179,13 @@ object AutoSave {
     /** The phone's Documents folder, where the pickers open (a suggestion: you can still go anywhere). */
     val DOCUMENTS: Uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
 
+    /** Save-as picker that opens where [initial] is (e.g. the folder file A went to, for file B). */
+    class CreateIn : androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip") {
+        var initial: Uri? = null
+        override fun createIntent(context: Context, input: String): Intent =
+            super.createIntent(context, input).apply { initial?.let { putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, it) } }
+    }
+
     /** Pick files to restore, opening in Documents. */
     class OpenBackups : androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments() {
         override fun createIntent(context: Context, input: Array<String>): Intent =
@@ -325,9 +332,8 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
     // The file being picked: which place, and A (0) or B (1).
     var picking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Pair<AutoSave.Slot, Int>?>(null) }
     var next by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Pair<AutoSave.Slot, Int>?>(null) }
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
-    ) { uri ->
+    val createIn = androidx.compose.runtime.remember { AutoSave.CreateIn() }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(createIn) { uri ->
         val (s, i) = picking ?: return@rememberLauncherForActivityResult
         picking = null
         if (uri == null) { if (i == 1) show("${s.title}: both files are needed – tap Choose files to finish."); return@rememberLauncherForActivityResult }
@@ -384,7 +390,12 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
         }
     }
     androidx.compose.runtime.LaunchedEffect(next) {
-        next?.let { (s, i) -> next = null; picking = s to i; pick.launch(s.names[i]) }
+        next?.let { (s, i) ->
+            next = null; picking = s to i
+            // File B opens in the folder file A went to.
+            createIn.initial = if (i == 1) AutoSave.states[s]?.uris?.getOrNull(0)?.let(Uri::parse) else null
+            pick.launch(s.names[i])
+        }
     }
     for (s in AutoSave.Slot.entries.filter { only == null || it == only }) {
         val st = AutoSave.states[s]
