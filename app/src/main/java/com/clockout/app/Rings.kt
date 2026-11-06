@@ -31,6 +31,21 @@ object RingReader {
         """([0-9OoIl|]{1,2})\s*-?\s*([A-Za-z]{3}|[A-Za-z0-9]{3}(?=\s*-))\s*-?\s*([0-9OoIl|]{2,4})\s+([0-9OoIl|]{1,2})(?:\s*[.:,;]\s*|\s+|)([0-9OoIl|SB]{2})(?:\s*[.:,;]\s*|\s+)([0-9OoIl|SB]{2})\s*([AaPp])\s*\.?\s*[MmNn]""",
     )
 
+    // The same without AM/PM (it was lost or read somewhere else): worked out from the hour, see [guessHour].
+    private val DATETIME_NO_AMPM = Regex(
+        """([0-9OoIl|]{1,2})\s*-?\s*([A-Za-z]{3}|[A-Za-z0-9]{3}(?=\s*-))\s*-?\s*([0-9OoIl|]{2,4})\s+([0-9OoIl|]{1,2})(?:\s*[.:,;]\s*|\s+|)([0-9OoIl|SB]{2})(?:\s*[.:,;]\s*|\s+)([0-9OoIl|SB]{2})(?!\s*[0-9])""",
+    )
+
+    /** A 12-hour time with no AM/PM: 7–11 is the morning, 12 and 1–6 the afternoon (a day shift). */
+    private fun guessHour(h: Int): Int = when (h) { 12 -> 12; in 1..6 -> h + 12; else -> h % 12 }
+
+    private fun parseNoAmPm(m: MatchResult): LocalDateTime? = runCatching {
+        val (d, mon, y, hh, mm, ss) = m.destructured
+        val h = num(hh); if (h !in 1..12) return null
+        val year = num(y).let { if (it < 100) 2000 + it else it }
+        LocalDateTime.of(year, month(mon) ?: return null, num(d), guessHour(h), num(mm), num(ss))
+    }.getOrNull()
+
     private fun num(s: String): Int = s.map {
         when (it) { 'O', 'o' -> '0'; 'I', 'l', '|' -> '1'; 'S' -> '5'; 'B' -> '8'; else -> it }
     }.joinToString("").toInt()
@@ -109,7 +124,10 @@ object RingReader {
 
     /** Times on one line of text, in the chosen format. Undated decimal times get [day]. */
     private fun timesIn(line: String, decimal: Boolean, day: LocalDate): List<LocalDateTime> {
-        if (!decimal) return DATETIME.findAll(line).mapNotNull { parseTime(it) }.toList()
+        if (!decimal) {
+            val full = DATETIME.findAll(line).mapNotNull { parseTime(it) }.toList()
+            return full.ifEmpty { DATETIME_NO_AMPM.findAll(line).mapNotNull { parseNoAmPm(it) }.toList() }
+        }
         val dated = DECIMAL_DATED.findAll(line).mapNotNull { parseDecimal(it) }.toList()
         if (dated.isNotEmpty()) return dated
         val rest = CODE.replace(line, "").trim()
@@ -163,6 +181,13 @@ object RingReader {
                 "?"
             }
             byRow += Ring(code, t.value as LocalDateTime)
+        }
+        // One time and one code left over: they belong together.
+        val leftCodes = codes.filter { it !in used }
+        if (missed == 1 && leftCodes.size == 1) {
+            val i = byRow.indexOfFirst { it.code == "?" }
+            byRow[i] = byRow[i].copy(code = leftCodes[0].value as String)
+            missed = 0
         }
         // Rows didn't line up (a photo at an angle) but there are as many codes as times: pair them top to bottom.
         // Only then: if the camera missed a row, top-to-bottom would shift every code onto the wrong time.
