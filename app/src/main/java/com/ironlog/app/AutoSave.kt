@@ -111,6 +111,15 @@ object AutoSave {
         }.getOrElse { "Couldn't use that folder: ${it.message}" }
     }
 
+    /** The phone's Documents folder, where the pickers open (a suggestion: you can still go anywhere). */
+    val DOCUMENTS: Uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
+
+    /** Pick files to restore, opening in Documents. */
+    class OpenBackups : androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments() {
+        override fun createIntent(context: Context, input: Array<String>): Intent =
+            super.createIntent(context, input).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, DOCUMENTS)
+    }
+
     /** The reminder shown wherever you pick where to save, or restore. */
     const val TWO_FILES = "Loadout saves two backup files that take turns (A and B), so one is always a good copy if a save is cut short. " +
         "To restore, select both files – Loadout uses the newer one."
@@ -250,7 +259,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                 GreyButton(when { s == AutoSave.Slot.PHONE -> if (st?.ready == true) "Change folder" else "Choose folder"
                     st?.ready == true -> "Change files"; else -> "Choose files" }, androidx.compose.ui.Modifier.weight(1f)) {
-                    if (s == AutoSave.Slot.PHONE) folder.launch(null) else next = s to 0
+                    if (s == AutoSave.Slot.PHONE) folder.launch(AutoSave.DOCUMENTS) else next = s to 0
                 }
                 if (st?.uris?.any { it != null } == true) GreyButton("Stop using", androidx.compose.ui.Modifier.weight(1f), Red) { AutoSave.forget(context, s) }
             }

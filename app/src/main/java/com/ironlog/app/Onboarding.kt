@@ -205,7 +205,7 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var msg by remember { mutableStateOf<String?>(null) }
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments(),
+        AutoSave.OpenBackups(),
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         msg = "Restoring…"

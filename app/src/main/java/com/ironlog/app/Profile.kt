@@ -79,7 +79,7 @@ fun SettingsScreen() {
         }
     }
     // Restore: pick one file, or both auto-save files (A and B) and the newer one is restored.
-    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    val import = rememberLauncherForActivityResult(AutoSave.OpenBackups()) { uris ->
         if (uris.isNotEmpty()) {
             message = "Restoring…"
             scope.launch {
