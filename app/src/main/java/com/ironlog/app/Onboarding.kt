@@ -204,10 +204,8 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var msg by remember { mutableStateOf<String?>(null) }
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        AutoSave.OpenBackups(),
-    ) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+    fun restoreUris(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
         msg = "Restoring…"
         scope.launch {
             msg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -225,6 +223,7 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
             }
         }
     }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(AutoSave.OpenBackups()) { uris -> restoreUris(uris) }
     Title("Are you new to Loadout?")
     @Composable fun Choice(value: Boolean, icon: String, title: String, text: String) {
         val on = importing == value
@@ -249,9 +248,11 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
         InfoCard {
             Text("Select both files", fontWeight = FontWeight.Bold)
             Text("Loadout auto-saves two files that take turns: loadout-autosave-A.zip and loadout-autosave-B.zip (or loadout-drive-autosave-A/B.zip in Google Drive). " +
-                "Select both – Loadout restores the newer one. A single backup file you saved yourself works too.", color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
+                "Tap Find my backup and allow Loadout to look in Documents: it finds them and restores the newer one. If they're somewhere else (or in Drive), " +
+                "you'll pick them yourself – select both. A single backup file you saved yourself works too.", color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
         }
-        BigButton("Choose backup files") { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }
+        RestoreButton("Find my backup", Modifier.fillMaxWidth(), big = true, show = { msg = it },
+            pickManually = { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }) { restoreUris(it) }
     }
     msg?.let { Text(it, color = Blue, fontSize = 14.sp) }
 }

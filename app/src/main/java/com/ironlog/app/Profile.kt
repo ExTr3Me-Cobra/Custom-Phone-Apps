@@ -79,7 +79,7 @@ fun SettingsScreen() {
         }
     }
     // Restore: pick one file, or both auto-save files (A and B) and the newer one is restored.
-    val import = rememberLauncherForActivityResult(AutoSave.OpenBackups()) { uris ->
+    fun restoreUris(uris: List<android.net.Uri>) {
         if (uris.isNotEmpty()) {
             message = "Restoring…"
             scope.launch {
@@ -105,6 +105,7 @@ fun SettingsScreen() {
             }
         }
     }
+    val import = rememberLauncherForActivityResult(AutoSave.OpenBackups()) { uris -> restoreUris(uris) }
 
     var packMsg by remember { mutableStateOf<String?>(null) }
     var textMsg by remember { mutableStateOf<String?>(null) }
@@ -288,7 +289,8 @@ fun SettingsScreen() {
                         scope.launch { message = withContext(Dispatchers.IO) { AutoSave.saveNow(context) } }
                     }
                 }
-                GreyButton("Restore", Modifier.weight(1f)) { import.launch(arrayOf("application/zip", "application/json", "*/*")) }
+                RestoreButton("Restore", Modifier.weight(1f), big = false, show = { message = it },
+                    pickManually = { import.launch(arrayOf("application/zip", "application/json", "*/*")) }) { restoreUris(it) }
             }
             if (AutoSave.active().isNotEmpty()) Text("Save a one-off copy somewhere else", color = Blue, fontSize = 13.sp,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { export.launch("loadout-backup.zip") }.padding(vertical = 4.dp))

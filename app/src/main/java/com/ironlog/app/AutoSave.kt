@@ -120,6 +120,33 @@ object AutoSave {
             super.createIntent(context, input).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, DOCUMENTS)
     }
 
+    /** This phone's own auto-save files, if they're set up (no picker needed to restore them). */
+    fun ownFiles(): List<Uri> = states[Slot.PHONE]?.takeIf { it.ready }?.uris?.filterNotNull()?.map(Uri::parse).orEmpty()
+
+    /** Backups in a folder you opened (and its subfolders, one level down): auto-save files and saved backups. */
+    fun findInTree(c: Context, tree: Uri): List<Uri> {
+        val r = c.contentResolver
+        val out = mutableListOf<Uri>()
+        val names = Slot.entries.flatMap { it.names }.toSet()
+        fun scan(docId: String, depth: Int) {
+            val kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+            runCatching {
+                r.query(kids, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME, android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE),
+                    null, null, null)?.use { cur ->
+                    while (cur.moveToNext()) {
+                        val id = cur.getString(0); val name = cur.getString(1) ?: ""; val mime = cur.getString(2)
+                        if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) { if (depth < 1) scan(id, depth + 1) }
+                        else if (name in names || (name.startsWith("loadout-backup") && name.endsWith(".zip")))
+                            out += android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                    }
+                }
+            }
+        }
+        scan(android.provider.DocumentsContract.getTreeDocumentId(tree), 0)
+        return out
+    }
+
     /** The reminder shown wherever you pick where to save, or restore. */
     const val TWO_FILES = "Loadout saves two backup files that take turns (A and B), so one is always a good copy if a save is cut short. " +
         "To restore, select both files – Loadout uses the newer one."
@@ -264,5 +291,47 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                 if (st?.uris?.any { it != null } == true) GreyButton("Stop using", androidx.compose.ui.Modifier.weight(1f), Red) { AutoSave.forget(context, s) }
             }
         }
+    }
+}
+
+/**
+ * Restore: uses this phone's auto-save files if they're set up; otherwise opens Documents (you allow access once),
+ * finds the auto-save files or a saved backup there and restores the newest; if there's none, [pickManually] opens
+ * the file picker. [restore] does the restoring (it picks the newest of the files it's given).
+ */
+@androidx.compose.runtime.Composable
+fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Boolean, show: (String) -> Unit,
+                  pickManually: () -> Unit, restore: (List<Uri>) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var confirm by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<Uri>?>(null) }
+    val folder = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { tree ->
+        if (tree == null) return@rememberLauncherForActivityResult
+        show("Looking for your backup…")
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val found = AutoSave.findInTree(context, tree)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (found.isEmpty()) { show("No Loadout backup in that folder – pick the files yourself (both A and B)."); pickManually() }
+                else restore(found)
+            }
+        }
+    }
+    val onClick = {
+        val own = AutoSave.ownFiles()
+        if (own.isNotEmpty()) confirm = own else folder.launch(AutoSave.DOCUMENTS)
+    }
+    if (big) BigButton(label, modifier = modifier) { onClick() } else GreyButton(label, modifier) { onClick() }
+    confirm?.let { files ->
+        val last = AutoSave.states[AutoSave.Slot.PHONE]?.last
+        val fmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault())
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = null },
+            text = { Text("Restore from this phone's auto-save" + (last?.let { " (saved ${fmt.format(java.util.Date(it))})" } ?: "") +
+                "? Everything in Loadout is replaced with that copy.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; restore(files) }) { Text("Restore", color = Red) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; pickManually() }) { Text("Pick another file") } },
+        )
     }
 }
