@@ -405,6 +405,10 @@ fun AutoSaveSettings(only: AutoSave.Slot? = null, show: (String) -> Unit) {
                     }
                 })
             }
+            // When it last saved there (updates as soon as a save finishes).
+            val last = st?.last
+            if (on && last != null) Text("Last saved " + java.text.SimpleDateFormat("EEE, MMM d · h:mm a", java.util.Locale.getDefault()).format(java.util.Date(last)),
+                color = Sub, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 2.dp))
             // Only problems are shown (e.g. a Drive file was deleted).
             st?.error?.takeIf { st.ready }?.let { Text("⚠️ $it", color = Red, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 4.dp)) }
         }
