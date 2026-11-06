@@ -26,8 +26,9 @@ object RingReader {
 
     // 09-OCT-26 02.41.06 PM  (dots or colons, a little forgiving about spaces)
     // Digits the camera sometimes reads as letters (0→O, 1→I/l/|, 5→S, 8→B) are accepted and fixed.
+    // A dash the camera dropped ("06-NOV26") or a missing dot between hours and minutes ("0849.11") is fine too.
     private val DATETIME = Regex(
-        """([0-9OoIl|]{1,2})\s*-\s*([A-Za-z0-9]{3})\s*-\s*([0-9OoIl|]{2,4})\s+([0-9OoIl|]{1,2})(?:\s*[.:,;]\s*|\s+)([0-9OoIl|SB]{2})(?:\s*[.:,;]\s*|\s+)([0-9OoIl|SB]{2})\s*([AaPp])\s*\.?\s*[MmNn]""",
+        """([0-9OoIl|]{1,2})\s*-?\s*([A-Za-z]{3}|[A-Za-z0-9]{3}(?=\s*-))\s*-?\s*([0-9OoIl|]{2,4})\s+([0-9OoIl|]{1,2})(?:\s*[.:,;]\s*|\s+|)([0-9OoIl|SB]{2})(?:\s*[.:,;]\s*|\s+)([0-9OoIl|SB]{2})\s*([AaPp])\s*\.?\s*[MmNn]""",
     )
 
     private fun num(s: String): Int = s.map {
@@ -64,8 +65,8 @@ object RingReader {
             }.toList()
         }
 
-    // 013 IL
-    private val CODE = Regex("""\b[0-9OoIl]{3}\s+([A-Z01]{2})\b""")
+    // 013 IL (or "012OL" when the space is lost)
+    private val CODE = Regex("""\b[0-9OoIl]{3}\s*([A-Z01]{2})\b""")
 
     /** "0L" -> "OL", "1L" -> "IL": letters in a code misread as digits. */
     private fun code(raw: String) = raw.uppercase().replace('0', 'O').replace('1', 'I')
@@ -123,13 +124,10 @@ object RingReader {
         val paired = mutableListOf<Ring>()
         // The details panel sits under the table, and its time lines often have no label of their own
         // (the photo cuts it off), so everything from the panel's first line down is left out.
-        val allLines = text.textBlocks.flatMap { it.lines }
-        val panelTop = allLines.filter { PANEL.containsMatchIn(it.text) }
+        val panelTop = text.textBlocks.flatMap { it.lines }.filter { PANEL.containsMatchIn(it.text) }
             .mapNotNull { it.boundingBox?.let { b -> b.top - b.height() * 0.3f } }.minOrNull()
-        for (line in allLines) {
-            val t = line.text
+        for ((t, box) in joinedLines(text)) {
             if (PANEL.containsMatchIn(t)) continue
-            val box: Rect = line.boundingBox ?: Rect()
             if (panelTop != null && box.exactCenterY() > panelTop) continue
             val y = box.exactCenterY()
             val h = box.height().toFloat().coerceAtLeast(1f)
@@ -151,26 +149,56 @@ object RingReader {
             lineTimes.forEach { times += Found(y, h, it) }
             lineCodes.forEach { codes += Found(y, h, it) }
         }
-        // Columns read separately. Same number of codes and times: pair them top to bottom
-        // (works even when the photo is at an angle).
-        if (times.isNotEmpty() && times.size == codes.size) {
-            val ts = times.sortedBy { it.y }; val cs = codes.sortedBy { it.y }
-            ts.indices.forEach { paired += Ring(cs[it].value as String, ts[it].value as LocalDateTime) }
-            return paired.distinctBy { it.time }.sortedBy { it.time }
-        }
-        // Otherwise match each time with the code on the same row.
+        // Columns read separately: match each time with the code on the same row.
+        val byRow = mutableListOf<Ring>()
         val used = HashSet<Found>()
+        var missed = 0
         for (t in times.sortedBy { it.y }) {
             val best = codes.filter { it !in used }.minByOrNull { abs(it.y - t.y) }
             val code = if (best != null && abs(best.y - t.y) < t.h * 1.5f) {
                 used += best
                 best.value as String
             } else {
+                missed++
                 "?"
             }
-            paired += Ring(code, t.value as LocalDateTime)
+            byRow += Ring(code, t.value as LocalDateTime)
         }
+        // Rows didn't line up (a photo at an angle) but there are as many codes as times: pair them top to bottom.
+        // Only then: if the camera missed a row, top-to-bottom would shift every code onto the wrong time.
+        if (missed > 0 && times.isNotEmpty() && times.size == codes.size) {
+            val ts = times.sortedBy { it.y }; val cs = codes.sortedBy { it.y }
+            ts.indices.forEach { paired += Ring(cs[it].value as String, ts[it].value as LocalDateTime) }
+        } else paired += byRow
         return paired.distinctBy { it.time }.sortedBy { it.time }
+    }
+
+    private val AMPM_ONLY = Regex("""^\s*([AaPp])\s*\.?\s*[Mm]\s*\.?\s*$""")
+
+    /**
+     * The lines the camera read, with an "AM" or "PM" that landed on a line of its own (the time column wraps)
+     * put back on the end of the time just above it.
+     */
+    private fun joinedLines(text: Text): List<Pair<String, Rect>> {
+        val lines = text.textBlocks.flatMap { it.lines }.map { (it.text) to (it.boundingBox ?: Rect()) }.toMutableList()
+        val out = mutableListOf<Pair<String, Rect>>()
+        val taken = HashSet<Int>()
+        for ((i, l) in lines.withIndex()) {
+            if (i in taken || AMPM_ONLY.matches(l.first)) continue
+            var s = l.first
+            // A time without AM/PM: find the AM/PM line just below it, roughly in the same column.
+            if (Regex("""\d\s*[.:,]\s*\d{2}\s*$""").containsMatchIn(s)) {
+                val b = l.second
+                val below = lines.withIndex().filter { (j, o) ->
+                    j != i && j !in taken && AMPM_ONLY.matches(o.first) &&
+                        o.second.top >= b.top && o.second.top - b.bottom < b.height() * 1.6f &&
+                        o.second.left < b.right && o.second.right > b.left - b.height()
+                }.minByOrNull { it.value.second.top }
+                if (below != null) { taken += below.index; s = "$s ${below.value.first.trim()}" }
+            }
+            out += s to l.second
+        }
+        return out
     }
 }
 
