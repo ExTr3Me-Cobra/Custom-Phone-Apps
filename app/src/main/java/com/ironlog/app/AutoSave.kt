@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateMapOf
 import org.json.JSONObject
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
@@ -330,37 +331,29 @@ fun AutoSaveSettings(show: (String) -> Unit) {
     androidx.compose.runtime.LaunchedEffect(next) {
         next?.let { (s, i) -> next = null; picking = s to i; pick.launch(s.names[i]) }
     }
-    val fmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault())
     for (s in AutoSave.Slot.entries) {
         val st = AutoSave.states[s]
+        val on = st?.ready == true && st.on
         androidx.compose.foundation.layout.Column(
             androidx.compose.ui.Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(Card).padding(14.dp),
         ) {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
-                    Text((if (s == AutoSave.Slot.PHONE) "📱 Auto-save on this phone" else "☁️ Auto-save to Google Drive"), fontWeight = FontWeight.Bold)
-                    val last = st?.last
-                    Text(
-                        when {
-                            st == null || !st.ready -> "Not set up"
-                            st.error != null -> "⚠️ ${st.error}"
-                            !st.on -> "Off"
-                            last != null -> "✓ Last saved ${fmt.format(java.util.Date(last))}"
-                            else -> "Not saved yet"
-                        },
-                        color = if (st?.error != null) Red else Sub, fontSize = 13.sp,
-                    )
-                }
-                if (st?.ready == true) androidx.compose.material3.Switch(st.on, { AutoSave.setOn(context, s, it) })
+                Text((if (s == AutoSave.Slot.PHONE) "📱 Auto-save on this phone" else "☁️ Auto-save to Google Drive"), fontWeight = FontWeight.Bold,
+                    modifier = androidx.compose.ui.Modifier.weight(1f))
+                // On with nothing picked yet: the A/B explanation, then the picker. Off: pauses it (the files stay).
+                androidx.compose.material3.Switch(on, { want ->
+                    when {
+                        !want -> AutoSave.setOn(context, s, false)
+                        st?.ready == true -> AutoSave.setOn(context, s, true)
+                        else -> explain = s
+                    }
+                })
             }
-            androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(top = 8.dp),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                GreyButton(when { s == AutoSave.Slot.PHONE -> if (st?.ready == true) "Change folder" else "Choose folder"
-                    st?.ready == true -> "Change files"; else -> "Choose files" }, androidx.compose.ui.Modifier.weight(1f)) {
-                    explain = s
-                }
-                if (st?.uris?.any { it != null } == true) GreyButton("Stop using", androidx.compose.ui.Modifier.weight(1f), Red) { AutoSave.forget(context, s) }
-            }
+            // Only problems are shown (e.g. a Drive file was deleted).
+            st?.error?.takeIf { st.ready }?.let { Text("⚠️ $it", color = Red, fontSize = 13.sp, modifier = androidx.compose.ui.Modifier.padding(top = 4.dp)) }
+            if (st?.ready == true) Text(if (s == AutoSave.Slot.PHONE) "Change folder" else "Change files", color = Blue, fontSize = 13.sp,
+                modifier = androidx.compose.ui.Modifier.padding(top = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                    .clickable { explain = s }.padding(vertical = 4.dp))
         }
     }
 }
