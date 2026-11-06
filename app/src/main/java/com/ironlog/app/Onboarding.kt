@@ -245,12 +245,6 @@ private fun StartPage(importing: Boolean?, set: (Boolean) -> Unit) {
     Choice(false, "👋", "I'm new to Loadout", "Set up from scratch.")
     Choice(true, "📦", "I have Loadout data to import", "From auto-save or a backup you saved, e.g. moving to a new phone.")
     if (importing == true) {
-        InfoCard {
-            Text("Select both files", fontWeight = FontWeight.Bold)
-            Text("Loadout auto-saves two files that take turns: loadout-autosave-A.zip and loadout-autosave-B.zip (or loadout-drive-autosave-A/B.zip in Google Drive). " +
-                "Tap Find my backup and allow Loadout to look in Documents: it finds them and restores the newer one. If they're somewhere else (or in Drive), " +
-                "you'll pick them yourself – select both. A single backup file you saved yourself works too.", color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
-        }
         RestoreButton("Find my backup", Modifier.fillMaxWidth(), big = true, show = { msg = it },
             pickManually = { pick.launch(arrayOf("application/zip", "application/json", "*/*")) }) { restoreUris(it) }
     }

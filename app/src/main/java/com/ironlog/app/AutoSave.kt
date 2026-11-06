@@ -184,7 +184,7 @@ object AutoSave {
         return out
     }
 
-    /** The reminder shown wherever you pick where to save, or restore. */
+    /** The reminder that pops up wherever you pick where to save, or pick restore files yourself. */
     const val TWO_FILES = "Loadout saves two backup files that take turns (A and B), so one is always a good copy if a save is cut short. " +
         "To restore, select both files – Loadout uses the newer one."
 
@@ -317,7 +317,16 @@ fun AutoSaveSettings(show: (String) -> Unit) {
             }
         }
     }
-    Text("⚠️ " + AutoSave.TWO_FILES, color = Sub, fontSize = 13.sp)
+    // The A/B explanation pops up before each picker; OK opens it.
+    var explain by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<AutoSave.Slot?>(null) }
+    explain?.let { s ->
+        TwoFilesDialog(if (s == AutoSave.Slot.PHONE) "Pick a folder such as Documents: Loadout makes a Loadout folder in it, names both files for you, and remakes them if they're ever deleted."
+            else "Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive, then tap Save twice – the names are filled in.",
+            onDismiss = { explain = null }) {
+            explain = null
+            if (s == AutoSave.Slot.PHONE) folder.launch(AutoSave.DOCUMENTS) else next = s to 0
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(next) {
         next?.let { (s, i) -> next = null; picking = s to i; pick.launch(s.names[i]) }
     }
@@ -333,8 +342,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                     val last = st?.last
                     Text(
                         when {
-                            st == null || !st.ready -> if (s == AutoSave.Slot.PHONE) "Not set up. Pick a folder such as Documents: Loadout makes a Loadout folder in it with its two files, named for you, and remakes them if they're ever deleted. They stay even if Loadout is uninstalled."
-                                else "Not set up. Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive, then tap Save twice (the names are filled in). Keeps a copy if you lose the phone."
+                            st == null || !st.ready -> "Not set up"
                             st.error != null -> "⚠️ ${st.error}"
                             !st.on -> "Off"
                             last != null -> "✓ Last saved ${fmt.format(java.util.Date(last))}"
@@ -349,7 +357,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                 GreyButton(when { s == AutoSave.Slot.PHONE -> if (st?.ready == true) "Change folder" else "Choose folder"
                     st?.ready == true -> "Change files"; else -> "Choose files" }, androidx.compose.ui.Modifier.weight(1f)) {
-                    if (s == AutoSave.Slot.PHONE) folder.launch(AutoSave.DOCUMENTS) else next = s to 0
+                    explain = s
                 }
                 if (st?.uris?.any { it != null } == true) GreyButton("Stop using", androidx.compose.ui.Modifier.weight(1f), Red) { AutoSave.forget(context, s) }
             }
@@ -368,6 +376,10 @@ fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Bo
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var confirm by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<Uri>?>(null) }
+    // Finding the files yourself: the A/B explanation first.
+    var manual by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (manual) TwoFilesDialog("Find loadout-autosave-A.zip and -B.zip (or loadout-drive-autosave-A/B.zip in Google Drive) and select both.",
+        onDismiss = { manual = false }) { manual = false; pickManually() }
     val folder = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
     ) { tree ->
@@ -376,7 +388,7 @@ fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Bo
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val found = AutoSave.findInTree(context, tree)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                if (found.isEmpty()) { show("No Loadout backup in that folder – pick the files yourself (both A and B)."); pickManually() }
+                if (found.isEmpty()) { show("No Loadout backup in that folder."); manual = true }
                 else restore(found)
             }
         }
@@ -394,7 +406,19 @@ fun RestoreButton(label: String, modifier: androidx.compose.ui.Modifier, big: Bo
             text = { Text("Restore from this phone's auto-save" + (last?.let { " (saved ${fmt.format(java.util.Date(it))})" } ?: "") +
                 "? Everything in Loadout is replaced with that copy.") },
             confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; restore(files) }) { Text("Restore", color = Red) } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; pickManually() }) { Text("Pick another file") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null; manual = true }) { Text("Pick another file") } },
         )
     }
+}
+
+/** The A/B explanation, shown before a picker opens; [ok] opens it. [extra] adds a line for that picker. */
+@androidx.compose.runtime.Composable
+fun TwoFilesDialog(extra: String? = null, onDismiss: () -> Unit, ok: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Two backup files") },
+        text = { Text(AutoSave.TWO_FILES + (extra?.let { "\n\n$it" } ?: "")) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = ok) { Text("OK") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

@@ -279,7 +279,6 @@ fun SettingsScreen() {
 
             Spacer(8)
             Text("Backup", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Auto-save keeps an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – saved after every finished workout, a couple of minutes after other changes, and at least once a day. Each place keeps two files (A and B) that take turns, so one is always a good copy. Restore puts a copy back (on this phone or a new one) and restarts the app: select both A and B and the newer one is used. Your OpenAI key stays on this phone.", color = Sub, fontSize = 13.sp)
             AutoSaveSettings { message = it }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GreyButton("Save backup now", Modifier.weight(1f)) {
