@@ -60,6 +60,10 @@ object Ocr {
         var switched = false
         // Nothing in the chosen time style: see if the picture uses the other one.
         if (rings.isEmpty()) merge(texts, !decimal).takeIf { it.isNotEmpty() }?.let { rings = it; decimal = !decimal; switched = true }
+        // The phone's own AI reads it too, where it can: its answer wins unless the text reading found more rings.
+        val aiRaw = StringBuilder()
+        val ai = runCatching { AiReader.read(context, uris, decimal, aiRaw) }.getOrNull()
+        if (ai != null && ai.size >= rings.size) return Result(ai, "Read by the phone's AI:\n$aiRaw", decimal, switched)
         return Result(rings, texts.first().text, decimal, switched)
     }
 

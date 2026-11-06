@@ -135,6 +135,21 @@ object RingReader {
         return listOfNotNull(decimalTime(m.groupValues[1], m.groupValues[2])?.let { day.atTime(it) })
     }
 
+    /**
+     * Rings from the AI's answer: one row per line, "CODE | time as written" (e.g. "IL | 06-NOV-26 01.47.05 PM").
+     * The time is read with the same rules as the camera text.
+     */
+    fun fromRows(answer: String, decimal: Boolean): List<Ring> {
+        val day = LocalDate.now()
+        return answer.lines().mapNotNull { line ->
+            val parts = line.split("|").map { it.trim() }
+            if (parts.size < 2) return@mapNotNull null
+            val c = Regex("""([A-Za-z01]{2})\s*$""").find(parts[0])?.groupValues?.get(1)?.let(::code) ?: return@mapNotNull null
+            val t = timesIn(parts[1], decimal, day).firstOrNull() ?: return@mapNotNull null
+            Ring(c, t)
+        }.distinctBy { it.time }.sortedBy { it.time }
+    }
+
     fun read(text: Text, decimal: Boolean): List<Ring> {
         val day = LocalDate.now()
         val times = mutableListOf<Found>()

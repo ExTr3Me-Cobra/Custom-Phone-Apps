@@ -1,6 +1,7 @@
 package com.clockout.app
 
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 import android.Manifest
 import android.content.Context
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity() {
         Store.load(this)
         Store.clearOldDays(this)
         Reminder.ensureChannel(this)
+        // Get the phone's AI model downloaded early, so it's ready for the first photo.
+        lifecycleScope.launch { AiReader.prepare() }
         enableEdgeToEdge()
         setContent {
             val dark = isSystemInDarkTheme()
