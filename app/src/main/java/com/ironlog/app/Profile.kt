@@ -78,13 +78,16 @@ fun SettingsScreen() {
             }
         }
     }
-    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+    // Restore: pick one file, or both auto-save files (A and B) and the newer one is restored.
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
             message = "Restoring…"
             scope.launch {
                 message = withContext(Dispatchers.IO) {
                     runCatching {
-                        val n = context.contentResolver.openInputStream(uri)!!.use { Store.readBackup(it) }
+                        val files = uris.map { u -> context.contentResolver.openInputStream(u)!!.use { it.readBytes() } }
+                        val bytes = files.maxByOrNull { Store.savedAt(it) ?: 0L }!!
+                        val n = Store.readBackup(bytes.inputStream())
                         if (n == -1) {
                             withContext(Dispatchers.Main) { Nav.go(Route.HevyMatch) }
                             return@runCatching "Choose what to import from Hevy…"
@@ -275,7 +278,7 @@ fun SettingsScreen() {
 
             Spacer(8)
             Text("Backup", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Auto-save keeps an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – in one .zip file, overwritten after every finished workout and at least once a day. Restore puts that copy back (on this phone or a new one) and restarts the app. Your OpenAI key stays on this phone.", color = Sub, fontSize = 13.sp)
+            Text("Auto-save keeps an exact copy of everything in Loadout – workouts (and one in progress), routines, profile, every setting, your exercise changes, text edits, reference weights, the Recycle Bin and every picture you've added – saved after every finished workout, a couple of minutes after other changes, and at least once a day. Each place keeps two files (A and B) that take turns, so one is always a good copy. Restore puts a copy back (on this phone or a new one) and restarts the app: select both A and B and the newer one is used. Your OpenAI key stays on this phone.", color = Sub, fontSize = 13.sp)
             AutoSaveSettings { message = it }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GreyButton("Save backup now", Modifier.weight(1f)) {

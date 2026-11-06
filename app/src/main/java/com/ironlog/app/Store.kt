@@ -86,6 +86,8 @@ object Store {
             tmp.writeText(text)
             tmp.renameTo(File(dir, name))
         }
+        // Auto-save picks up changes a couple of minutes later (the workout in progress is saved when it finishes).
+        if (name != "active.json") AutoSave.changed()
     }
 
     fun exercise(id: String): Exercise? = _exercises.value[id]
@@ -285,11 +287,20 @@ object Store {
                 zip.closeEntry()
             }
             zip.putNextEntry(java.util.zip.ZipEntry("full.txt"))
-            zip.write("Loadout full backup 2".toByteArray())
+            zip.write("Loadout full backup 2\nsaved=${System.currentTimeMillis()}".toByteArray())
             zip.closeEntry()
         }
         return pics.size
     }
+
+    /** When a backup zip was saved (from its full.txt), or null for older backups. */
+    fun savedAt(bytes: ByteArray): Long? = runCatching {
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            generateSequence { zip.nextEntry }.firstOrNull { it.name == "full.txt" }?.let {
+                zip.readBytes().toString(Charsets.UTF_8).lines().firstOrNull { l -> l.startsWith("saved=") }?.removePrefix("saved=")?.trim()?.toLong()
+            }
+        }
+    }.getOrNull()
 
     /** The last restore was a full (exact copy) backup: the app restarts to load it. */
     var lastFull = false
