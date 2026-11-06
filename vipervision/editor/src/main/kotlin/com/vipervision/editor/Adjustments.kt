@@ -103,12 +103,18 @@ fun applyAdjustments(context: Context, source: Bitmap, adjustments: Adjustments)
         }
     }
     if (gpuFilters.isNotEmpty()) {
-        bitmap = GPUImage(context.applicationContext).run {
-            setImage(bitmap)
-            setFilter(gpuFilters.singleOrNull() ?: GPUImageFilterGroup(gpuFilters))
-            bitmapWithFilterApplied
+        // One GPU filter run at a time, app-wide (a live preview and a full-size save could
+        // otherwise run together, and a GPU failure there closes the app).
+        bitmap = synchronized(GpuLock) {
+            GPUImage(context.applicationContext).run {
+                setImage(bitmap)
+                setFilter(gpuFilters.singleOrNull() ?: GPUImageFilterGroup(gpuFilters))
+                bitmapWithFilterApplied
+            }
         }
     }
     return bitmap
 }
 
+/** Serializes GPU filter runs (see applyAdjustments). */
+private object GpuLock

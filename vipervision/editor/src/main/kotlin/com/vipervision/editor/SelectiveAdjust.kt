@@ -88,7 +88,10 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
                         val white = Bitmap.createBitmap(work.width, work.height, Bitmap.Config.ARGB_8888).apply { eraseColor(AColor.WHITE) }
                         val seg = sam.segment(points = listOf(MobileSAM.Point(point.x, point.y, true)), outputImage = white)
                         white.recycle()
-                        SoftMask.ofAlpha(seg).also { seg.recycle() }
+                        SoftMask.ofAlpha(seg).also {
+                            seg.recycle()
+                            if (closing) sam.close()
+                        }
                     }
                 }
                 if (mask.isEmpty) current else current + mask
@@ -137,36 +140,63 @@ class SelectiveAdjustTool(private val preview: Bitmap, private val sam: Sam2.Ses
      */
     private suspend fun render(context: Context, image: Bitmap, inA: Adjustments, outA: Adjustments, weight: (Int, Int) -> Float): Bitmap {
         if (inA.isIdentity && outA.isIdentity) return image
+        val ins = if (inA.isIdentity) null else withContext(Dispatchers.Default) { applyAdjustments(context, image, inA) }
+        val outs = if (outA.isIdentity) null else withContext(Dispatchers.Default) { applyAdjustments(context, image, outA) }
         val w = image.width
         val h = image.height
-        val px = IntArray(w * h)
-        image.getPixels(px, 0, w, 0, 0, w, h)
-        suspend fun adjusted(a: Adjustments): IntArray? {
-            if (a.isIdentity) return null
-            val b = withContext(Dispatchers.Default) { applyAdjustments(context, image, a) }
-            return IntArray(w * h).also { b.getPixels(it, 0, w, 0, 0, w, h) }
-        }
-        val ins = adjusted(inA)
-        val outs = adjusted(outA)
-        forRows(h) { y ->
-            var i = y * w
-            for (x in 0 until w) {
-                val m = weight(x, y)
-                val c = px[i]
-                val a = ins?.get(i) ?: c
-                val o = outs?.get(i) ?: c
-                px[i] = when {
-                    m >= 0.998f -> a
-                    m <= 0.002f -> o
-                    else -> rgb(o.red8 + (a.red8 - o.red8) * m, o.green8 + (a.green8 - o.green8) * m, o.blue8 + (a.blue8 - o.blue8) * m)
+        val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        // A band of rows at a time, so even a very big photo needs only a few small buffers
+        // (whole-photo pixel copies of three versions ran phones out of memory).
+        val band = 64
+        val c = IntArray(w * band)
+        val a = IntArray(w * band)
+        val o = IntArray(w * band)
+        var y0 = 0
+        while (y0 < h) {
+            val rows = minOf(band, h - y0)
+            image.getPixels(c, 0, w, 0, y0, w, rows)
+            ins?.getPixels(a, 0, w, 0, y0, w, rows)
+            outs?.getPixels(o, 0, w, 0, y0, w, rows)
+            val top = y0
+            forRows(rows) { r ->
+                var i = r * w
+                for (x in 0 until w) {
+                    val m = weight(x, top + r)
+                    val p = c[i]
+                    val inside = if (ins != null) a[i] else p
+                    val outside = if (outs != null) o[i] else p
+                    c[i] = when {
+                        m >= 0.998f -> inside
+                        m <= 0.002f -> outside
+                        else -> rgb(
+                            outside.red8 + (inside.red8 - outside.red8) * m,
+                            outside.green8 + (inside.green8 - outside.green8) * m,
+                            outside.blue8 + (inside.blue8 - outside.blue8) * m
+                        )
+                    }
+                    i++
                 }
-                i++
             }
+            result.setPixels(c, 0, w, 0, y0, w, rows)
+            y0 += rows
         }
-        return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { setPixels(px, 0, w, 0, 0, w, h) }
+        ins?.takeIf { it !== image }?.recycle()
+        outs?.takeIf { it !== image }?.recycle()
+        return result
     }
 
-    override fun close() = sam.close()
+    /** Set when closed while a selection was still being worked out: it closes SAM when done. */
+    @Volatile
+    private var closing = false
+
+    override fun close() {
+        // Never while SAM is busy (closing it mid-run crashes in native code).
+        if (samLock.tryLock()) {
+            try { sam.close() } finally { samLock.unlock() }
+        } else {
+            closing = true
+        }
+    }
 
     @Composable
     override fun Screen(onCancel: () -> Unit, onApply: () -> Unit) {
