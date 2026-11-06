@@ -39,7 +39,7 @@ object AppLock {
         BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
 
     /** Null when the phone can lock the app; otherwise why not (e.g. no screen lock set up). */
-    fun unavailable(a: Activity): String? = when (a.getSystemService(BiometricManager::class.java)?.canAuthenticate(ALLOWED)) {
+    fun unavailable(a: Activity): String? = when (runCatching { a.getSystemService(BiometricManager::class.java)?.canAuthenticate(ALLOWED) }.getOrNull()) {
         BiometricManager.BIOMETRIC_SUCCESS -> null
         BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Set up a screen lock (PIN, pattern, password, fingerprint or face) in your phone's settings first."
         else -> "This phone can't lock apps with its screen lock."
@@ -57,8 +57,8 @@ object AppLock {
             BiometricPrompt.Builder(a).setTitle(title).setSubtitle("Use your fingerprint, face or phone passcode")
                 .setAllowedAuthenticators(ALLOWED).build()
                 .authenticate(CancellationSignal(), a.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) { ok() }
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) { failed(errString?.toString() ?: "Cancelled") }
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) { runCatching { ok() } }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) { runCatching { failed(errString?.toString() ?: "Cancelled") } }
                 })
         }.onFailure { failed(it.message ?: "Couldn't show the unlock prompt") }
     }
