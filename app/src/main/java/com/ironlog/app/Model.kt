@@ -174,7 +174,8 @@ data class Profile(
     /** PERSONAL-USE (removable): rank with the non-commercial personal-use standards only. */
     val devPersonal: Boolean = false,
     /** PERSONAL-USE (removable): rank with the pre-purge standards only. */
-    val devPurged: Boolean = false,
+    /** PERSONAL-USE (removable): the purged standards rank you. The default, by the owner's choice. */
+    val devPurged: Boolean = true,
     /** Developer: show Research mode (a standing list of 1 Rep Max tests for improving the standards) under 1 Rep Max mode. */
     val devResearch: Boolean = false,
     /** Body fat picture you chose, 1 (leanest) to 5; null = not set (no adjustment). See [BodyFat]. */
@@ -259,7 +260,7 @@ object Json {
         .put("restSound", p.restSound).put("restVibrate", p.restVibrate).put("rankMode", p.rankMode)
         .put("dev", p.devUnlocked).put("devAi", p.devAi).put("range", p.homeRange).put("onb", p.onboarded).put("bk", p.cloud).put("cmp", p.compareAll).put("sort", p.exerciseSort).put("grip", p.gripRank)
         .put("gp", JSONObject(p.groupPicks.mapValues { JSONArray(it.value) } as Map<*, *>))
-        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dper", p.devPersonal).put("dpg", p.devPurged).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent)
+        .put("xa", p.extraAnims).put("d1rm", p.dev1rm).put("dgem", p.devGemini).put("dv2", p.devV2).put("dper", p.devPersonal).put("dpg", p.devPurged).put("dpgd", true).put("dres", p.devResearch).putOpt2("bf", p.bodyFat).put("lock", p.appLock).put("acc", p.accent)
         .put("lay", JSONObject(p.layouts.mapValues { JSONArray(it.value) } as Map<*, *>))
         .put("stk", JSONObject(p.stacks as Map<*, *>))
         .put("pul", JSONObject(p.pulleys as Map<*, *>))
@@ -278,7 +279,9 @@ object Json {
         devGemini = o.optBoolean("dgem"),
         devV2 = o.optBoolean("dv2"),
         devPersonal = o.optBoolean("dper"),
-        devPurged = o.optBoolean("dpg"),
+        // Purged became the default: switched on once for profiles saved before that, unless another table is picked.
+        devPurged = if (o.has("dpgd")) o.optBoolean("dpg", true)
+            else !(o.optBoolean("dper") || o.optBoolean("dv2") || o.optBoolean("dgem")),
         devResearch = o.optBoolean("dres"),
         bodyFat = o.optIntOrNull("bf")?.takeIf { it in 1..5 },
         appLock = o.optBoolean("lock"),

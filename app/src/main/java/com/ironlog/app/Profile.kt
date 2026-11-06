@@ -352,7 +352,7 @@ fun SettingsScreen() {
                 Row(Modifier.fillMaxWidth().clickable { set(p.copy(devV2 = false, devGemini = false, devPersonal = false, devPurged = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("V1 rankings")
-                        Text("The normal standards everyone gets.", color = Sub, fontSize = 13.sp)
+                        Text("The regular standards (built only from sources free for commercial use).", color = Sub, fontSize = 13.sp)
                     }
                     androidx.compose.material3.Switch(!p.devV2 && !p.devGemini && !p.devPersonal && !p.devPurged, { set(p.copy(devV2 = false, devGemini = false, devPersonal = false, devPurged = false)) })
                 }
@@ -376,7 +376,8 @@ fun SettingsScreen() {
                 Row(Modifier.fillMaxWidth().clickable { set(p.copy(devPurged = !p.devPurged, devPersonal = false, devV2 = false, devGemini = false)) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Purged rankings")
-                        Text("Ranks only with the app's standards from before the October 2026 purge (${StandardsData.purgedCount} exercises). Exercises they don't cover aren't ranked.",
+                        Text("The default. Ranks with the app's standards from before the October 2026 purge (${StandardsData.purgedOwn} exercises), " +
+                            "plus ${StandardsData.purgedCount - StandardsData.purgedOwn} more from the personal-use standards that the purged set doesn't have (its own numbers are never replaced).",
                             color = Sub, fontSize = 13.sp)
                     }
                     androidx.compose.material3.Switch(p.devPurged, { set(p.copy(devPurged = it, devPersonal = false, devV2 = false, devGemini = false)) })
@@ -442,7 +443,7 @@ fun SettingsScreen() {
                 }
                 // Replays the first-run welcome; your answers are already filled in and nothing else is reset.
                 GreyButton("Show the welcome screens again") { set(p.copy(onboarded = false)) }
-                GreyButton("Hide developer settings", textColor = Red) { set(p.copy(devUnlocked = false, devAi = false, dev1rm = false, devGemini = false, devV2 = false, devPersonal = false, devPurged = false, devResearch = false)) }
+                GreyButton("Hide developer settings", textColor = Red) { set(p.copy(devUnlocked = false, devAi = false, dev1rm = false, devGemini = false, devV2 = false, devPersonal = false, devResearch = false)) }
                 Spacer(8)
                 Text("Backup log", fontWeight = FontWeight.Bold)
                 Text("What Android's Google backup has done with Loadout. Empty means Android hasn't asked Loadout for a backup yet.",

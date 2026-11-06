@@ -17,6 +17,8 @@ file `build-iron-log.yml` and key alias `ironlog` stay too, as renaming them wou
 - Never compare our data with Strength Level, for any reason, not even as a reference point or sanity check.
   Exception, the owner's choice: the separate personal-use section (`tools/personal/`, marked `PERSONAL-USE`) may use
   Strength Level and other non-commercial sources. Keep it fully apart: nothing from it may feed V1, V2 or Gemini.
+  By the owner's choice the Purged table (personal-use) is the default ranking, with exercises it lacks added from
+  the personal-use table (never replacing purged numbers), then from V1.
 - Nothing copyrighted, trademarked or not free for commercial use (Strength Level, ExRx, StrengthLog,
   Bodybuilding.com text, "Olympian" and similar). Cite studies by reference only; never copy their text or figures.
 - Personal data stays out of the repo: Hevy exports, workout history, body weight or body fat, the OpenAI key, email.

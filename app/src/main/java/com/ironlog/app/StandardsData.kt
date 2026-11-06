@@ -52,6 +52,9 @@ object StandardsData {
     // PERSONAL-USE (removable): the app's standards from before the October 2026 purge (tools/personal/build_purged.py).
     @Volatile private var purged: List<Std> = emptyList()
     val purgedCount get() = purged.size
+    /** How many of those are the purged table's own (the rest come from the personal-use table). */
+    @Volatile var purgedOwn = 0
+        private set
 
     /** The standards in use: normally standards.json (V1); the V2 or Gemini-favored set while that developer setting is on. */
     val all: List<Std> get() = Store.profile.value.let { p ->
@@ -75,6 +78,10 @@ object StandardsData {
         // The other tables only change numbers; anything one of them leaves out keeps its regular standard, so
         // switching tables never takes a rank away (the purged table had no Grip Dynamometer Test).
         fun filled(t: List<Std>) = if (t.isEmpty()) t else t + normal.filter { s -> t.none { it.id == s.id } }
+        // PERSONAL-USE (removable): exercises the purged table never had are added from the personal-use table. Purged
+        // numbers are never replaced; only missing exercises are added.
+        purgedOwn = purged.size
+        if (purged.isNotEmpty()) purged = purged + personal.filter { s -> purged.none { it.id == s.id } }
         gemini = filled(gemini); v2 = filled(v2); personal = filled(personal); purged = filled(purged)
     }
 
