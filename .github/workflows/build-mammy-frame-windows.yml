@@ -1,0 +1,66 @@
+name: Build Mammy Frame for Windows
+
+# Only when the Windows version (or the AI model / font it shares with Android) changes.
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - 'app/src/main/assets/**'
+      - 'app/src/main/res/font/**'
+      - '.github/workflows/build-mammy-frame-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mammy-frame-windows-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the installer and the no-install version
+        working-directory: windows
+        run: ./gradlew.bat packageMsi createDistributable --stacktrace
+
+      - name: Collect the downloads
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "windows/build/compose/binaries/main/msi/*.msi" | Select-Object -First 1
+          Copy-Item $msi.FullName "MammyFrame-Windows-Setup.msi"
+          Compress-Archive -Path "windows/build/compose/binaries/main/app/Mammy Frame" -DestinationPath "MammyFrame-Windows.zip"
+          Get-ChildItem MammyFrame-Windows*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MammyFrame-Windows
+          path: |
+            MammyFrame-Windows-Setup.msi
+            MammyFrame-Windows.zip
+
+      - name: Publish downloads on the Releases page
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mammy-frame-windows-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Mammy Frame for Windows (build ${{ github.run_number }})
+          body: |
+            **MammyFrame-Windows-Setup.msi**: download and open it to install (no administrator needed).
+            If Windows says "Windows protected your PC", click **More info**, then **Run anyway**.
+
+            **MammyFrame-Windows.zip**: no install. Unzip it anywhere and open **Mammy Frame.exe**.
+          files: |
+            MammyFrame-Windows-Setup.msi
+            MammyFrame-Windows.zip
+          make_latest: false

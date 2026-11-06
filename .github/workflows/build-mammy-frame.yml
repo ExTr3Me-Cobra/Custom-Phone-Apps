@@ -2,6 +2,10 @@ name: Build Mammy Frame APK
 
 on:
   push:
+    # The Windows version has its own build.
+    paths-ignore:
+      - 'windows/**'
+      - '.github/workflows/build-mammy-frame-windows.yml'
   workflow_dispatch:
 
 permissions:

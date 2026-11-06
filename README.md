@@ -1,6 +1,7 @@
 # Mammy Frame
 
-A very simple digital photo frame for an Android tablet.
+A very simple digital photo frame for an Android tablet. There's also a Windows version: see
+[windows/README.md](windows/README.md) (its own download, **mammy-frame-windows-N** on the Releases page).
 
 ## Home screen
 - **Mammy Frame** name in a script font, with a big **Play** button.
