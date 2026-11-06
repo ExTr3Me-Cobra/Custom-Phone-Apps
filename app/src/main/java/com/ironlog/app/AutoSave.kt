@@ -48,9 +48,13 @@ object AutoSave {
     private val handler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
     private val later = Runnable { app?.let { soon(it) } }
 
+    /** This phone: the folder you picked (Loadout keeps its own Loadout folder inside it, and remakes files that go missing). */
+    @Volatile private var phoneTree: String? = null
+
     fun load(c: Context) {
         app = c.applicationContext
         val o = runCatching { JSONObject(file(c).readText()) }.getOrDefault(JSONObject())
+        phoneTree = o.optString("tree").ifEmpty { null }
         for (s in Slot.entries) {
             val j = o.optJSONObject(s.key)
             states[s] = if (j == null) EMPTY else State(
@@ -61,7 +65,7 @@ object AutoSave {
     }
 
     private fun save(c: Context) {
-        val o = JSONObject()
+        val o = JSONObject().put("tree", phoneTree ?: "")
         for ((s, st) in states) o.put(s.key, JSONObject().put("a", st.uris[0] ?: "").put("b", st.uris[1] ?: "")
             .put("la", st.lasts[0] ?: 0).put("lb", st.lasts[1] ?: 0).put("on", st.on).put("err", st.error ?: ""))
         runCatching { file(c).writeText(o.toString()) }
@@ -87,29 +91,62 @@ object AutoSave {
     }
 
     /**
-     * This phone: you picked a folder. Loadout makes (or reuses) its two files there, named for you, and keeps
-     * permission to the folder. Returns a problem to show, or null.
+     * This phone: you picked a folder. Loadout makes its own "Loadout" folder inside it (or uses it, if that's what you
+     * picked), names its two files there for you, and keeps permission so it can remake them if they're ever deleted.
+     * Returns a problem to show, or null.
      */
     fun chosenFolder(c: Context, tree: Uri): String? {
         if (isDrive(tree)) return "For Google Drive, use the Google Drive auto-save below."
         return runCatching {
             c.contentResolver.takePersistableUriPermission(tree, RW)
-            val r = c.contentResolver
-            val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
-            val kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getDocumentId(parent))
-            val have = HashMap<String, Uri>()
-            r.query(kids, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cur ->
-                while (cur.moveToNext()) have[cur.getString(1)] = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, cur.getString(0))
-            }
-            val uris = Slot.PHONE.names.map { n ->
-                (have[n] ?: android.provider.DocumentsContract.createDocument(r, parent, "application/zip", n) ?: error("couldn't make $n")).toString()
-            }
-            states[Slot.PHONE]?.uris?.filterNotNull()?.filter { it !in uris }?.forEach { u -> runCatching { r.releasePersistableUriPermission(Uri.parse(u), RW) } }
+            phoneTree?.takeIf { it != tree.toString() }?.let { old -> runCatching { c.contentResolver.releasePersistableUriPermission(Uri.parse(old), RW) } }
+            phoneTree = tree.toString()
+            val uris = phoneFiles(c, tree, Slot.PHONE.names.indices.toList())
+            states[Slot.PHONE]?.uris?.filterNotNull()?.filter { it !in uris }?.forEach { u -> runCatching { c.contentResolver.releasePersistableUriPermission(Uri.parse(u), RW) } }
             states[Slot.PHONE] = State(uris, listOf(null, null), true, null)
             save(c)
             null
         }.getOrElse { "Couldn't use that folder: ${it.message}" }
     }
+
+    /** Children of a folder in the picked tree: name -> (document id, is a folder). */
+    private fun children(c: Context, tree: Uri, docId: String): Map<String, Pair<String, Boolean>> {
+        val out = HashMap<String, Pair<String, Boolean>>()
+        val kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+        c.contentResolver.query(kids, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME, android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)?.use { cur ->
+            while (cur.moveToNext()) out[cur.getString(1) ?: ""] = cur.getString(0) to (cur.getString(2) == android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
+        }
+        return out
+    }
+
+    /** The Loadout folder in the picked tree (made if it's missing), and the two files in it (made if missing). */
+    private fun phoneFiles(c: Context, tree: Uri, which: List<Int>): List<String> {
+        val r = c.contentResolver
+        val rootId = android.provider.DocumentsContract.getTreeDocumentId(tree)
+        val root = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId)
+        // Picked a folder called Loadout? Use it; otherwise use (or make) Loadout inside it.
+        val pickedName = r.query(root, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null }
+        val dirId = if (pickedName == "Loadout") rootId else children(c, tree, rootId)["Loadout"]?.takeIf { it.second }?.first
+            ?: android.provider.DocumentsContract.getDocumentId(
+                android.provider.DocumentsContract.createDocument(r, root, android.provider.DocumentsContract.Document.MIME_TYPE_DIR, "Loadout") ?: error("couldn't make the Loadout folder"))
+        val dir = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, dirId)
+        val have = children(c, tree, dirId)
+        val current = states[Slot.PHONE]?.uris.orEmpty()
+        return Slot.PHONE.names.mapIndexed { i, n ->
+            if (i !in which && current.getOrNull(i) != null) current[i]!!
+            else have[n]?.let { android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, it.first).toString() }
+                ?: android.provider.DocumentsContract.createDocument(r, dir, "application/zip", n)?.toString() ?: error("couldn't make $n")
+        }
+    }
+
+    /** Is this file still there? */
+    private fun exists(c: Context, uri: String?): Boolean = uri != null && runCatching {
+        c.contentResolver.query(Uri.parse(uri), arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { it.moveToFirst() } == true
+    }.getOrDefault(false)
+
+    /** Which of a place's files are missing (deleted, moved to the trash…). */
+    fun missing(c: Context, s: Slot): List<Int> = states[s]?.takeIf { it.ready }?.uris?.withIndex()?.filter { !exists(c, it.value) }?.map { it.index }.orEmpty()
 
     /** The phone's Documents folder, where the pickers open (a suggestion: you can still go anywhere). */
     val DOCUMENTS: Uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
@@ -158,6 +195,7 @@ object AutoSave {
 
     fun forget(c: Context, s: Slot) {
         states[s]?.uris?.filterNotNull()?.forEach { u -> runCatching { c.contentResolver.releasePersistableUriPermission(Uri.parse(u), RW) } }
+        if (s == Slot.PHONE) { phoneTree?.let { t -> runCatching { c.contentResolver.releasePersistableUriPermission(Uri.parse(t), RW) } }; phoneTree = null }
         states[s] = EMPTY; save(c)
     }
 
@@ -167,8 +205,26 @@ object AutoSave {
     /** Writes one place now: whichever of A and B is older. True when it worked. */
     @Synchronized
     fun write(c: Context, s: Slot): Boolean {
-        val st = states[s]?.takeIf { it.ready } ?: return false
-        val i = if ((st.lasts[0] ?: 0) <= (st.lasts[1] ?: 0)) 0 else 1
+        var st = states[s]?.takeIf { it.ready } ?: return false
+        val gone = missing(c, s)
+        if (gone.isNotEmpty()) {
+            val tree = phoneTree
+            if (s == Slot.PHONE && tree != null) {
+                // Deleted? Make them again (and the Loadout folder, if that went too), then save into them.
+                val remade = runCatching { phoneFiles(c, Uri.parse(tree), gone) }.getOrNull()
+                if (remade == null) {
+                    states[s] = State(st.uris, st.lasts, st.on, "The auto-save folder is gone or Loadout lost access – choose a folder again.")
+                    save(c); return false
+                }
+                st = State(remade, st.lasts.mapIndexed { i, l -> if (i in gone) null else l }, st.on, null)
+                states[s] = st; save(c)
+            } else {
+                states[s] = State(st.uris, st.lasts, st.on, "An auto-save file was deleted – choose the files again (Loadout can't remake files in Drive).")
+                save(c); return false
+            }
+        }
+        // A remade (empty) file is filled first; otherwise the older of A and B.
+        val i = gone.firstOrNull() ?: if ((st.lasts[0] ?: 0) <= (st.lasts[1] ?: 0)) 0 else 1
         val err = runCatching {
             // "wt": replace what's in that file (it's overwritten, never added to). The other file is left alone.
             c.contentResolver.openOutputStream(Uri.parse(st.uris[i]), "wt")?.use { Store.writeBackup(it) } ?: error("couldn't open the file")
@@ -179,6 +235,12 @@ object AutoSave {
         val lasts = st.lasts.toMutableList().also { if (err == null) it[i] = System.currentTimeMillis() }
         states[s] = State(st.uris, lasts, st.on, msg)
         save(c)
+        // Both were deleted: fill the other one too, so there are two good copies again.
+        if (err == null && gone.size > 1) gone.drop(1).forEach { j ->
+            runCatching { c.contentResolver.openOutputStream(Uri.parse(st.uris[j]), "wt")?.use { Store.writeBackup(it) } }.onSuccess {
+                states[s] = State(st.uris, states[s]!!.lasts.toMutableList().also { it[j] = System.currentTimeMillis() }, st.on, null); save(c)
+            }
+        }
         return err == null
     }
 
@@ -205,7 +267,8 @@ object AutoSave {
         if (!onlyIfDue) handler.removeCallbacks(later)
         Thread {
             for (s in active()) {
-                if (!onlyIfDue || System.currentTimeMillis() - (states[s]?.last ?: 0) > DAY) write(ctx, s)
+                // On opening the app: save if it's been a day, or straight away if a file has gone missing.
+                if (!onlyIfDue || System.currentTimeMillis() - (states[s]?.last ?: 0) > DAY || missing(ctx, s).isNotEmpty()) write(ctx, s)
             }
         }.start()
     }
@@ -250,7 +313,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val ok = AutoSave.write(context, AutoSave.Slot.PHONE)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                show(if (ok) "On this phone: auto-save set up and saved ✓ (loadout-autosave-A.zip and -B.zip)" else "On this phone: couldn't save – ${AutoSave.states[AutoSave.Slot.PHONE]?.error}")
+                show(if (ok) "On this phone: auto-save set up and saved ✓ (Loadout folder: loadout-autosave-A.zip and -B.zip)" else "On this phone: couldn't save – ${AutoSave.states[AutoSave.Slot.PHONE]?.error}")
             }
         }
     }
@@ -270,7 +333,7 @@ fun AutoSaveSettings(show: (String) -> Unit) {
                     val last = st?.last
                     Text(
                         when {
-                            st == null || !st.ready -> if (s == AutoSave.Slot.PHONE) "Not set up. Pick a folder such as Documents; Loadout names the two files for you. They stay even if Loadout is uninstalled."
+                            st == null || !st.ready -> if (s == AutoSave.Slot.PHONE) "Not set up. Pick a folder such as Documents: Loadout makes a Loadout folder in it with its two files, named for you, and remakes them if they're ever deleted. They stay even if Loadout is uninstalled."
                                 else "Not set up. Needs the Google Drive app, signed in. In the picker, open the menu (☰) and choose Drive, then tap Save twice (the names are filled in). Keeps a copy if you lose the phone."
                             st.error != null -> "⚠️ ${st.error}"
                             !st.on -> "Off"
