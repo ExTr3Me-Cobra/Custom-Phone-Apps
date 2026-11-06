@@ -63,9 +63,9 @@ fun HomeScreen() {
                         // Tap to switch between today, this week and all time (remembered).
                         Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Card2)) {
                             listOf("today" to "Today", "week" to "This week", "all" to "All time").forEach { (v, label) ->
-                                Text(label, fontSize = 13.sp, color = if (range == v) Color.White else Sub,
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (range == v) Blue else Color.Transparent)
-                                        .clickable { Store.setProfile(profile.copy(homeRange = v)) }.padding(horizontal = 12.dp, vertical = 6.dp))
+                                val m = Modifier.clip(RoundedCornerShape(16.dp)).background(if (range == v) Blue else Color.Transparent)
+                                    .clickable { Store.setProfile(profile.copy(homeRange = v)) }.padding(horizontal = 12.dp, vertical = 6.dp)
+                                if (range == v) OutlinedLabel(label, 13.sp, m, FontWeight.Normal) else Text(label, fontSize = 13.sp, color = Sub, modifier = m)
                             }
                         }
                         androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
@@ -241,8 +241,7 @@ fun WorkoutCalendar(workouts: List<Workout>) {
                                     .then(if (date == today && !logged) Modifier.border(1.dp, Blue, CircleShape) else Modifier),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("$n", fontSize = 14.sp, color = if (logged) Color.White else Color.Unspecified,
-                                    fontWeight = if (logged) FontWeight.Bold else FontWeight.Normal)
+                                if (logged) OutlinedLabel("$n", 14.sp) else Text("$n", fontSize = 14.sp, fontWeight = FontWeight.Normal)
                             }
                         }
                     }

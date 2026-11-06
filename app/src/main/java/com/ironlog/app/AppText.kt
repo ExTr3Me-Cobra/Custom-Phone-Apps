@@ -218,12 +218,11 @@ fun Text(
 fun AppTextPill() {
     if (!AppText.on) return
     Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 76.dp, start = 12.dp), contentAlignment = Alignment.BottomStart) {
-        androidx.compose.material3.Text(
-            if (AppText.paused) "⏸ Text editing paused · tap to edit" else "✏️ Tap any text (${AppText.count} changed) · tap here to pause",
-            color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium,
-            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (AppText.paused) Card2 else Blue.copy(alpha = 0.92f))
-                .clickable { AppText.paused = !AppText.paused; AppText.editing = null }.padding(horizontal = 12.dp, vertical = 6.dp),
-        )
+        val pill = Modifier.clip(RoundedCornerShape(16.dp)).background(if (AppText.paused) Card2 else Blue.copy(alpha = 0.92f))
+            .clickable { AppText.paused = !AppText.paused; AppText.editing = null }.padding(horizontal = 12.dp, vertical = 6.dp)
+        if (AppText.paused) androidx.compose.material3.Text("⏸ Text editing paused · tap to edit", color = Color.White, fontSize = 11.sp,
+            fontWeight = FontWeight.Medium, modifier = pill)
+        else OutlinedLabel("✏️ Tap any text (${AppText.count} changed) · tap here to pause", 11.sp, pill, FontWeight.Medium, editable = false)
     }
     AppText.editing?.takeIf { AppText.active }?.let { TextEditorPanel(it, AppText.editingText) }
 }

@@ -304,7 +304,7 @@ fun DataChoice(p: Profile, showStatus: Boolean = true) {
                 Text(text, color = Sub, fontSize = 13.sp, lineHeight = 18.sp)
             }
             Box(Modifier.size(22.dp).clip(CircleShape).background(if (on) Blue else Card2), contentAlignment = Alignment.Center) {
-                if (on) Text("✓", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                if (on) OutlinedLabel("✓", 13.sp)
             }
         }
     }
@@ -339,7 +339,7 @@ fun BackupStatus() {
                 else -> "…" to Card2
             }
             Box(Modifier.size(34.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-                Text(icon, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                if (last != null) OutlinedLabel(icon, 18.sp) else Text(icon, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
             Column(Modifier.padding(start = 12.dp)) {
                 when {

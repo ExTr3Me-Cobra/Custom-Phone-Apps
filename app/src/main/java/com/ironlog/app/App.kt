@@ -423,12 +423,18 @@ fun BigButton(text: String, color: Color = Blue, modifier: Modifier = Modifier.f
  */
 @Composable
 fun OutlinedLabel(text: String, fontSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier, fontWeight: FontWeight = FontWeight.Bold,
-                  color: Color = Color.White) {
+                  color: Color = Color.White, editable: Boolean = true) {
+    val stroke = androidx.compose.material3.LocalTextStyle.current.copy(drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f,
+        join = androidx.compose.ui.graphics.StrokeJoin.Round))
     Box(modifier, contentAlignment = Alignment.Center) {
-        Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black,
-            style = androidx.compose.material3.LocalTextStyle.current.copy(drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f,
-                join = androidx.compose.ui.graphics.StrokeJoin.Round)))
-        Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
+        if (editable) {
+            Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black, style = stroke)
+            Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
+        } else {
+            // Outside the app's text editing (e.g. its own controls).
+            androidx.compose.material3.Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = Color.Black, style = stroke)
+            androidx.compose.material3.Text(text, fontSize = fontSize, fontWeight = fontWeight, maxLines = 1, softWrap = false, color = color)
+        }
     }
 }
 
