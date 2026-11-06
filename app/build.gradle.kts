@@ -71,5 +71,5 @@ dependencies {
     // Reads text from photos, on the phone (no internet needed).
     implementation("com.google.mlkit:text-recognition:16.0.1")
     // On-device AI (Gemini Nano through Android's AICore) that reads the photo like a person would.
-    implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
 }
