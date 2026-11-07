@@ -150,9 +150,32 @@ fun main(args: Array<String>) {
             // Photos and the black screen fill the whole screen; the menus are a normal window.
             LaunchedEffect(screen) {
                 val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
-                val want = if (frame) WindowPlacement.Fullscreen else WindowPlacement.Maximized
-                if (windowState.placement != want) Log.i("Window placement: ${windowState.placement} -> $want (for $screen)")
-                windowState.placement = want
+                // Going straight between full screen and maximised confuses the window toolkit on
+                // Windows (it can think it's still full screen, so the next full screen does
+                // nothing). So: always go through a normal window first, then check it really
+                // covers the screen, and try once more if not.
+                if (frame) {
+                    if (!coversScreen(window)) {
+                        Log.i("Window placement: ${windowState.placement} -> Fullscreen (for $screen)")
+                        windowState.placement = WindowPlacement.Floating
+                        delay(120)
+                        windowState.placement = WindowPlacement.Fullscreen
+                        delay(500)
+                        if (!coversScreen(window)) {
+                            Log.i("Full screen didn't take (window ${window.bounds}); trying again")
+                            windowState.placement = WindowPlacement.Floating
+                            delay(300)
+                            windowState.placement = WindowPlacement.Fullscreen
+                            delay(500)
+                            Log.i("Full screen now: ${coversScreen(window)} (window ${window.bounds})")
+                        }
+                    }
+                } else if (windowState.placement != WindowPlacement.Maximized || coversScreen(window)) {
+                    Log.i("Window placement: ${windowState.placement} -> Maximized (for $screen)")
+                    windowState.placement = WindowPlacement.Floating
+                    delay(120)
+                    windowState.placement = WindowPlacement.Maximized
+                }
                 if (screen == Screen.SLIDESHOW || screen == Screen.BLACK) {
                     // Brought forward by the schedule even if minimised or behind other windows.
                     windowState.isMinimized = false
@@ -329,7 +352,12 @@ private fun App(
             picking = false; update(settings.copy(folder = folder.path)); shot("folder-chosen")
             dialog = HomeDialog.SCHEDULE; shot("schedule"); dialog = HomeDialog.NONE
             dialog = HomeDialog.TRANSITIONS; shot("transitions"); dialog = HomeDialog.NONE
-            slideshowRun++; setScreen(Screen.SLIDESHOW); delay(3000)
+            val notFull = ArrayList<String>()
+            suspend fun mustBeFull(what: String) {
+                delay(1500)
+                if (!coversScreen(window)) { notFull += what; Log.i("AUTOTEST PROBLEM: $what isn't full screen (window ${window.bounds}, screen ${window.graphicsConfiguration.bounds})") }
+            }
+            slideshowRun++; setScreen(Screen.SLIDESHOW); mustBeFull("slideshow"); delay(1500)
             val show = measureDrawing()
             Log.i("AUTOTEST drawing in slideshow: ${"%.0f".format(show.first)} frames/s, slowest ${show.second} ms")
             shot("slideshow")
@@ -344,12 +372,18 @@ private fun App(
                 Log.i("AUTOTEST   ${r.name}: AI ${r.fix}° (${(r.certainty * 100).toInt()}%) ${AiRotate.kind(r, st.threshold)}, applied ${r.applied}°, tag now ${Photos.exifOrientation(java.io.File(r.path))}")
             }
             shot("ai-rotate-done")
-            setScreen(Screen.REVIEW); shot("review")
+            setScreen(Screen.REVIEW); mustBeFull("review"); shot("review")
             setScreen(Screen.ROTATE); delay(500)
-            setScreen(Screen.BLACK); shot("black")
+            setScreen(Screen.BLACK); mustBeFull("black screen"); shot("black")
+            setScreen(Screen.HOME); delay(1500)
+            slideshowRun++; setScreen(Screen.SLIDESHOW); mustBeFull("slideshow (second time)"); shot("slideshow-again")
             setScreen(Screen.HOME); shot("home-again")
-            val ok = st.lastRunFinished && recs.isNotEmpty() && st.message == null
-            Log.i(if (ok) "AUTOTEST PASSED" else "AUTOTEST FAILED: AI check didn't finish cleanly")
+            val ok = st.lastRunFinished && recs.isNotEmpty() && st.message == null && notFull.isEmpty()
+            Log.i(if (ok) "AUTOTEST PASSED" else "AUTOTEST FAILED: " +
+                listOfNotNull(
+                    "AI check didn't finish cleanly".takeIf { !(st.lastRunFinished && recs.isNotEmpty() && st.message == null) },
+                    "not full screen: $notFull".takeIf { notFull.isNotEmpty() },
+                ).joinToString("; "))
             kotlin.system.exitProcess(if (ok) 0 else 1)
         } catch (t: Throwable) {
             Log.e("AUTOTEST FAILED", t)
@@ -484,3 +518,7 @@ object ScreenMemory {
 
     private fun java.io.File.readTextOrNull() = if (exists()) readText().trim().ifEmpty { null } else null
 }
+
+/** True when the window exactly covers its whole screen (real full screen, no title bar or taskbar). */
+fun coversScreen(window: java.awt.Window): Boolean =
+    runCatching { window.isShowing && window.bounds == window.graphicsConfiguration.bounds }.getOrDefault(false)
