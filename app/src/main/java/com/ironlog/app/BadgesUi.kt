@@ -192,7 +192,8 @@ fun BadgeDialog(b: Badges.Badge, state: Badges.State, onClose: () -> Unit) {
                 Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(Card2)) {
                     Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(if (earnedAt != null) badgeColor(b.tier) else Blue))
                 }
-                Text("${Badges.fmt(minOf(value, b.target).let { if (earnedAt != null) b.target else it })} / ${Badges.fmt(b.target)} ${b.family.unit}",
+                val lab = { x: Double -> with(Badges) { b.family.label(x) } }
+                Text("${lab(if (earnedAt != null) b.target else minOf(value, b.target))} / ${lab(b.target)} ${b.family.unit}".trim(),
                     fontWeight = FontWeight.Medium)
                 Text(if (earnedAt != null) "Earned ${fmt.format(java.util.Date(earnedAt))}" else "Not earned yet",
                     color = if (earnedAt != null) badgeColor(b.tier) else Sub)
@@ -204,7 +205,7 @@ fun BadgeDialog(b: Badges.Badge, state: Badges.State, onClose: () -> Unit) {
                             Text(if (t.id in state.earned) "✓" else "·", color = if (t.id in state.earned) badgeColor(i) else Sub,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.size(width = 22.dp, height = 20.dp))
                             Text(t.name, Modifier.weight(1f), fontSize = 14.sp)
-                            Text("${Badges.fmt(t.target)}", color = Sub, fontSize = 14.sp)
+                            Text(with(Badges) { b.family.label(t.target) }, color = Sub, fontSize = 14.sp)
                         }
                     }
                 }
