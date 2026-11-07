@@ -49,116 +49,53 @@ object Badges {
 
     val families: List<Family> = listOf(
         // ---- Showing up ----
-        Family("workouts", "Iron Habit", "🏋️", "Showing up", t(1, 25, 75, 150, 300, 500, 750, 1000), "workouts",
+        Family("workouts", "Iron Habit", "🏋️", "Showing up", t(50, 100, 150, 200, 250, 300), "workouts",
             "Finish {n} workouts.", "a sturdy iron dumbbell crossed with a calendar page") { it.workouts.toDouble() },
-        Family("streak", "Steady Rhythm", "🔥", "Showing up", t(4, 8, 16, 26, 52, 104), "weeks in a row",
-            "Train at least twice a week for {n} weeks in a row.", "a flame shaped like a metronome") { it.bestStreak.toDouble() },
-        Family("weeks", "Clocked In", "📅", "Showing up", t(12, 26, 52, 104, 156, 260), "weeks",
-            "Train in {n} different weeks.", "a punch-clock card stamped with a barbell") { it.activeWeeks.toDouble() },
-        Family("months", "Month Maker", "🗓️", "Showing up", t(3, 6, 12, 24, 36), "months",
-            "Have {n} months with 8 or more workouts.", "a crescent moon wrapped in a lifting belt") { it.bigMonths.toDouble() },
-        Family("comeback", "Welcome Back", "👋", "Showing up", t(1, 5), "comebacks",
-            "Come back to training after 2+ weeks off ({n} times).", "a phoenix rising from a weight plate") { it.comebacks.toDouble() },
-        Family("hours", "Time Under Iron", "⏳", "Showing up", t(25, 75, 150, 300, 600, 1000), "hours",
+        Family("streak", "Steady Rhythm", "🔥", "Showing up", t(13, 26, 39, 52), "weeks in a row",
+            "Train at least once a week for {n} weeks in a row. One missed week is forgiven; a second resets the streak.",
+            "a flame shaped like a metronome") { it.bestWeekly.toDouble() },
+        Family("hours", "Time Under Iron", "⏳", "Showing up", t(50, 100, 150, 200, 250, 300, 350), "hours",
             "Spend {n} hours working out.", "an hourglass with a barbell for its middle") { it.hours },
-        Family("early", "Early Bird", "🌅", "Showing up", t(5, 25, 100), "workouts",
-            "Start {n} workouts before 7 AM.", "a rooster on a kettlebell at sunrise") { it.early.toDouble() },
-        Family("night", "Night Owl", "🦉", "Showing up", t(5, 25, 100), "workouts",
-            "Start {n} workouts after 9 PM.", "an owl perched on a barbell under a moon") { it.night.toDouble() },
-        Family("long", "Marathon Session", "🕰️", "Showing up", t(5, 25, 100), "workouts",
-            "Finish {n} workouts that last 90 minutes or more.", "a long winding road leading to a dumbbell") { it.long.toDouble() },
-        Family("weekend", "Weekend Warrior", "⚔️", "Showing up", t(25, 100, 250), "workouts",
-            "Train on {n} weekend days.", "a shield with crossed swords made of dumbbells") { it.weekend.toDouble() },
-        Family("anyday", "Any Day", "🗂️", "Showing up", t(7), "days of the week",
-            "Train on every day of the week at least once.", "a seven-segment wheel with a dumbbell hub") { it.weekdays.toDouble() },
-        Family("double", "Double Day", "✌️", "Showing up", t(1, 10), "days",
-            "Do two workouts on the same day ({n} times).", "two overlapping suns over a barbell") { it.doubleDays.toDouble() },
-        Family("newyear", "Fresh Start", "🎆", "Showing up", t(1, 3), "workouts",
-            "Work out on New Year's Day ({n} times).", "fireworks bursting over a weight plate") { it.newYear.toDouble() },
 
         // ---- Hard work ----
-        Family("volume", "Mountain Mover", "⛰️", "Hard work", t(1000, 3000, 7500, 15000, 30000, 60000), "× your body weight",
+        Family("volume", "Mountain Mover", "⛰️", "Hard work", t(2000, 4000, 6000, 8000, 10000), "× your body weight",
             "Lift a total of {n} times your body weight (all your sets added up).", "a mountain being lifted on a barbell") { it.volumeXbw },
-        Family("reps", "Rep Machine", "⚙️", "Hard work", t(5000, 25000, 50000, 100000, 200000, 350000), "reps",
+        Family("reps", "Rep Machine", "⚙️", "Hard work", t(10000, 20000, 30000, 40000, 50000), "reps",
             "Do {n} reps in total.", "interlocking gears with a dumbbell in the centre") { it.reps.toDouble() },
-        Family("sets", "Set Collector", "🧱", "Hard work", t(500, 2500, 5000, 10000, 20000), "sets",
+        Family("ownbody", "Own Body", "🤸", "Hard work", t(2000, 4000, 6000, 8000, 10000), "reps",
+            "Do {n} reps of bodyweight exercises.", "a gymnast holding a handstand") { it.bodyReps.toDouble() },
+        Family("sets", "Set Collector", "🧱", "Hard work", t(800, 1600, 2400, 3200, 4000), "sets",
             "Finish {n} sets in total.", "a neat stack of bricks shaped like a weight stack") { it.sets.toDouble() },
-        Family("heavyday", "Heavy Day", "🐘", "Hard work", t(100, 150, 200, 300), "× your body weight",
-            "Lift {n} times your body weight in a single workout.", "an elephant standing on a weight plate") { it.bestDayXbw },
-        Family("failure", "To the Edge", "🧗", "Hard work", t(100, 250, 500, 1000, 2500), "failure sets",
+        Family("failure", "To the Edge", "🧗", "Hard work", t(250, 500, 750, 1000, 1250), "failure sets",
             "Take {n} sets to failure (marked F).", "a climber gripping the edge of a cliff") { it.failure.toDouble() },
-        Family("holds", "Hold Steady", "🧘", "Hard work", t(60, 180, 500, 1000), "minutes",
+        Family("holds", "Hold Steady", "🧘", "Hard work", t(150, 300, 450, 600, 750), "minutes",
             "Hold timed exercises for {n} minutes in total.", "a balanced stone stack on a yoga mat") { it.holdMinutes },
-        Family("minute", "One Minute Wonder", "⏱️", "Hard work", t(120, 300, 600, 900), "seconds",
-            "Hold a single timed set for {n} seconds.", "a stopwatch held up by a flexed arm") { it.bestHold.toDouble() },
-        Family("century", "Century", "💯", "Hard work", t(1, 10), "workouts",
-            "Do exactly 100 reps in one workout ({n} times).", "a laurel wreath around a ring of one hundred small beads") { it.century.toDouble() },
-        Family("warmup", "Warmed Up", "♨️", "Hard work", t(50, 250, 1000), "warm-up sets",
-            "Do {n} warm-up sets (marked W).", "a steaming kettle shaped like a kettlebell") { it.warmups.toDouble() },
+        Family("distance", "Distance", "🏃", "Hard work", t(20, 40, 60, 80, 100), "miles",
+            "Cover {n} miles in cardio.", "a running shoe leaving a long trail") { it.miles },
 
-        // ---- Getting stronger (you vs. you) ----
-        Family("bests", "Record Breaker", "👑", "Getting stronger", t(50, 150, 300, 600, 1000, 2000), "new bests",
+        // ---- Getting stronger ----
+        Family("bests", "Record Breaker", "👑", "Getting stronger", t(100, 200, 300, 400, 500, 600, 700), "new bests",
             "Set {n} new personal bests (a set that beats everything you'd done on that exercise before).", "a crown resting on a broken chain") { it.bests.toDouble() },
-        Family("bestex", "Many Fronts", "🎯", "Getting stronger", t(10, 25, 50), "exercises",
-            "Set a new personal best on {n} different exercises.", "a target with several arrows in the bullseye") { it.bestExercises.toDouble() },
-        Family("growth", "Growth Spurt", "🌱", "Getting stronger", t(25, 50, 100, 200), "% stronger",
-            "Raise your estimated 1-rep max on any exercise {n}% above your best in your first month of doing it.", "a sapling growing out of a weight plate") { it.bestGrowth },
-
-        // ---- Ranks (climbing, never a set tier) ----
-        Family("ranked", "Ranked", "⭐", "Ranks", t(10, 30, 60, 100), "ranked exercises", "Get a rank on {n} exercises.",
-            "a star badge pinned on a ribbon", timeline = false) { it.rankedCount.toDouble() },
-        Family("rankups", "On the Rise", "📈", "Ranks", t(25, 75, 150, 250, 400), "tiers climbed",
-            "Climb {n} rank tiers in total (counted from each exercise's first rank).", "an arrow shooting up a staircase", timeline = false) { it.tiersClimbed.toDouble() },
-        Family("climber", "Climber", "🧗‍♂️", "Ranks", t(4, 8, 12, 16), "tiers",
-            "Climb {n} rank tiers on one exercise.", "a flag planted on a mountain peak", timeline = false) { it.bestClimb.toDouble() },
-        Family("groups", "Full House", "🏠", "Ranks", t(3, 6, 9, 12), "",
-            "Have every main muscle group ranked {n} or higher.", "a house built from different coloured muscle shapes", timeline = false,
-            show = { v -> if (v < 0) "not all ranked" else Tier.entries[v.toInt().coerceIn(0, Tier.entries.lastIndex)].label }) { it.lowestGroupTier.toDouble() },
-
-        // ---- Well-rounded ----
-        Family("explorer", "Explorer", "🧭", "Well-rounded", t(15, 30, 60, 100, 150), "exercises",
-            "Do {n} different exercises.", "a compass with a dumbbell needle") { it.exercises.toDouble() },
-        Family("totalbody", "Total Body", "🧍", "Well-rounded", t(4, 12, 26, 52), "weeks",
-            "Train 10 or more main muscle groups in one week ({n} weeks).", "a glowing human silhouette with every muscle lit") { it.fullWeeks.toDouble() },
-        Family("toolbox", "Toolbox", "🧰", "Well-rounded", t(4, 6, 8), "kinds of equipment",
-            "Use {n} different kinds of equipment (barbell, dumbbell, cable, machine…).", "an open toolbox full of gym equipment") { it.equipment.toDouble() },
-
-        // ---- Testing ----
-        Family("tests", "Tested", "🧪", "Testing", t(3, 10, 25, 50), "1 Rep Max tests",
-            "Do {n} 1 Rep Max tests.", "a glowing test tube with a barbell inside") { it.tests.toDouble() },
-        Family("proven", "Proven", "🏅", "Testing", t(3, 10, 25), "retests beaten",
-            "Beat your previous 1 Rep Max test on an exercise ({n} times).", "a medal stamped with an upward arrow") { it.testBeats.toDouble() },
-        Family("grip", "Grip Check", "✊", "Testing", t(1, 5), "tests",
-            "Do {n} Grip Dynamometer Tests.", "a clenched fist squeezing a hand dynamometer") { it.grip.toDouble() },
-
-        // ---- Habits ----
-        Family("planner", "Planner", "📝", "Habits", t(3, 10, 20), "routines",
-            "Make {n} routines.", "a clipboard with a training plan", timeline = false) { it.routines.toDouble() },
-        Family("finisher", "Finisher", "🏁", "Habits", t(10, 50, 150, 300, 500), "routine workouts",
-            "Finish {n} workouts started from a routine.", "a chequered finish flag over a barbell") { it.routineWorkouts.toDouble() },
-        Family("habit", "Creature of Habit", "🔁", "Habits", t(25, 50, 100), "times",
-            "Do the same routine {n} times.", "a looping arrow around a dumbbell") { it.sameRoutine.toDouble() },
-        Family("notes", "Note Taker", "🗒️", "Habits", t(10, 50, 200), "workouts",
-            "Write notes in {n} workouts.", "a pencil writing in a training journal") { it.notes.toDouble() },
-        // ---- More ----
-        Family("perfectmonth", "Perfect Month", "🌕", "Showing up", t(1, 3, 6, 12), "months",
-            "Have {n} months with 12 or more workouts.", "a full moon ringed by twelve small dumbbells") { it.perfectMonths.toDouble() },
-        Family("ironyear", "Iron Year", "📆", "Showing up", t(100, 150, 200), "workouts in a year",
-            "Do {n} workouts in one calendar year.", "a year wheel of twelve segments around a barbell") { it.bestYear.toDouble() },
-        Family("legday", "Never Skip Leg Day", "🦵", "Well-rounded", t(10, 50, 150, 300), "leg workouts",
-            "Train your legs (quads, hamstrings, glutes or calves) in {n} workouts.", "a powerful pair of legs in a deep squat") { it.legDays.toDouble() },
-        Family("core", "Core Strength", "🎽", "Well-rounded", t(10, 50, 150), "core workouts",
-            "Train your abs or obliques in {n} workouts.", "a shield shaped like a six-pack") { it.coreDays.toDouble() },
+        Family("overload", "Overload", "📊", "Getting stronger", t(100, 200, 300, 400, 500), "times",
+            "Beat last time's total volume (weight × reps) on an exercise ({n} times).", "a bar chart climbing step by step") { it.overloads.toDouble() },
         Family("bwclub", "Body Weight Club", "⚖️", "Getting stronger", t(1, 1.5, 2, 2.5), "× your body weight",
             "Do a working set with {n} times your body weight on any exercise.", "a balance scale with a lifter on one side and a weight on the other") { it.bestXbw },
-        Family("overload", "Overload", "📊", "Getting stronger", t(50, 150, 400, 1000), "times",
-            "Beat last time's total volume (weight × reps) on an exercise ({n} times).", "a bar chart climbing step by step") { it.overloads.toDouble() },
-        Family("hotstreak", "Hot Streak", "☄️", "Getting stronger", t(10, 25, 50), "workouts in a row",
-            "Set a personal best in {n} workouts in a row.", "a blazing comet trailing fire") { it.bestHot.toDouble() },
-        Family("ownbody", "Own Body", "🤸", "Hard work", t(1000, 5000, 20000, 50000), "reps",
-            "Do {n} reps of bodyweight exercises.", "a gymnast holding a handstand") { it.bodyReps.toDouble() },
-        Family("distance", "Distance", "🏃", "Hard work", t(10, 50, 200, 500), "miles",
-            "Cover {n} miles in cardio.", "a running shoe leaving a long trail") { it.miles },
+
+        // ---- Muscle focus (the exercise's main muscle group) ----
+        Family("legday", "Never Skip Leg Day", "🦵", "Muscle focus", t(40, 80, 120, 160, 200), "leg workouts",
+            "Train your legs (quads, hamstrings, glutes or calves) in {n} workouts.", "a powerful pair of legs in a deep squat") { it.legDays.toDouble() },
+        Family("core", "Core Strength", "🎽", "Muscle focus", t(25, 50, 75, 100, 125, 150, 175), "core workouts",
+            "Train your abs or obliques in {n} workouts.", "a shield shaped like a six-pack") { it.coreDays.toDouble() },
+        Family("chest", "Chest Day", "🛡️", "Muscle focus", t(40, 80, 120, 160, 200), "chest workouts",
+            "Train your chest in {n} workouts.", "a broad armoured chest plate") { it.chestDays.toDouble() },
+        Family("arms", "Arm Day", "💪", "Muscle focus", t(40, 80, 120, 160, 200), "arm workouts",
+            "Train your arms (biceps, triceps or forearms) in {n} workouts.", "a flexed arm with a bulging bicep") { it.armDays.toDouble() },
+        Family("back", "Back Day", "🦅", "Muscle focus", t(40, 80, 120, 160, 200), "back workouts",
+            "Train your back (lats, middle or lower back, or traps) in {n} workouts.", "a broad back with wing-like lats spreading out") { it.backDays.toDouble() },
+
+        // ---- Testing ----
+        Family("tests", "Tested", "🧪", "Testing", t(10, 20, 30, 40, 50, 60, 70, 80, 90), "1 Rep Max tests",
+            "Do {n} 1 Rep Max tests.", "a glowing test tube with a barbell inside") { it.tests.toDouble() },
     )
 
     val all: List<Badge> = families.flatMap { f -> f.targets.indices.map { Badge(f, it) } }
@@ -189,6 +126,9 @@ object Badges {
         val yearCounts = HashMap<Int, Int>(); val bestYear get() = yearCounts.values.maxOrNull() ?: 0
         var legDays = 0; var coreDays = 0; var bestXbw = 0.0; var overloads = 0; val routineVolume = HashMap<String, Double>()
         var hot = 0; var bestHot = 0; var bodyReps = 0L; var miles = 0.0
+        var chestDays = 0; var armDays = 0; var backDays = 0
+        /** Steady Rhythm: weeks in a row with a workout, one missed week forgiven (the spare comes back after a reset). */
+        var weekly = 0; var bestWeekly = 0; var spare = 1; var lastWeek: LocalDate? = null
         // Worked out from your ranks today (not workout by workout).
         var rankedCount = 0; var tiersClimbed = 0; var bestClimb = 0; var rankedGroups = 0; var routines = 0
         /** The lowest tier among the main muscle groups (Tier ordinal), or -1 while any is unranked. */
@@ -284,6 +224,20 @@ object Badges {
         if (dayReps == 100) p.century++
         if (groupsToday.any { it in setOf("quadriceps", "hamstrings", "glutes", "calves") }) p.legDays++
         if ("abdominals" in groupsToday) p.coreDays++
+        if ("chest" in groupsToday) p.chestDays++
+        if (groupsToday.any { it in setOf("biceps", "triceps", "forearms") }) p.armDays++
+        if (groupsToday.any { it in setOf("lats", "middle back", "lower back", "traps") }) p.backDays++
+        // Steady Rhythm: count this week once; weeks missed since the last one use the spare, then reset the streak.
+        val monday = date.with(DayOfWeek.MONDAY)
+        val lw = p.lastWeek
+        if (lw == null) { p.weekly = 1; p.spare = 1 }
+        else if (monday != lw) {
+            val missed = java.time.temporal.ChronoUnit.WEEKS.between(lw, monday) - 1
+            repeat(missed.toInt().coerceAtLeast(0)) { if (p.spare > 0) p.spare-- else { p.weekly = 0; p.spare = 1 } }
+            p.weekly++
+        }
+        p.lastWeek = monday
+        p.bestWeekly = maxOf(p.bestWeekly, p.weekly)
         if (p.bests > bestsBefore) { p.hot++; p.bestHot = maxOf(p.bestHot, p.hot) } else p.hot = 0
         p.bestDayXbw = maxOf(p.bestDayXbw, dayVolume / p.bodyweight)
         if (wk !in p.fullDone && (p.weekGroups[wk]?.size ?: 0) >= minOf(10, mainGroups.size)) { p.fullDone += wk; p.fullWeeks++ }
