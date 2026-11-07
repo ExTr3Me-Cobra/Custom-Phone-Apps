@@ -76,7 +76,7 @@ object Badges {
         // ---- Getting stronger ----
         Family("bests", "Record Breaker", "👑", "Getting stronger", t(100, 200, 300, 400, 500, 600, 700), "new bests",
             "Set {n} new personal bests (a set that beats everything you'd done on that exercise before).", "a crown resting on a broken chain") { it.bests.toDouble() },
-        Family("overload", "Overload", "📊", "Getting stronger", t(100, 200, 300, 400, 500), "times",
+        Family("overload", "Overload", "📊", "Getting stronger", t(100, 200, 300, 400, 500, 600), "times",
             "Beat last time's total volume (weight × reps) on an exercise ({n} times).", "a bar chart climbing step by step") { it.overloads.toDouble() },
         Family("bwclub", "Body Weight Club", "⚖️", "Getting stronger", t(1, 1.5, 2, 2.5), "× your body weight",
             "Do a working set with {n} times your body weight on any exercise.", "a balance scale with a lifter on one side and a weight on the other") { it.bestXbw },
@@ -86,10 +86,10 @@ object Badges {
             "Train your legs (quads, hamstrings, glutes or calves) in {n} workouts.", "a powerful pair of legs in a deep squat") { it.legDays.toDouble() },
         Family("core", "Core Strength", "🎽", "Muscle focus", t(25, 50, 75, 100, 125, 150, 175), "core workouts",
             "Train your abs or obliques in {n} workouts.", "a shield shaped like a six-pack") { it.coreDays.toDouble() },
-        Family("chest", "Chest Day", "🛡️", "Muscle focus", t(40, 80, 120, 160, 200), "chest workouts",
+        Family("chest", "Chest Day", "🛡️", "Muscle focus", t(40, 80, 120, 160), "chest workouts",
             "Train your chest in {n} workouts.", "a broad armoured chest plate") { it.chestDays.toDouble() },
         Family("arms", "Arm Day", "💪", "Muscle focus", t(40, 80, 120, 160, 200), "arm workouts",
-            "Train your arms (biceps, triceps or forearms) in {n} workouts.", "a flexed arm with a bulging bicep") { it.armDays.toDouble() },
+            "Train your arms or shoulders (biceps, triceps, forearms or shoulders) in {n} workouts.", "a flexed arm with a bulging bicep") { it.armDays.toDouble() },
         Family("back", "Back Day", "🦅", "Muscle focus", t(40, 80, 120, 160, 200), "back workouts",
             "Train your back (lats, middle or lower back, or traps) in {n} workouts.", "a broad back with wing-like lats spreading out") { it.backDays.toDouble() },
 
@@ -225,7 +225,7 @@ object Badges {
         if (groupsToday.any { it in setOf("quadriceps", "hamstrings", "glutes", "calves") }) p.legDays++
         if ("abdominals" in groupsToday) p.coreDays++
         if ("chest" in groupsToday) p.chestDays++
-        if (groupsToday.any { it in setOf("biceps", "triceps", "forearms") }) p.armDays++
+        if (groupsToday.any { it in setOf("biceps", "triceps", "forearms", "shoulders") }) p.armDays++
         if (groupsToday.any { it in setOf("lats", "middle back", "lower back", "traps") }) p.backDays++
         // Steady Rhythm: count this week once; weeks missed since the last one use the spare, then reset the streak.
         val monday = date.with(DayOfWeek.MONDAY)
