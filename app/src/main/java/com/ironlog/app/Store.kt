@@ -71,6 +71,9 @@ object Store {
         ChartRange.load()
     }
 
+    /** The app's data folder. */
+    fun dataDir(): File = dir
+
     /** Small app files (e.g. remembered import choices). */
     fun readFile(name: String) = read(name)
     fun writeFile(name: String, text: String) = write(name, text)

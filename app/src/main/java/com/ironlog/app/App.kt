@@ -99,6 +99,8 @@ sealed interface Route {
     data object Active : Route
     data class Summary(val id: String) : Route
     data class ShareWorkout(val id: String) : Route
+    data object BadgeList : Route
+    data object BadgeArt : Route
     data class WorkoutDetail(val id: String) : Route
     data object Settings : Route
     data object Library : Route
@@ -272,6 +274,8 @@ private fun RouteScreen(route: Route) {
         Route.Active -> ActiveWorkoutScreen()
         is Route.Summary -> SummaryScreen(route.id)
         is Route.ShareWorkout -> WorkoutShareScreen(route.id)
+        Route.BadgeList -> BadgesScreen()
+        Route.BadgeArt -> BadgeArtScreen()
         is Route.WorkoutDetail -> WorkoutDetailScreen(route.id)
         Route.Settings -> SettingsScreen()
         Route.Library -> PickerScreen(null)

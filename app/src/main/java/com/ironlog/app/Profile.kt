@@ -323,6 +323,8 @@ fun SettingsScreen() {
             if (p.devUnlocked) {
                 Spacer(8)
                 Text("Developer settings", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Red)
+                // Temporary: make the badge pictures.
+                GreyButton("🏅  Badge pictures (make them)") { Nav.go(Route.BadgeArt) }
                 // Edit any text in the app where it's shown, then export the changes to have them built in.
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

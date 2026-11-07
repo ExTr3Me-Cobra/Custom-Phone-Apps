@@ -589,6 +589,7 @@ fun SummaryScreen(id: String) {
                 ChangePanel("What got worse", down, "Nothing dropped since last time. 👌")
             }
             RankChanges(w, history, profile)
+            BadgesEarned(w)
             BigButton("Done") { Nav.home(0) }
             Spacer(24)
         }
