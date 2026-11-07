@@ -38,8 +38,9 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "mammyframe.MainKt"
-        // If Java itself ever crashes, its report goes next to the program (the log picks it up next time).
-        jvmArgs += listOf("-Xmx2g", "-XX:ErrorFile=\$APPDIR/hs_err_pid%p.log")
+        // No custom crash-report location: "-XX:ErrorFile=...%p..." stopped Java starting on Windows
+        // ("Failed to launch JVM"). Java's default places are checked by the log instead.
+        jvmArgs += listOf("-Xmx2g")
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "Mammy Frame"
