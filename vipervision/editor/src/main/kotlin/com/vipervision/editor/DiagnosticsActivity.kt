@@ -64,6 +64,8 @@ class DiagnosticsActivity : ComponentActivity() {
                         .background(Color.Black)
                         .statusBarsPadding()
                         .navigationBarsPadding()
+                        // One scroll for the whole screen, so an opened phone check never squeezes the log off it.
+                        .verticalScroll(scroll)
                 ) {
                     Text(
                         "Diagnostic log",
@@ -93,14 +95,12 @@ class DiagnosticsActivity : ComponentActivity() {
                             }
                         }
                     }
-                    // Collapsed to one line (tap it for the list), so the log keeps its room.
+                    // Collapsed to one line (tap it for the list).
                     PhoneCheck.Section()
                     Spacer(Modifier.height(8.dp))
                     SelectionContainer(
                         Modifier
-                            .weight(1f)
                             .fillMaxWidth()
-                            .verticalScroll(scroll)
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 12.dp)
                     ) {
@@ -112,6 +112,7 @@ class DiagnosticsActivity : ComponentActivity() {
                             fontFamily = FontFamily.Monospace
                         )
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
