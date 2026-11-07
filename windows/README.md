@@ -23,6 +23,9 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
   Review keyboard: R = turn 90°, Enter or → = Next, Backspace or ← = Back, Esc = leave.
 
 ## Windows-only bits
+- The window has its own slim bar at the top of the menus (minimise, close, and **Move to next
+  screen** when there's more than one screen). It fills the screen above the taskbar; the slideshow,
+  review and black screen cover the whole screen. It opens on the screen it was on last time.
 - Mammy Frame has to be open for the schedule to work (minimised is fine). At the start time it
   comes to the front by itself. In the Schedule settings, **Open Mammy Frame when Windows starts**
   starts it straight into the slideshow (or black screen) when the PC is switched on.

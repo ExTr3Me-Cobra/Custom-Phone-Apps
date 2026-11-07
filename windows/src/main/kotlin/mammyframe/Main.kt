@@ -4,6 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -30,7 +36,6 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
-import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.key as keyOf
 import kotlinx.coroutines.delay
@@ -90,11 +95,11 @@ fun main(args: Array<String>) {
     val autotest = args.indexOf("--autotest").takeIf { it >= 0 && args.size > it + 2 }
         ?.let { java.io.File(args[it + 1]) to java.io.File(args[it + 2]) }
     application {
-        // Open on the screen Mammy Frame was on last time (Windows may otherwise pick another one).
-        val windowState = rememberWindowState(
-            placement = WindowPlacement.Maximized, size = DpSize(1280.dp, 820.dp),
-            position = ScreenMemory.lastPosition() ?: WindowPosition.PlatformDefault,
-        )
+        // The window has no Windows title bar and is placed by hand: full screen is simply
+        // "cover the whole screen" (switching Windows' full screen on and off proved unreliable).
+        val windowState = rememberWindowState(placement = WindowPlacement.Floating, size = DpSize(1280.dp, 820.dp))
+        // The screen to use: the one Mammy Frame was on last time, if it's still connected.
+        var device by remember { mutableStateOf(ScreenMemory.lastDevice()) }
         var screen by remember { mutableStateOf(Screen.HOME) }
         // If something goes wrong while drawing: write it in the log and start again from the home
         // screen, instead of closing (gives up if it keeps happening).
@@ -104,6 +109,7 @@ fun main(args: Array<String>) {
             onCloseRequest = ::exitApplication,
             title = "Mammy Frame",
             state = windowState,
+            undecorated = true,
             icon = painterResource("icon.png"),
             onPreviewKeyEvent = { e ->
                 if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) Log.i("Key: ${e.keyOf} on $screen")
@@ -147,35 +153,15 @@ fun main(args: Array<String>) {
                     delay(5_000)
                 }
             }
-            // Photos and the black screen fill the whole screen; the menus are a normal window.
-            LaunchedEffect(screen) {
-                val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
-                // Going straight between full screen and maximised confuses the window toolkit on
-                // Windows (it can think it's still full screen, so the next full screen does
-                // nothing). So: always go through a normal window first, then check it really
-                // covers the screen, and try once more if not.
-                if (frame) {
-                    if (!coversScreen(window)) {
-                        Log.i("Window placement: ${windowState.placement} -> Fullscreen (for $screen)")
-                        windowState.placement = WindowPlacement.Floating
-                        delay(120)
-                        windowState.placement = WindowPlacement.Fullscreen
-                        delay(500)
-                        if (!coversScreen(window)) {
-                            Log.i("Full screen didn't take (window ${window.bounds}); trying again")
-                            windowState.placement = WindowPlacement.Floating
-                            delay(300)
-                            windowState.placement = WindowPlacement.Fullscreen
-                            delay(500)
-                            Log.i("Full screen now: ${coversScreen(window)} (window ${window.bounds})")
-                        }
-                    }
-                } else if (windowState.placement != WindowPlacement.Maximized || coversScreen(window)) {
-                    Log.i("Window placement: ${windowState.placement} -> Maximized (for $screen)")
-                    windowState.placement = WindowPlacement.Floating
-                    delay(120)
-                    windowState.placement = WindowPlacement.Maximized
-                }
+            // Photos, review and the black screen cover the whole screen (above the taskbar too);
+            // the menus fill the screen apart from the taskbar.
+            val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
+            LaunchedEffect(screen, device) {
+                val d = device ?: window.graphicsConfiguration.device
+                placeWindow(window, d, full = frame)
+                window.isAlwaysOnTop = frame
+                if (device != d) device = d
+                ScreenMemory.remember(d.iDstring)
                 if (screen == Screen.SLIDESHOW || screen == Screen.BLACK) {
                     // Brought forward by the schedule even if minimised or behind other windows.
                     windowState.isMinimized = false
@@ -199,6 +185,19 @@ fun main(args: Array<String>) {
                     }
                 }
             ) {
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                    if (!frame) TopBar(
+                        screens = runCatching { GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.size }.getOrDefault(1),
+                        onNextScreen = {
+                            val all = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+                            val cur = all.indexOfFirst { it.iDstring == (device ?: window.graphicsConfiguration.device).iDstring }
+                            device = all[(cur + 1) % all.size]
+                            Log.i("Move to next screen: ${device?.iDstring}")
+                        },
+                        onMinimise = { Log.i("Minimise button"); windowState.isMinimized = true },
+                        onClose = { Log.i("Close button"); exitApplication() },
+                    )
+                    Box(Modifier.weight(1f).fillMaxSize()) {
                 key(restarts) {
                     App(
                         screen = screen,
@@ -207,6 +206,8 @@ fun main(args: Array<String>) {
                         autotest = autotest,
                         window = window,
                     )
+                }
+                    }
                 }
             }
         }
@@ -375,6 +376,15 @@ private fun App(
             setScreen(Screen.REVIEW); mustBeFull("review"); shot("review")
             setScreen(Screen.ROTATE); delay(500)
             setScreen(Screen.BLACK); mustBeFull("black screen"); shot("black")
+            // The black screen must really be black right to the edges (no title bar, no taskbar).
+            run {
+                val sb = window.graphicsConfiguration.bounds
+                val cap = java.awt.Robot().createScreenCapture(sb)
+                val spots = listOf(cap.width / 2 to 8, 30 to 8, cap.width / 2 to cap.height - 8, cap.width - 30 to cap.height - 8)
+                val notBlack = spots.filter { (x, y) -> val c = java.awt.Color(cap.getRGB(x, y)); c.red + c.green + c.blue > 60 }
+                if (notBlack.isNotEmpty()) { notFull += "black screen edges $notBlack"; Log.i("AUTOTEST PROBLEM: black screen isn't black at $notBlack") }
+                else Log.i("AUTOTEST black screen is black to every edge")
+            }
             setScreen(Screen.HOME); delay(1500)
             slideshowRun++; setScreen(Screen.SLIDESHOW); mustBeFull("slideshow (second time)"); shot("slideshow-again")
             setScreen(Screen.HOME); shot("home-again")
@@ -506,14 +516,11 @@ object ScreenMemory {
 
     fun remember(id: String) = runCatching { if (file.readTextOrNull() != id) file.writeText(id) }
 
-    /** A spot just inside that screen, if it's still connected. */
-    fun lastPosition(): WindowPosition? = runCatching {
+    /** That screen, if it's still connected. */
+    fun lastDevice(): java.awt.GraphicsDevice? = runCatching {
         val id = file.readTextOrNull() ?: return null
-        val device = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.firstOrNull { it.iDstring == id }
-            ?: return null
-        val b = device.defaultConfiguration.bounds
-        Log.i("Opening on the screen used last time: $id")
-        WindowPosition((b.x + 40).dp, (b.y + 40).dp)
+        GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.firstOrNull { it.iDstring == id }
+            ?.also { Log.i("Opening on the screen used last time: $id") }
     }.getOrNull()
 
     private fun java.io.File.readTextOrNull() = if (exists()) readText().trim().ifEmpty { null } else null
@@ -522,3 +529,42 @@ object ScreenMemory {
 /** True when the window exactly covers its whole screen (real full screen, no title bar or taskbar). */
 fun coversScreen(window: java.awt.Window): Boolean =
     runCatching { window.isShowing && window.bounds == window.graphicsConfiguration.bounds }.getOrDefault(false)
+
+/** Puts the window on screen [d]: covering all of it ([full]), or all of it apart from the taskbar. */
+fun placeWindow(window: java.awt.Window, d: java.awt.GraphicsDevice, full: Boolean) {
+    val gc = d.defaultConfiguration
+    val b = java.awt.Rectangle(gc.bounds)
+    if (!full) {
+        val i = Toolkit.getDefaultToolkit().getScreenInsets(gc)
+        b.x += i.left; b.y += i.top; b.width -= i.left + i.right; b.height -= i.top + i.bottom
+    }
+    if (window.bounds != b) {
+        Log.i("Window ${if (full) "covers the whole screen" else "fills the screen above the taskbar"}: ${d.iDstring} $b")
+        window.bounds = b
+    }
+}
+
+/** The slim bar at the top of the menus: name, move to the next screen, minimise, close. */
+@Composable
+private fun TopBar(screens: Int, onNextScreen: () -> Unit, onMinimise: () -> Unit, onClose: () -> Unit) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().height(36.dp).background(Color(0xFFF7EAE6)),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Text(
+            "Mammy Frame", fontSize = 14.sp, color = Color(0xFF6B5258),
+            modifier = Modifier.padding(start = 14.dp).weight(1f)
+        )
+        if (screens > 1) BarButton("Move to next screen", onNextScreen)
+        BarButton("—", onMinimise)
+        BarButton("✕", onClose)
+    }
+}
+
+@Composable
+private fun BarButton(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.fillMaxHeight().clickable(onClick = onClick).padding(horizontal = 16.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) { androidx.compose.material3.Text(text, fontSize = 15.sp, color = Color(0xFF6B5258)) }
+}
