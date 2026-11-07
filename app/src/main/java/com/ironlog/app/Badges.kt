@@ -151,7 +151,7 @@ object Badges {
             "Train your abs or obliques in {n} workouts.", "a shield shaped like a six-pack") { it.coreDays.toDouble() },
         Family("bwclub", "Body Weight Club", "⚖️", "Getting stronger", t(1, 1.5, 2, 2.5), "× your body weight",
             "Do a working set with {n} times your body weight on any exercise.", "a balance scale with a lifter on one side and a weight on the other") { it.bestXbw },
-        Family("overload", "Overload", "📊", "Getting stronger", t(50, 150, 400, 1000), "workouts",
+        Family("overload", "Overload", "📊", "Getting stronger", t(50, 150, 400, 1000), "times",
             "Beat last time's total volume (weight × reps) on an exercise ({n} times).", "a bar chart climbing step by step") { it.overloads.toDouble() },
         Family("hotstreak", "Hot Streak", "☄️", "Getting stronger", t(10, 25, 50), "workouts in a row",
             "Set a personal best in {n} workouts in a row.", "a blazing comet trailing fire") { it.bestHot.toDouble() },
