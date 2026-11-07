@@ -188,7 +188,9 @@ object Badges {
                 if (s.failure) p.failure++
                 val r = s.reps ?: 0
                 p.reps += r; dayReps += r
-                if (ex?.type != ExType.BODYWEIGHT) { val v = (s.weight ?: 0.0) * r; p.volumeLb += v; dayVolume += v } else p.bodyReps += r
+                // Volume: bodyweight moves count the share of body weight they lift (see Stats.bodyShare).
+                val v = Stats.setVolume(ex, s, w.bodyweight ?: Store.profile.value.bodyweight); p.volumeLb += v; dayVolume += v
+                if (ex?.type == ExType.BODYWEIGHT) p.bodyReps += r
                 if (ex?.type == ExType.WEIGHT && r > 0) p.bestXbw = maxOf(p.bestXbw, (s.weight ?: 0.0) / p.bodyweight)
                 s.distance?.let { p.miles += it }
                 s.seconds?.let { sec -> if (ex?.type == ExType.TIMED || ex?.type == ExType.WEIGHT_TIME) { p.holdSeconds += sec; p.bestHold = maxOf(p.bestHold, sec) } }

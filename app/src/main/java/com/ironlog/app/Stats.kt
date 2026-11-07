@@ -150,8 +150,55 @@ object Stats {
         return load.mapValues { it.value / max }
     }
 
-    fun volume(w: Workout): Double = w.items.filter { Store.exercise(it.exerciseId)?.type != ExType.BODYWEIGHT }.sumOf { i ->
-        i.sets.filter { it.done }.sumOf { (it.weight ?: 0.0) * (it.reps ?: 0) }
+    /**
+     * The share of your body weight a bodyweight exercise moves (0 = not counted). Push-ups: force-plate measurements
+     * (Ebben WP et al., J Strength Cond Res 2011;25(10):2891-2894): regular 64%, knees 49%, feet raised 70-74%, hands
+     * raised 41-55%. Pull-ups, chin-ups and muscle-ups lift nearly the whole body; dips all but the hands and forearms.
+     * Inverted rows, bench dips, band-assisted pull-ups and bodyweight squats and lunges (body above the knees) are
+     * estimates; no study measured them directly. Tiny-range moves (scapular, wall push-ups) aren't counted.
+     */
+    fun bodyShare(e: Exercise?): Double {
+        val n = e?.name?.lowercase() ?: return 0.0
+        fun has(vararg w: String) = w.any { it in n }
+        return when {
+            has("scapular", "wall push", "mini squat", "plank to push") -> 0.0
+            has("assisted") && has("pull", "chin") -> 0.70
+            has("pull-up", "pull up", "pullup", "chin-up", "chin up", "muscle up") -> 1.0
+            has("handstand push") -> 0.92
+            has("bench dip") -> 0.50
+            Regex("""\bdips?\b""").containsMatchIn(n) -> 0.95
+            has("push-up", "push up", "pushup") -> when {
+                has("knee") -> 0.49
+                has("feet elevated", "decline", "exercise ball") -> 0.72
+                has("incline") -> 0.48
+                else -> 0.64
+            }
+            has("inverted row", "bodyweight row", "australian") -> 0.60
+            e.type == ExType.BODYWEIGHT && has("squat", "lunge", "step-up", "step up") -> 0.88
+            else -> 0.0
+        }
+    }
+
+    /**
+     * One set's volume: weight × reps; for bodyweight moves, the share of your body weight they move plus any added
+     * weight (weighted pull-ups, dips, push-ups) × reps. [bw] is your body weight (null = bodyweight moves don't count).
+     */
+    fun setVolume(e: Exercise?, s: DoneSet, bw: Double?): Double {
+        val reps = s.reps ?: 0
+        if (reps <= 0) return 0.0
+        val share = bodyShare(e)
+        val bodyMove = e?.type == ExType.BODYWEIGHT || (share > 0 && e?.name?.lowercase()?.contains("weighted") == true)
+        if (!bodyMove) return if (e?.type == ExType.BODYWEIGHT) 0.0 else (s.weight ?: 0.0) * reps
+        val body = (bw ?: 0.0) * share
+        return (body + (s.weight ?: 0.0)).coerceAtLeast(0.0) * reps
+    }
+
+    fun volume(w: Workout): Double {
+        val bw = w.bodyweight ?: Store.profile.value.bodyweight
+        return w.items.sumOf { i ->
+            val e = Store.exercise(i.exerciseId)
+            i.sets.filter { it.done }.sumOf { setVolume(e, it, bw) }
+        }
     }
 }
 
