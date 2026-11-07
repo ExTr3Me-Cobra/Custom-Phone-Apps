@@ -139,7 +139,10 @@ class CutOutSession internal constructor(
     var samPreviewSource by mutableStateOf<Bitmap?>(null)
         internal set
 
-    /** Smart select's latest result at screen size (background removed), or null. */
+    /**
+     * Smart select's latest guess at screen size, as a green tint over what would be kept (the
+     * photo itself isn't cut until Cut out / ✓), or null.
+     */
     var samPreview by mutableStateOf<Bitmap?>(null)
         internal set
     internal var samSession: Sam2.Session? = null
@@ -238,6 +241,7 @@ private fun CutOutContent(
                 EdgeRefiner.refine(source, selection).also { if (it !== selection) selection.recycle() }
             }
         }.onSuccess {
+            ViperLog.i("CUTOUT", "Smart select cut out: ${strokes.size} strokes, refine edges $refine, ${ViperLog.transparency(it)}")
             component.applySubjectSelection(it)
             session.resetSmart()
             session.tool = CutTool.Erase
@@ -339,7 +343,8 @@ private fun CutOutContent(
             val (points, box) = samPrompt(strokes, session.smartPaint.shownWidthPx, preview.width.toFloat() / preview.height)
             session.samPreview = runCatching {
                 withContext(Dispatchers.Default) {
-                    session.samLock.withLock { sam.segment(points = points, box = box, outputImage = preview) }
+                    val selection = session.samLock.withLock { sam.segment(points = points, box = box, outputImage = preview) }
+                    SoftMask.ofAlpha(selection).tint(0x34C759, 0.45f).also { selection.recycle() }
                 }
             }.getOrNull()
         }
@@ -394,16 +399,26 @@ private fun CutOutContent(
         ) {
             val bitmap = component.bitmap
             if (session.tool == CutTool.Smart) {
-                val shown = session.samPreview ?: session.samPreviewSource
+                // The whole photo while marking, with what would be kept tinted green; nothing is
+                // removed until Cut out (or ✓).
+                val shown = session.samPreviewSource
                 if (shown != null) {
                     val zoom = remember(session.samPreviewSource) { PaintZoom() }
                     Checkerboard(Modifier.fillMaxSize().then(with(zoom) { Modifier.zoomed() }), shown.width, shown.height)
                     Image(
-                        bitmap = shown.asImageBitmap(),
+                        bitmap = remember(shown) { shown.asImageBitmap() },
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = with(zoom) { Modifier.fillMaxSize().zoomed() }
                     )
+                    session.samPreview?.let { tint ->
+                        Image(
+                            bitmap = remember(tint) { tint.asImageBitmap() },
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = with(zoom) { Modifier.fillMaxSize().zoomed() }
+                        )
+                    }
                     PaintOverlay(
                         imageWidth = shown.width,
                         imageHeight = shown.height,
