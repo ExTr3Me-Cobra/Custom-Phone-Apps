@@ -58,8 +58,8 @@ object Badges {
             "Spend {n} hours working out.", "an hourglass with a barbell for its middle") { it.hours },
 
         // ---- Hard work ----
-        Family("volume", "Mountain Mover", "⛰️", "Hard work", t(2000, 4000, 6000, 8000, 10000), "× your body weight",
-            "Lift a total of {n} times your body weight (all your sets added up).", "a mountain being lifted on a barbell") { it.volumeXbw },
+        Family("volume", "Mountain Mover", "⛰️", "Hard work", t(400000, 800000, 1200000, 1600000, 2000000), "lbs",
+            "Lift a total of {n} lbs (all your sets added up: weight × reps).", "a mountain being lifted on a barbell") { it.volumeLb },
         Family("reps", "Rep Machine", "⚙️", "Hard work", t(10000, 20000, 30000, 40000, 50000), "reps",
             "Do {n} reps in total.", "interlocking gears with a dumbbell in the centre") { it.reps.toDouble() },
         Family("ownbody", "Own Body", "🤸", "Hard work", t(2000, 4000, 6000, 8000, 10000), "reps",
@@ -70,7 +70,7 @@ object Badges {
             "Take {n} sets to failure (marked F).", "a climber gripping the edge of a cliff") { it.failure.toDouble() },
         Family("holds", "Hold Steady", "🧘", "Hard work", t(150, 300, 450, 600, 750), "minutes",
             "Hold timed exercises for {n} minutes in total.", "a balanced stone stack on a yoga mat") { it.holdMinutes },
-        Family("distance", "Distance", "🏃", "Hard work", t(20, 40, 60, 80, 100), "miles",
+        Family("distance", "Distance", "🏃", "Hard work", t(500, 1000, 1500, 2000, 2500), "miles",
             "Cover {n} miles in cardio.", "a running shoe leaving a long trail") { it.miles },
 
         // ---- Getting stronger ----
@@ -84,17 +84,20 @@ object Badges {
         // ---- Muscle focus (the exercise's main muscle group) ----
         Family("legday", "Never Skip Leg Day", "🦵", "Muscle focus", t(40, 80, 120, 160, 200), "leg workouts",
             "Train your legs (quads, hamstrings, glutes or calves) in {n} workouts.", "a powerful pair of legs in a deep squat") { it.legDays.toDouble() },
-        Family("core", "Core Strength", "🎽", "Muscle focus", t(25, 50, 75, 100, 125, 150, 175), "core workouts",
+        Family("core", "Core Strength", "🎽", "Muscle focus", t(40, 80, 120, 160, 200), "core workouts",
             "Train your abs or obliques in {n} workouts.", "a shield shaped like a six-pack") { it.coreDays.toDouble() },
-        Family("chest", "Chest Day", "🛡️", "Muscle focus", t(40, 80, 120, 160), "chest workouts",
+        Family("chest", "Chest Day", "🛡️", "Muscle focus", t(40, 80, 120, 160, 200), "chest workouts",
             "Train your chest in {n} workouts.", "a broad armoured chest plate") { it.chestDays.toDouble() },
         Family("arms", "Arm Day", "💪", "Muscle focus", t(40, 80, 120, 160, 200), "arm workouts",
             "Train your arms or shoulders (biceps, triceps, forearms or shoulders) in {n} workouts.", "a flexed arm with a bulging bicep") { it.armDays.toDouble() },
         Family("back", "Back Day", "🦅", "Muscle focus", t(40, 80, 120, 160, 200), "back workouts",
             "Train your back (lats, middle or lower back, or traps) in {n} workouts.", "a broad back with wing-like lats spreading out") { it.backDays.toDouble() },
 
+        Family("cardio", "Cardio Day", "❤️", "Muscle focus", t(40, 80, 120, 160, 200), "cardio workouts",
+            "Do cardio in {n} workouts.", "a glowing heart with a pulse line running through it") { it.cardioDays.toDouble() },
+
         // ---- Testing ----
-        Family("tests", "Tested", "🧪", "Testing", t(10, 20, 30, 40, 50, 60, 70, 80, 90), "1 Rep Max tests",
+        Family("tests", "Tested", "🧪", "Testing", t(10, 20, 30, 40, 50, 60, 70, 80, 90, 100), "1 Rep Max tests",
             "Do {n} 1 Rep Max tests.", "a glowing test tube with a barbell inside") { it.tests.toDouble() },
     )
 
@@ -126,7 +129,7 @@ object Badges {
         val yearCounts = HashMap<Int, Int>(); val bestYear get() = yearCounts.values.maxOrNull() ?: 0
         var legDays = 0; var coreDays = 0; var bestXbw = 0.0; var overloads = 0; val routineVolume = HashMap<String, Double>()
         var hot = 0; var bestHot = 0; var bodyReps = 0L; var miles = 0.0
-        var chestDays = 0; var armDays = 0; var backDays = 0
+        var chestDays = 0; var armDays = 0; var backDays = 0; var cardioDays = 0
         /** Steady Rhythm: weeks in a row with a workout, one missed week forgiven (the spare comes back after a reset). */
         var weekly = 0; var bestWeekly = 0; var spare = 1; var lastWeek: LocalDate? = null
         // Worked out from your ranks today (not workout by workout).
@@ -225,6 +228,7 @@ object Badges {
         if (groupsToday.any { it in setOf("quadriceps", "hamstrings", "glutes", "calves") }) p.legDays++
         if ("abdominals" in groupsToday) p.coreDays++
         if ("chest" in groupsToday) p.chestDays++
+        if (w.items.any { i -> Store.exercise(i.exerciseId)?.type == ExType.CARDIO && i.sets.any { it.done } }) p.cardioDays++
         if (groupsToday.any { it in setOf("biceps", "triceps", "forearms", "shoulders") }) p.armDays++
         if (groupsToday.any { it in setOf("lats", "middle back", "lower back", "traps") }) p.backDays++
         // Steady Rhythm: count this week once; weeks missed since the last one use the spare, then reset the streak.
