@@ -750,15 +750,36 @@ class CameraThumbnailService : AccessibilityService() {
             hideReturnButton()
             return
         }
+        // A hand-off left another way (home screen, or long forgotten) ends here, so it never
+        // drives Samsung's apps later when they're used on their own.
+        val ageSec = System.currentTimeMillis() / 1000 - session.startedAtSec
+        if (ageSec > HANDOFF_MAX_AGE_SEC) return abandonHandoff(session, "it's over ${HANDOFF_MAX_AGE_SEC / 60} minutes old")
         when {
             pkg in SamsungHandoff.PACKAGES -> {
                 handler.removeCallbacks(handoffRefresh)
                 handler.postDelayed(handoffRefresh, if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) 300 else 400)
             }
-            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != packageName && pkg != "com.android.systemui" ->
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg == homePackage() ->
+                abandonHandoff(session, "the home screen was opened")
+            // Anywhere else (Viper Vision itself included) the Back button isn't wanted.
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != "com.android.systemui" ->
                 hideReturnButton()
         }
     }
+
+    /** Ends a hand-off that won't come back: no more taps in Samsung's apps, the temporary picture deleted. */
+    private fun abandonHandoff(session: SamsungHandoff.Session, why: String) {
+        if (SamsungHandoff.active !== session) return
+        ViperLog.i("SAMSUNG", "Hand-off ended without coming back ($why)")
+        SamsungHandoff.active = null
+        hideReturnButton()
+        Thread { SamsungHandoff.cleanUp(applicationContext, session) }.start()
+    }
+
+    /** The phone's home screen app. */
+    private fun homePackage(): String? = runCatching {
+        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+    }.getOrNull()
 
     private fun samsungRoot(): AccessibilityNodeInfo? =
         windows.firstNotNullOfOrNull { window -> window.root?.takeIf { it.packageName in SamsungHandoff.PACKAGES } }
@@ -773,6 +794,22 @@ class CameraThumbnailService : AccessibilityService() {
         // (it does that job, then comes back). Anywhere else it stays hidden.
         val saveArea = findNode(root, SAVE_LABELS, exact = true)?.let(::tappableBounds)
         if (saveArea != null) showReturnButton(saveArea) else hideReturnButton()
+        // Backed all the way out of Samsung's editor to Gallery's viewer of the temporary picture
+        // (it only shows that again after the tool was open): Back means "back to Viper Vision".
+        if (session.toolOpened && !session.returnRequested && root.packageName == GALLERY_PACKAGE &&
+            findNode(root, GALAXY_AI_LABELS, exact = false) != null
+        ) {
+            handler.postDelayed({
+                val again = samsungRoot()
+                if (SamsungHandoff.active === session && !session.returnRequested && again?.packageName == GALLERY_PACKAGE) {
+                    ViperLog.i("SAMSUNG", "Backed out of Samsung's editor; going back to Viper Vision")
+                    session.returnRequested = true
+                    hideReturnButton()
+                    bringViperBack()
+                }
+            }, 700)
+            return
+        }
         if (session.toolOpened || session.returnRequested || session.tapAttempts >= MAX_TAP_ATTEMPTS) return
         session.tapAttempts++
         val tool = findNode(root, session.tool.samsungLabels, exact = true)
@@ -981,6 +1018,9 @@ class CameraThumbnailService : AccessibilityService() {
         /** Read by the gallery's setup (MainActivity.showViperSetup). */
         const val RUNNING_PID = "vv_a11y_running_pid"
         const val MAX_TAP_ATTEMPTS = 40
+        /** A hand-off still unfinished after this long has been left: it ends. */
+        const val HANDOFF_MAX_AGE_SEC = 30 * 60L
+        const val GALLERY_PACKAGE = "com.sec.android.gallery3d"
         val GALAXY_AI_LABELS = listOf("Galaxy AI", "Photo Assist", "Generative edit", "AI edit")
         val EDIT_LABELS = listOf("Edit")
         val SAVE_LABELS = listOf("Save copy", "Save as copy", "Save", "Done")
