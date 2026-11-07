@@ -49,6 +49,47 @@ jobs:
             MammyFrame-Windows-Setup.msi
             MammyFrame-Windows.zip
 
+      # Real Windows test: install from the installer, open the installed app in its automatic test
+      # mode (every screen, a real click, Ai Rotate on test photos, screenshots), and check it passed.
+      - name: Test the installed app on Windows
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "mammyframe-test"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $install = Start-Process msiexec.exe -ArgumentList "/i", "MammyFrame-Windows-Setup.msi", "/qn", "/L*v", "$out\install.log" -Wait -PassThru
+          "Installer finished with code $($install.ExitCode)"
+          if ($install.ExitCode -ne 0) { throw "The installer failed (code $($install.ExitCode))" }
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA", "$env:ProgramFiles" -Recurse -Filter "Mammy Frame.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "Installed Mammy Frame.exe not found" }
+          "Installed at $($exe.FullName)"
+          $app = Start-Process -FilePath $exe.FullName -ArgumentList "--autotest", "$out", "$env:GITHUB_WORKSPACE\windows\testdata" -PassThru
+          if (-not $app.WaitForExit(540000)) { $app.Kill(); "The app didn't finish in time" }
+          "App finished with code $($app.ExitCode)"
+          $log = "$env:APPDATA\MammyFrame\log.txt"
+          if (Test-Path $log) { Copy-Item $log "$out\log.txt"; Get-Content $log -Tail 150 } else { "No log was written" }
+          if (-not ((Test-Path $log) -and (Select-String -Path $log -Pattern "AUTOTEST PASSED" -Quiet))) { throw "The Windows test did not pass" }
+
+      # The test's screenshots and logs, kept even if it failed (a separate pre-release, not for installing).
+      - name: Keep the test results
+        if: always()
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "mammyframe-test"
+          New-Item -ItemType Directory -Force -Path "test-results" | Out-Null
+          Get-ChildItem $out -File -ErrorAction SilentlyContinue | Copy-Item -Destination "test-results"
+          Get-ChildItem "test-results"
+
+      - uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: mammy-frame-windows-test-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Mammy Frame for Windows - test results (build ${{ github.run_number }})
+          body: Screenshots and logs from the automatic Windows test. Not for installing.
+          prerelease: true
+          make_latest: false
+          files: test-results/*
+
       - name: Publish downloads on the Releases page
         uses: softprops/action-gh-release@v2
         with:

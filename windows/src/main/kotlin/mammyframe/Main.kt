@@ -86,6 +86,9 @@ fun main(args: Array<String>) {
         .onFailure { Log.e("look and feel", it) }
     // Opened by Windows at startup: behave like a photo frame straight away.
     val fromStartup = "--startup" in args
+    // Automatic test on the build machine: --autotest <folder for results> <folder of test photos>
+    val autotest = args.indexOf("--autotest").takeIf { it >= 0 && args.size > it + 2 }
+        ?.let { java.io.File(args[it + 1]) to java.io.File(args[it + 2]) }
     application {
         // Open on the screen Mammy Frame was on last time (Windows may otherwise pick another one).
         val windowState = rememberWindowState(
@@ -178,6 +181,7 @@ fun main(args: Array<String>) {
                         screen = screen,
                         setScreen = { Log.i("Screen: $screen -> $it"); screen = it },
                         fromStartup = fromStartup,
+                        autotest = autotest,
                         window = window,
                     )
                 }
@@ -187,7 +191,10 @@ fun main(args: Array<String>) {
 }
 
 @Composable
-private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolean, window: java.awt.Window) {
+private fun App(
+    screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolean, window: java.awt.Window,
+    autotest: Pair<java.io.File, java.io.File>? = null,
+) {
     var settings by remember { mutableStateOf(Prefs.load()) }
     var dialog by remember { mutableStateOf(HomeDialog.NONE) }
     var slideshowRun by remember { mutableIntStateOf(0) }
@@ -280,6 +287,76 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
     }
 
     val scope = rememberCoroutineScope()
+
+    // ---- Automatic test (build machine only): every screen, a real click, screenshots, timings.
+    LaunchedEffect(Unit) {
+        val (out, photos) = autotest ?: return@LaunchedEffect
+        out.mkdirs()
+        // Never hang the build: give up after 8 minutes.
+        Thread({ Thread.sleep(8 * 60_000L); Log.i("AUTOTEST FAILED: took too long"); kotlin.system.exitProcess(2) }, "autotest-timeout")
+            .apply { isDaemon = true }.start()
+        var step = 0
+        suspend fun shot(name: String) {
+            delay(1500)
+            step++
+            val file = java.io.File(out, "%02d-%s.png".format(step, name))
+            val img = java.awt.Robot().createScreenCapture(java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().screenSize))
+            javax.imageio.ImageIO.write(img, "png", file)
+            Log.i("AUTOTEST screenshot ${file.name} (window ${window.bounds})")
+        }
+        try {
+            Log.i("AUTOTEST starting: results in $out, photos in $photos")
+            // Test photos: a third saved sideways on purpose (the AI should turn them back).
+            val folder = java.io.File(out, "Family").apply { mkdirs() }
+            photos.listFiles { f -> f.extension.lowercase() == "jpg" }.orEmpty().sortedBy { it.name }.forEachIndexed { i, f ->
+                val dst = java.io.File(folder, f.name)
+                if (i % 3 == 1) javax.imageio.ImageIO.write(Photos.transform(javax.imageio.ImageIO.read(f), false, 270), "jpg", dst)
+                else f.copyTo(dst, overwrite = true)
+            }
+            shot("home")
+            // A real mouse click in the middle of the window: the log should show "Press".
+            run {
+                val r = java.awt.Robot()
+                r.mouseMove(window.x + window.width / 2, window.y + window.height - 60)
+                r.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+                r.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+            }
+            delay(800)
+            val home = measureDrawing()
+            Log.i("AUTOTEST drawing on home: ${"%.0f".format(home.first)} frames/s, slowest ${home.second} ms")
+            update(settings.copy(developer = true)); shot("developer-settings")
+            picking = true; shot("folder-picker")
+            picking = false; update(settings.copy(folder = folder.path)); shot("folder-chosen")
+            dialog = HomeDialog.SCHEDULE; shot("schedule"); dialog = HomeDialog.NONE
+            dialog = HomeDialog.TRANSITIONS; shot("transitions"); dialog = HomeDialog.NONE
+            slideshowRun++; setScreen(Screen.SLIDESHOW); delay(3000)
+            val show = measureDrawing()
+            Log.i("AUTOTEST drawing in slideshow: ${"%.0f".format(show.first)} frames/s, slowest ${show.second} ms")
+            shot("slideshow")
+            setScreen(Screen.HOME); delay(500); setScreen(Screen.ROTATE); shot("ai-rotate")
+            AiRotate.start(folder.path)
+            while (AiRotate.status.value.running) delay(500)
+            val st = AiRotate.status.value
+            val recs = AiRotate.recordsIn(folder.path)
+            Log.i("AUTOTEST AI check: finished=${st.lastRunFinished} in ${st.lastRunMs} ms, ${recs.size} photos, " +
+                "turned ${recs.count { it.applied != 0 }}, message=${st.message}")
+            recs.sortedBy { it.name }.forEach { r ->
+                Log.i("AUTOTEST   ${r.name}: AI ${r.fix}° (${(r.certainty * 100).toInt()}%) ${AiRotate.kind(r, st.threshold)}, applied ${r.applied}°, tag now ${Photos.exifOrientation(java.io.File(r.path))}")
+            }
+            shot("ai-rotate-done")
+            setScreen(Screen.REVIEW); shot("review")
+            setScreen(Screen.ROTATE); delay(500)
+            setScreen(Screen.BLACK); shot("black")
+            setScreen(Screen.HOME); shot("home-again")
+            val ok = st.lastRunFinished && recs.isNotEmpty() && st.message == null
+            Log.i(if (ok) "AUTOTEST PASSED" else "AUTOTEST FAILED: AI check didn't finish cleanly")
+            kotlin.system.exitProcess(if (ok) 0 else 1)
+        } catch (t: Throwable) {
+            Log.e("AUTOTEST FAILED", t)
+            runCatching { shot("failure") }
+            kotlin.system.exitProcess(1)
+        }
+    }
     var aiText by remember { mutableStateOf("") }
     LaunchedEffect(aiStatus.revision, aiStatus.running, aiStatus.done, settings.folder) {
         aiText = aiSummary(aiStatus, AiRotate.recordsIn(settings.folder))

@@ -35,6 +35,14 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
   the app was doing, frame rate every 10 s and slow frames, every click / key / window event and
   screen change, memory every 30 s, errors, and Java crash reports from earlier runs.
 
+## Automatic Windows test
+Every Windows build is tested on a real Windows machine before it's published: it's installed from
+the installer, then opened with `--autotest <results folder> <photos folder>`, which goes through
+every screen, makes a real mouse click, runs Ai Rotate on `windows/testdata` (a third of the
+photos saved sideways on purpose), measures drawing speed and takes a screenshot of each step.
+The download is only published if that passes. Screenshots and logs go to a separate
+**mammy-frame-windows-test-N** pre-release either way.
+
 ## Build
 `.github/workflows/build-mammy-frame-windows.yml` builds it on a Windows machine whenever
 `windows/` (or the AI model or font it shares with the Android app) changes. To build locally:
