@@ -63,18 +63,24 @@ object Log {
         i("Windows: ${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}")
         i("Java: ${System.getProperty("java.vendor")} ${System.getProperty("java.version")}, " +
             "max memory ${Runtime.getRuntime().maxMemory() / 1_048_576} MB, ${Runtime.getRuntime().availableProcessors()} processors")
-        i("Java options: ${ManagementFactory.getRuntimeMXBean().inputArguments}")
+        safely("Java options") { i("Java options: ${ManagementFactory.getRuntimeMXBean().inputArguments}") }
         i("Program: ${System.getProperty("jpackage.app-path")}, data: ${dataDir.path}")
         screens("at start")
         i("Drawing settings: " + listOf("skiko.renderApi", "skiko.vsync.enabled", "skiko.fps.enabled")
             .joinToString { "$it=${System.getProperty(it) ?: "(default)"}" })
 
-        captureConsole()
+        safely("console capture") { captureConsole() }
         Thread.setDefaultUncaughtExceptionHandler { th, t -> e("uncaught on thread ${th.name}", t) }
-        Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing (normal close)") })
-        crashReports()
-        watchMainThread()
-        watchMemory()
+        safely("close hook") { Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing (normal close)") }) }
+        safely("crash reports") { crashReports() }
+        safely("freeze watch") { watchMainThread() }
+        safely("memory watch") { watchMemory() }
+        i("Logging started")
+    }
+
+    /** Logging must never stop the app: anything that goes wrong here (even a missing part of Java) is just noted. */
+    private inline fun safely(what: String, block: () -> Unit) {
+        try { block() } catch (t: Throwable) { runCatching { e("diagnostics: $what", t) } }
     }
 
     fun screens(why: String) = runCatching {
@@ -131,7 +137,7 @@ object Log {
 
     /** Memory and Java clean-up (GC) time, every 30 seconds. */
     private fun watchMemory() {
-        Thread({
+        Thread({ try {
             var lastGcMs = 0L
             var lastGcCount = 0L
             while (true) {
@@ -145,7 +151,7 @@ object Log {
                     "threads: ${Thread.activeCount()}")
                 lastGcMs = gcMs; lastGcCount = gcCount
             }
-        }, "memory-watch").apply { isDaemon = true }.start()
+        } catch (t: Throwable) { e("memory watch stopped", t) } }, "memory-watch").apply { isDaemon = true }.start()
     }
 
     /**

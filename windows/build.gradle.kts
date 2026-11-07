@@ -48,7 +48,7 @@ compose.desktop {
             description = "A simple photo frame"
             vendor = "Mammy Frame"
             // Only the parts of Java the app uses (found with ./gradlew suggestRuntimeModules).
-            modules("java.instrument", "java.sql", "jdk.unsupported", "java.naming", "jdk.accessibility")
+            modules("java.instrument", "java.sql", "jdk.unsupported", "java.naming", "jdk.accessibility", "java.management", "jdk.management")
             windows {
                 menu = true
                 shortcut = true
