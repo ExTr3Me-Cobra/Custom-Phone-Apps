@@ -68,7 +68,10 @@ object BadgePictures {
     /** Changes whenever a picture is made or replaced, so screens redraw. */
     var version by mutableIntStateOf(0)
 
-    fun get(c: android.content.Context, id: String): ImageBitmap? {
+    /** A badge's picture: its own, else its family's (made, picked, or built in). */
+    fun get(c: android.content.Context, b: Badges.Badge): ImageBitmap? = one(c, b.id) ?: one(c, b.family.id)
+
+    private fun one(c: android.content.Context, id: String): ImageBitmap? {
         val f = Badges.pictureFile(id)
         val stamp = if (f.exists()) f.lastModified() else -1L
         cache[id]?.takeIf { it.first == stamp }?.let { return it.second }
@@ -95,7 +98,7 @@ object BadgePictures {
 fun BadgeIcon(b: Badges.Badge, earned: Boolean, size: Dp, modifier: Modifier = Modifier) {
     val c = LocalContext.current
     val v = BadgePictures.version
-    val img = remember(b.family.id, v) { BadgePictures.get(c, b.family.id) }
+    val img = remember(b.id, v) { BadgePictures.get(c, b) }
     val ring = badgeColor(b.tier)
     val grey = remember { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
@@ -225,11 +228,11 @@ fun BadgesEarned(w: Workout) {
 // ---------------- Developer: making the badge pictures (temporary) ----------------
 
 /** Makes a family's picture with OpenAI (transparent PNG). Null when it worked, else why not. */
-suspend fun makeBadgePicture(f: Badges.Family): String? = withContext(Dispatchers.IO) {
+suspend fun makeBadgePicture(b: Badges.Badge): String? = withContext(Dispatchers.IO) {
     val p = Store.profile.value
     if (p.apiKey.isBlank()) return@withContext "Add your OpenAI API key in Settings first."
     runCatching {
-        val body = JSONObject().put("model", p.imageModel.ifBlank { "gpt-image-1" }).put("prompt", Badges.prompt(f))
+        val body = JSONObject().put("model", p.imageModel.ifBlank { "gpt-image-1" }).put("prompt", Badges.prompt(b))
             .put("size", "1024x1024").put("n", 1).put("background", "transparent").put("output_format", "png")
         if (p.imageQuality.isNotBlank()) body.put("quality", p.imageQuality)
         val conn = (URL("https://api.openai.com/v1/images/generations").openConnection() as HttpURLConnection).apply {
@@ -243,14 +246,15 @@ suspend fun makeBadgePicture(f: Badges.Family): String? = withContext(Dispatcher
         val item = JSONObject(text).getJSONArray("data").getJSONObject(0)
         val bytes = if (item.has("b64_json")) Base64.decode(item.getString("b64_json"), Base64.DEFAULT) else URL(item.getString("url")).openStream().use { it.readBytes() }
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@withContext "Couldn't read the picture."
-        withContext(Dispatchers.Main) { BadgePictures.save(f.id, bmp) }
+        withContext(Dispatchers.Main) { BadgePictures.save(b.id, bmp) }
         null
     }.getOrElse { "Couldn't reach OpenAI (${it.message})" }
 }
 
 /**
- * Developer (temporary): one picture per badge family. Each has its AI prompt (editable, with Copy), Generate (your
- * OpenAI key, transparent PNG) and Pick (a picture you made elsewhere). Save as zip to send them in to be built in.
+ * Developer (temporary): a picture for every badge, each level grander than the one before. Each has its AI prompt
+ * (editable, with Copy), Generate (your OpenAI key, transparent PNG) and Pick (a picture you made elsewhere).
+ * Save as zip to send them in to be built in.
  */
 @Composable
 fun BadgeArtScreen() {
@@ -259,12 +263,12 @@ fun BadgeArtScreen() {
     val v = BadgePictures.version
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
-    var picking by remember { mutableStateOf<Badges.Family?>(null) }
+    var picking by remember { mutableStateOf<Badges.Badge?>(null) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        val f = picking ?: return@rememberLauncherForActivityResult
+        val b = picking ?: return@rememberLauncherForActivityResult
         picking = null
         if (uri != null) runCatching {
-            context.contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }?.let { BadgePictures.save(f.id, it) }
+            context.contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }?.let { BadgePictures.save(b.id, it) }
         }.onFailure { status = "Couldn't use that picture: ${it.message}" }
     }
     val zip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -273,31 +277,31 @@ fun BadgeArtScreen() {
             var n = 0
             context.contentResolver.openOutputStream(uri)!!.use { os ->
                 java.util.zip.ZipOutputStream(os).use { z ->
-                    Badges.families.forEach { f ->
-                        val file = Badges.pictureFile(f.id)
-                        if (file.exists()) { z.putNextEntry(java.util.zip.ZipEntry("badges/${f.id}.png")); file.inputStream().use { it.copyTo(z) }; z.closeEntry(); n++ }
+                    Badges.pictureFile("x").parentFile?.listFiles { f -> f.name.endsWith(".png") }?.forEach { file ->
+                        z.putNextEntry(java.util.zip.ZipEntry("badges/${file.name}")); file.inputStream().use { it.copyTo(z) }; z.closeEntry(); n++
                     }
                 }
             }
             "Saved $n badge pictures."
         }.getOrElse { "Couldn't save: ${it.message}" }
     }
-    val missing = Badges.families.filter { !Badges.pictureFile(it.id).exists() }
+    val missing = remember(v) { Badges.all.filter { !Badges.pictureFile(it.id).exists() } }
     Column(Modifier.fillMaxSize()) {
         TopBar("Badge pictures")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Text("One picture per badge family (${Badges.families.size}); the app adds each level's ring colour and numeral. " +
-                    "Generate uses your OpenAI key (transparent PNG). Or copy a prompt, make the picture anywhere, and Pick it.", color = Sub, fontSize = 13.sp)
+                Text("A picture for each of the ${Badges.all.size} badges, every level grander than the last (the app adds the numeral). " +
+                    "Generate uses your OpenAI key (transparent PNG), or copy a prompt, make it anywhere, and Pick it. " +
+                    "${Badges.all.size - missing.size} of ${Badges.all.size} done.", color = Sub, fontSize = 13.sp)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GreyButton(if (busy != null) "Making…" else "Generate all ${missing.size} missing", Modifier.weight(1f)) {
                         if (busy != null) return@GreyButton
                         scope.launch {
                             var made = 0
-                            for (f in missing) {
-                                busy = f.id; status = "Making ${f.name}…"
-                                val err = makeBadgePicture(f)
-                                if (err != null) { status = "${f.name}: $err"; if (err.contains("API key")) break } else made++
+                            for (b in missing) {
+                                busy = b.id; status = "Making ${b.name}… ($made done)"
+                                val err = makeBadgePicture(b)
+                                if (err != null) { status = "${b.name}: $err"; if (err.contains("API key")) break } else made++
                             }
                             busy = null; status = "Made $made pictures."
                         }
@@ -306,32 +310,31 @@ fun BadgeArtScreen() {
                 }
                 status?.let { Text(it, color = Blue, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
             }
-            items(Badges.families.size) { i ->
-                val f = Badges.families[i]
-                var text by remember(f.id) { mutableStateOf(Badges.prompt(f)) }
+            items(Badges.all.size) { i ->
+                val b = Badges.all[i]
+                var text by remember(b.id) { mutableStateOf(Badges.prompt(b)) }
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.runtime.key(v) { BadgeIcon(Badges.Badge(f, f.targets.lastIndex), true, 72.dp) }
+                        androidx.compose.runtime.key(v) { BadgeIcon(b, true, 72.dp) }
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(f.name, fontWeight = FontWeight.Bold)
-                            Text("${f.targets.size} level${if (f.targets.size == 1) "" else "s"} · ${f.id}.png" +
-                                if (Badges.pictureFile(f.id).exists()) " ✓" else "", color = Sub, fontSize = 12.sp)
+                            Text(b.name, fontWeight = FontWeight.Bold)
+                            Text("${b.id}.png" + if (Badges.pictureFile(b.id).exists()) " ✓" else "", color = Sub, fontSize = 12.sp)
                         }
                     }
-                    androidx.compose.material3.OutlinedTextField(text, { text = it; Badges.setPrompt(f, it) }, Modifier.fillMaxWidth().typing(),
+                    androidx.compose.material3.OutlinedTextField(text, { text = it; Badges.setPrompt(b, it) }, Modifier.fillMaxWidth().typing(),
                         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White), minLines = 3, maxLines = 8)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         GreyButton("Copy", Modifier.weight(1f)) {
                             val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Badge prompt", text)); status = "Copied the ${f.name} prompt."
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Badge prompt", text)); status = "Copied the ${b.name} prompt."
                         }
-                        GreyButton(if (busy == f.id) "Making…" else "Generate", Modifier.weight(1f)) {
+                        GreyButton(if (busy == b.id) "Making…" else "Generate", Modifier.weight(1f)) {
                             if (busy != null) return@GreyButton
-                            busy = f.id
-                            scope.launch { val err = makeBadgePicture(f); busy = null; status = err?.let { "${f.name}: $it" } ?: "Made ${f.name}." }
+                            busy = b.id
+                            scope.launch { val err = makeBadgePicture(b); busy = null; status = err?.let { "${b.name}: $it" } ?: "Made ${b.name}." }
                         }
                         GreyButton("Pick", Modifier.weight(1f)) {
-                            picking = f; pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            picking = b; pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         }
                     }
                 }

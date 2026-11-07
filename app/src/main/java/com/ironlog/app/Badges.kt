@@ -301,24 +301,42 @@ object Badges {
 
     // ---- Pictures (one per family) ----
 
-    /** A family's picture: one you've made or added (badges/<id>.png in the app's data), else one built in. */
-    fun pictureFile(id: String) = File(Store.dataDir(), "badges/$id.png")
+    /** The picture prompt for a badge: your edited one if you changed it, else the default. */
+    fun prompt(b: Badge): String = runCatching { JSONObject(Store.readFile("badge_prompts.json") ?: "{}").optString(b.id) }.getOrNull()
+        ?.ifBlank { null } ?: defaultPrompt(b)
 
-    /** The picture prompt for a family: your edited one if you changed it, else the default. */
-    fun prompt(f: Family): String = runCatching { JSONObject(Store.readFile("badge_prompts.json") ?: "{}").optString(f.id) }.getOrNull()
-        ?.ifBlank { null } ?: defaultPrompt(f)
-
-    fun setPrompt(f: Family, text: String) {
+    fun setPrompt(b: Badge, text: String) {
         val o = runCatching { JSONObject(Store.readFile("badge_prompts.json") ?: "{}") }.getOrDefault(JSONObject())
-        if (text.isBlank() || text == defaultPrompt(f)) o.remove(f.id) else o.put(f.id, text)
+        if (text.isBlank() || text == defaultPrompt(b)) o.remove(b.id) else o.put(b.id, text)
         Store.writeFile("badge_prompts.json", o.toString())
     }
 
-    fun defaultPrompt(f: Family) =
+    /** How grand each level looks, from a plain bronze medal up to a radiant legendary emblem. */
+    private val LOOKS = listOf(
+        "Level 1 of 8: a simple, plain bronze medallion with a thin rim and minimal detail",
+        "Level 2 of 8: a polished silver medallion with a raised decorative rim and a little engraved detail",
+        "Level 3 of 8: a shining gold medallion framed by a laurel wreath, with finer engraving",
+        "Level 4 of 8: a platinum medallion with teal enamel, small inset gems around the rim and an ornate frame",
+        "Level 5 of 8: a brilliant blue diamond-crystal emblem with faceted gems and small wings spreading from the sides",
+        "Level 6 of 8: a rose-gold champion emblem with pink gems, a crown on top, wings and a soft glow",
+        "Level 7 of 8: a legendary deep-purple emblem with violet gems, large ornate wings, a crown and a cosmic, starry aura",
+        "Level 8 of 8: the ultimate radiant white-gold emblem, intricately detailed, with a halo of light, majestic wings, a jewelled crown and sparkling rays",
+    )
+
+    /** This badge's look: its level spread over the eight looks (a family with fewer levels still ends grand). */
+    fun look(b: Badge): String {
+        val n = b.family.targets.size
+        val i = if (n == 1) 2 else Math.round(b.tier * (LOOKS.size - 1) / (n - 1).toFloat())
+        return LOOKS[i]
+    }
+
+    fun defaultPrompt(b: Badge) =
         "A single achievement badge icon for a weightlifting app, centred and seen straight on, filling most of the square. " +
-            "The badge is a round medallion emblem showing ${f.art}. Style: polished brushed steel and dark gunmetal with glossy " +
-            "enamel accents, crisp bevelled edges, soft studio lighting, bold simple silhouette that reads clearly at small sizes, " +
-            "like a premium mobile game achievement. Neutral silver-grey metal (the app adds a coloured ring for each level), " +
-            "a few accent colours only inside the emblem. Fully transparent background, no shadow under it, no text, no letters, " +
-            "no numbers, no watermark."
+            "The emblem shows ${b.family.art}. ${look(b)}; higher levels look clearly more impressive and detailed than lower ones, " +
+            "keeping the same central design. Style: premium mobile game achievement, glossy metal and enamel, crisp bevelled edges, " +
+            "soft studio lighting, bold simple silhouette that reads clearly at small sizes. Fully transparent background, " +
+            "no shadow under it, no text, no letters, no numbers, no watermark."
+
+    /** A badge's own picture (badges/<family>_<level>.png); without one, its family's picture is used. */
+    fun pictureFile(id: String) = File(Store.dataDir(), "badges/$id.png")
 }
