@@ -325,6 +325,30 @@ object Badges {
         return State(p, earned)
     }
 
+    /** Every family's progress as plain text (Export on the Badges screen), to share and fine-tune the targets. */
+    fun report(s: State): String {
+        val d = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val done = s.progress.workouts
+        val sb = StringBuilder("Loadout badges: ${s.earned.size} of ${all.size} earned · $done workouts logged\n")
+        val days = Store.workouts.value.filter { it.end != null }.minOfOrNull { it.start }
+            ?.let { (System.currentTimeMillis() - it) / 86_400_000L }
+        days?.let { sb.append("Training for $it days\n") }
+        for ((cat, fams) in families.groupBy { it.category }) {
+            sb.append("\n== $cat ==\n")
+            for (f in fams) {
+                val v = f.value(s.progress)
+                sb.append("${f.name} [${f.id}]: ${fmt(v)} ${f.unit}\n")
+                f.targets.indices.forEach { i ->
+                    val b = Badge(f, i)
+                    sb.append("   ${if (b.id in s.earned) "✓" else "·"} ${b.name} – ${fmt(b.target)}")
+                    s.earned[b.id]?.let { sb.append(" (earned ${d.format(java.util.Date(it))})") }
+                    sb.append('\n')
+                }
+            }
+        }
+        return sb.toString()
+    }
+
     /** Badges earned by this workout (shown on its Summary). */
     fun earnedBy(w: Workout, s: State): List<Badge> {
         val end = w.end ?: return emptyList()

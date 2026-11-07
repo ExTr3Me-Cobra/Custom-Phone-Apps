@@ -136,8 +136,17 @@ fun rememberBadges(): Badges.State? {
 fun BadgesScreen() {
     val state = rememberBadges()
     var open by remember { mutableStateOf<Badges.Badge?>(null) }
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        TopBar("Badges")
+        // Export: every badge's progress as text, through the share menu (or copy it).
+        TopBar("Badges", action = "Export") {
+            state?.let { s ->
+                val text = Badges.report(s)
+                context.startActivity(android.content.Intent.createChooser(
+                    android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text),
+                    "Export badge progress"))
+            }
+        }
         if (state == null) { Text("Counting…", color = Sub, modifier = Modifier.padding(16.dp)); return@Column }
         LazyVerticalGrid(GridCells.Adaptive(88.dp), Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
