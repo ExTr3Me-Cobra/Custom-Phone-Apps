@@ -30,6 +30,9 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key as keyOf
 import kotlinx.coroutines.delay
 import java.awt.GraphicsEnvironment
 import java.awt.Point
@@ -71,16 +74,24 @@ private val blankPointer: PointerIcon by lazy {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    // Don't wait for each screen refresh. With screens of different speeds (e.g. a 30 Hz TV next
-    // to 60 Hz monitors) that held drawing to the slowest one. Set MAMMYFRAME_VSYNC=1 to wait again.
-    if (System.getenv("MAMMYFRAME_VSYNC") != "1") System.setProperty("skiko.vsync.enabled", "false")
+    // Drawing waits for each screen refresh (smooth, and no wasted work). MAMMYFRAME_VSYNC=0 turns that off.
+    if (System.getenv("MAMMYFRAME_VSYNC") == "0") System.setProperty("skiko.vsync.enabled", "false")
+    // The drawing library's own frame-rate counter and slow-frame reports, every 10 s, into the log.
+    System.setProperty("skiko.fps.enabled", "true")
+    System.setProperty("skiko.fps.periodSeconds", "10")
+    System.setProperty("skiko.fps.longFrames.show", "true")
+    System.setProperty("skiko.fps.longFrames.millis", "40")
     Log.startup(args)
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
         .onFailure { Log.e("look and feel", it) }
     // Opened by Windows at startup: behave like a photo frame straight away.
     val fromStartup = "--startup" in args
     application {
-        val windowState = rememberWindowState(placement = WindowPlacement.Maximized, size = DpSize(1280.dp, 820.dp))
+        // Open on the screen Mammy Frame was on last time (Windows may otherwise pick another one).
+        val windowState = rememberWindowState(
+            placement = WindowPlacement.Maximized, size = DpSize(1280.dp, 820.dp),
+            position = ScreenMemory.lastPosition() ?: WindowPosition.PlatformDefault,
+        )
         var screen by remember { mutableStateOf(Screen.HOME) }
         // If something goes wrong while drawing: write it in the log and start again from the home
         // screen, instead of closing (gives up if it keeps happening).
@@ -91,7 +102,30 @@ fun main(args: Array<String>) {
             title = "Mammy Frame",
             state = windowState,
             icon = painterResource("icon.png"),
+            onPreviewKeyEvent = { e ->
+                if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) Log.i("Key: ${e.keyOf} on $screen")
+                false
+            },
         ) {
+            // Every window event goes in the log.
+            LaunchedEffect(Unit) {
+                window.addWindowStateListener { e -> Log.i("Window state: ${e.oldState} -> ${e.newState} (placement ${windowState.placement})") }
+                window.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
+                    override fun windowGainedFocus(e: java.awt.event.WindowEvent) = Log.i("Window got focus")
+                    override fun windowLostFocus(e: java.awt.event.WindowEvent) = Log.i("Window lost focus")
+                })
+                window.addComponentListener(object : java.awt.event.ComponentAdapter() {
+                    override fun componentMoved(e: java.awt.event.ComponentEvent) = Log.i("Window moved to ${window.x},${window.y}")
+                    override fun componentResized(e: java.awt.event.ComponentEvent) = Log.i("Window resized to ${window.width}x${window.height}")
+                    override fun componentShown(e: java.awt.event.ComponentEvent) = Log.i("Window shown")
+                    override fun componentHidden(e: java.awt.event.ComponentEvent) = Log.i("Window hidden")
+                })
+                window.addWindowListener(object : java.awt.event.WindowAdapter() {
+                    override fun windowIconified(e: java.awt.event.WindowEvent) = Log.i("Window minimised")
+                    override fun windowDeiconified(e: java.awt.event.WindowEvent) = Log.i("Window restored")
+                    override fun windowClosing(e: java.awt.event.WindowEvent) = Log.i("Window close button pressed")
+                })
+            }
             LaunchedEffect(Unit) {
                 Log.i("Window open: drawing with ${runCatching { window.renderApi }.getOrNull()}, " +
                     "size ${window.width}x${window.height}, vsync ${System.getProperty("skiko.vsync.enabled") ?: "on"}")
@@ -102,14 +136,20 @@ fun main(args: Array<String>) {
                         val m = window.graphicsConfiguration.device.displayMode
                         "${window.graphicsConfiguration.device.iDstring} ${m.width}x${m.height} @ ${m.refreshRate} Hz"
                     }.getOrNull()
-                    if (here != lastScreen) { Log.i("Window is on screen $here"); lastScreen = here }
+                    if (here != lastScreen) {
+                        Log.i("Window is on screen $here")
+                        lastScreen = here
+                        runCatching { ScreenMemory.remember(window.graphicsConfiguration.device.iDstring) }
+                    }
                     delay(5_000)
                 }
             }
             // Photos and the black screen fill the whole screen; the menus are a normal window.
             LaunchedEffect(screen) {
                 val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
-                windowState.placement = if (frame) WindowPlacement.Fullscreen else WindowPlacement.Maximized
+                val want = if (frame) WindowPlacement.Fullscreen else WindowPlacement.Maximized
+                if (windowState.placement != want) Log.i("Window placement: ${windowState.placement} -> $want (for $screen)")
+                windowState.placement = want
                 if (screen == Screen.SLIDESHOW || screen == Screen.BLACK) {
                     // Brought forward by the schedule even if minimised or behind other windows.
                     windowState.isMinimized = false
@@ -257,7 +297,16 @@ private fun App(screen: Screen, setScreen: (Screen) -> Unit, fromStartup: Boolea
                         while (true) {
                             val e = awaitPointerEvent(PointerEventPass.Initial)
                             when (e.type) {
-                                PointerEventType.Press -> { lastTouch = AiRotate.now(); lastMove[0] = lastTouch }
+                                PointerEventType.Press -> {
+                                    lastTouch = AiRotate.now(); lastMove[0] = lastTouch
+                                    val c = e.changes.firstOrNull()
+                                    Log.i("Press ${e.buttons} ${c?.type} at ${c?.position} on $screen")
+                                }
+                                PointerEventType.Release -> {
+                                    val c = e.changes.firstOrNull()
+                                    Log.i("Release ${c?.type} at ${c?.position} on $screen")
+                                }
+                                PointerEventType.Scroll -> Log.i("Scroll on $screen")
                                 PointerEventType.Move -> lastMove[0] = AiRotate.now()
                                 else -> {}
                             }
@@ -338,4 +387,23 @@ private suspend fun measureDrawing(): Pair<Double, Long> {
         if (t - first > 2_000_000_000L) break
     }
     return frames / ((last - first) / 1e9) to worst
+}
+
+/** Which screen Mammy Frame was last on (Windows' name for it, e.g. "\\Display1"). */
+object ScreenMemory {
+    private val file get() = java.io.File(dataDir, "screen.txt")
+
+    fun remember(id: String) = runCatching { if (file.readTextOrNull() != id) file.writeText(id) }
+
+    /** A spot just inside that screen, if it's still connected. */
+    fun lastPosition(): WindowPosition? = runCatching {
+        val id = file.readTextOrNull() ?: return null
+        val device = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.firstOrNull { it.iDstring == id }
+            ?: return null
+        val b = device.defaultConfiguration.bounds
+        Log.i("Opening on the screen used last time: $id")
+        WindowPosition((b.x + 40).dp, (b.y + 40).dp)
+    }.getOrNull()
+
+    private fun java.io.File.readTextOrNull() = if (exists()) readText().trim().ifEmpty { null } else null
 }

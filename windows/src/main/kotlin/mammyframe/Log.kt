@@ -1,29 +1,54 @@
 package mammyframe
 
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
+import java.io.PrintStream
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.lang.management.ManagementFactory
 import java.text.SimpleDateFormat
 import java.util.Date
+import javax.swing.SwingUtilities
 
 /**
- * A diagnostic log in %APPDATA%\MammyFrame\log.txt: what the PC is, errors and crashes, and how
- * smoothly the screen is drawing. "Copy diagnostic log" in the developer settings copies it.
+ * The diagnostic log, %APPDATA%\MammyFrame\log.txt. It records as much as possible:
+ *  - what the PC is (Windows, Java, every screen and its scaling and refresh rate)
+ *  - everything the app or its libraries print (Java, Compose, the drawing library Skiko)
+ *  - every freeze or stutter of the app's main thread over 100 ms, with what it was doing
+ *  - the drawing library's own frame-rate counter and every slow frame
+ *  - every click, key and window event, every screen change
+ *  - memory and Java clean-up (GC) every 30 seconds
+ *  - errors and crashes (and Java's crash report from an earlier run)
+ * Each line is written straight away, so nothing is lost if the app dies.
+ * "Copy diagnostic log" in the developer settings copies it.
  */
 object Log {
-    private val file by lazy { File(dataDir, "log.txt") }
+    val file by lazy { File(dataDir, "log.txt") }
     private val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
-    private const val MAX_BYTES = 400_000L
+    private const val MAX_BYTES = 3_000_000L
+    private var out: PrintStream? = null
+    private var originalOut: PrintStream = System.out
+
+    @Synchronized
+    private fun writer(): PrintStream {
+        out?.let { return it }
+        if (file.length() > MAX_BYTES) {
+            // Keep it from growing forever: keep the newer half.
+            runCatching {
+                val keep = file.readText().takeLast((MAX_BYTES / 2).toInt())
+                file.writeText("…(older lines removed)\n" + keep.substringAfter('\n'))
+            }
+        }
+        return PrintStream(FileOutputStream(file, true), true, "UTF-8").also { out = it }
+    }
 
     @Synchronized
     fun i(msg: String) {
         runCatching {
-            // Keep it small: when it gets big, keep only the newer half.
-            if (file.length() > MAX_BYTES) {
-                val keep = file.readText().takeLast((MAX_BYTES / 2).toInt())
-                file.writeText("…(older lines removed)\n" + keep.substringAfter('\n'))
-            }
-            file.appendText("${time.format(Date())}  $msg\n")
+            val line = "${time.format(Date())}  [${Thread.currentThread().name}] $msg"
+            writer().println(line)
+            writer().flush()
         }
     }
 
@@ -32,46 +57,121 @@ object Log {
         i("ERROR $msg${if (t != null) ": $t\n$trace" else ""}")
     }
 
-    /** Everything worth knowing about this PC, written once at startup. */
+    /** Everything worth knowing about this PC, then start recording everything. Call first thing. */
     fun startup(args: Array<String>) {
         i("================ Mammy Frame ${System.getProperty("jpackage.app-version") ?: "(dev)"} starting, args=${args.toList()}")
         i("Windows: ${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}")
         i("Java: ${System.getProperty("java.vendor")} ${System.getProperty("java.version")}, " +
             "max memory ${Runtime.getRuntime().maxMemory() / 1_048_576} MB, ${Runtime.getRuntime().availableProcessors()} processors")
-        runCatching {
-            java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.forEachIndexed { n, d ->
-                val m = d.displayMode
-                val scale = d.defaultConfiguration.defaultTransform.scaleX
-                i("Screen $n: ${m.width}x${m.height} @ ${m.refreshRate} Hz, scaling ${(scale * 100).toInt()}%")
-            }
-        }.onFailure { e("reading screens", it) }
-        i("Drawing: skiko.renderApi=${System.getProperty("skiko.renderApi") ?: "(default)"}")
+        i("Java options: ${ManagementFactory.getRuntimeMXBean().inputArguments}")
+        i("Program: ${System.getProperty("jpackage.app-path")}, data: ${dataDir.path}")
+        screens("at start")
+        i("Drawing settings: " + listOf("skiko.renderApi", "skiko.vsync.enabled", "skiko.fps.enabled")
+            .joinToString { "$it=${System.getProperty(it) ?: "(default)"}" })
+
+        captureConsole()
         Thread.setDefaultUncaughtExceptionHandler { th, t -> e("uncaught on thread ${th.name}", t) }
-        // A normal close writes this; if a start isn't preceded by it, the app crashed last time.
-        Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing") })
+        Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing (normal close)") })
         crashReports()
+        watchMainThread()
+        watchMemory()
+    }
+
+    fun screens(why: String) = runCatching {
+        java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.forEachIndexed { n, d ->
+            val m = d.displayMode
+            val c = d.defaultConfiguration
+            i("Screen $n ($why): ${d.iDstring} ${m.width}x${m.height} @ ${m.refreshRate} Hz, " +
+                "scaling ${(c.defaultTransform.scaleX * 100).toInt()}%, desktop area ${c.bounds}")
+        }
+    }.onFailure { e("reading screens", it) }
+
+    /** Everything printed to the console by the app or any library goes into the log too. */
+    private fun captureConsole() {
+        originalOut = System.out
+        fun tee(original: PrintStream, tag: String) = PrintStream(object : OutputStream() {
+            private val buf = StringBuilder()
+            override fun write(b: Int) {
+                original.write(b)
+                if (b == '\n'.code) { i("$tag ${buf.toString().trimEnd()}"); buf.setLength(0) } else buf.append(b.toChar())
+            }
+        }, true)
+        System.setOut(tee(System.out, "(printed)"))
+        System.setErr(tee(System.err, "(printed error)"))
     }
 
     /**
-     * If Java itself crashed, it leaves an hs_err_pid*.log file (in the program's folder or the
-     * temp folder). Copy the important part of any new one into this log, once.
+     * Freeze and stutter watch: every 100 ms, check the app's main (screen) thread answers. If it
+     * takes longer than 100 ms, write down how long, and what it was busy doing.
+     */
+    private fun watchMainThread() {
+        var edt: Thread? = null
+        SwingUtilities.invokeLater { edt = Thread.currentThread() }
+        Thread({
+            while (true) {
+                Thread.sleep(100)
+                val asked = System.nanoTime()
+                val answer = java.util.concurrent.atomic.AtomicLong(0L)
+                SwingUtilities.invokeLater { answer.set(System.nanoTime()) }
+                var reported = false
+                while (answer.get() == 0L) {
+                    Thread.sleep(10)
+                    val waited = (System.nanoTime() - asked) / 1_000_000
+                    if (!reported && waited >= 250) {
+                        reported = true
+                        val stack = edt?.stackTrace?.take(25)?.joinToString("\n    at ") ?: "?"
+                        i("STALL: the app's screen thread hasn't answered for $waited ms. It is busy with:\n    at $stack")
+                    }
+                }
+                val took = (answer.get() - asked) / 1_000_000
+                if (took >= 100) i("STUTTER: the screen thread was held up $took ms")
+            }
+        }, "freeze-watch").apply { isDaemon = true; priority = Thread.MAX_PRIORITY }.start()
+    }
+
+    /** Memory and Java clean-up (GC) time, every 30 seconds. */
+    private fun watchMemory() {
+        Thread({
+            var lastGcMs = 0L
+            var lastGcCount = 0L
+            while (true) {
+                Thread.sleep(30_000)
+                val rt = Runtime.getRuntime()
+                val gcs = ManagementFactory.getGarbageCollectorMXBeans()
+                val gcMs = gcs.sumOf { it.collectionTime.coerceAtLeast(0) }
+                val gcCount = gcs.sumOf { it.collectionCount.coerceAtLeast(0) }
+                i("Memory: ${(rt.totalMemory() - rt.freeMemory()) / 1_048_576} MB used of ${rt.totalMemory() / 1_048_576} MB, " +
+                    "clean-ups in last 30 s: ${gcCount - lastGcCount} taking ${gcMs - lastGcMs} ms, " +
+                    "threads: ${Thread.activeCount()}")
+                lastGcMs = gcMs; lastGcCount = gcCount
+            }
+        }, "memory-watch").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * If Java itself crashed, it leaves an hs_err_pid*.log file. Copy the important part of any
+     * new one into this log, once.
      */
     private fun crashReports() = runCatching {
         val seenFile = File(dataDir, "crashes-seen.txt")
         val seen = runCatching { seenFile.readLines().toSet() }.getOrDefault(emptySet())
+        val app = System.getProperty("jpackage.app-path")?.let { File(it).parentFile }
         val places = listOfNotNull(
-            System.getProperty("user.dir"), System.getProperty("java.io.tmpdir"),
-            System.getProperty("jpackage.app-path")?.let { File(it).parent }, dataDir.path,
-        ).map(::File).distinct()
+            dataDir, File(System.getProperty("user.dir")), File(System.getProperty("java.io.tmpdir")),
+            app, app?.let { File(it, "app") },
+        ).distinct()
         val found = places.flatMap { d -> d.listFiles { f -> f.name.startsWith("hs_err_pid") && f.name.endsWith(".log") }.orEmpty().toList() }
             .filter { it.path !in seen && System.currentTimeMillis() - it.lastModified() < 14L * 24 * 3600 * 1000 }
         for (f in found) {
             val lines = f.readLines()
-            val important = lines.take(40) + listOf("…") + lines.filter { it.startsWith("Current thread") || it.contains("Problematic frame") || it.startsWith("C  [") || it.startsWith("j  ") }.take(30)
-            i("CRASH REPORT found from an earlier run: ${f.path}\n" + important.joinToString("\n"))
+            i("CRASH REPORT from an earlier run (${f.path}):\n" + lines.take(120).joinToString("\n"))
             seenFile.appendText(f.path + "\n")
         }
+        if (found.isEmpty()) i("No Java crash reports found from earlier runs.")
     }.onFailure { e("looking for crash reports", it) }
+
+    /** Opens the folder with the log in File Explorer. */
+    fun openFolder() = runCatching { java.awt.Desktop.getDesktop().open(dataDir) }.onFailure { e("opening the log folder", it) }
 
     fun text(): String = runCatching { file.readText() }.getOrDefault("(no log yet)")
 
@@ -79,6 +179,12 @@ object Log {
     fun report(extra: String): String = buildString {
         append("Mammy Frame diagnostic log\n")
         append(extra).append("\n\n")
-        append(text().takeLast(60_000))
+        // The last two runs (e.g. one that crashed and the one after it), at most ~150 KB.
+        val all = text()
+        val marker = "================ Mammy Frame"
+        val last = all.lastIndexOf(marker)
+        val before = if (last > 0) all.lastIndexOf(marker, last - 1) else -1
+        val from = (if (before >= 0) before else maxOf(last, 0)).let { all.lastIndexOf('\n', it).coerceAtLeast(0) }
+        append(all.substring(from).takeLast(150_000))
     }
 }

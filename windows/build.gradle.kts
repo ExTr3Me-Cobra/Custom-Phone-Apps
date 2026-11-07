@@ -38,7 +38,8 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "mammyframe.MainKt"
-        jvmArgs += listOf("-Xmx2g")
+        // If Java itself ever crashes, its report goes next to the program (the log picks it up next time).
+        jvmArgs += listOf("-Xmx2g", "-XX:ErrorFile=\$APPDIR/hs_err_pid%p.log")
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "Mammy Frame"

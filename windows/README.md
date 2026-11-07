@@ -29,8 +29,11 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
 - While it's showing photos or the black screen, the PC won't sleep or turn the screen off.
   While Ai Rotate is checking, the PC won't sleep.
 - Settings and Ai Rotate's list are kept in `%APPDATA%\MammyFrame`.
-- **Copy diagnostic log** (developer settings) measures how smoothly the screen draws for 2 seconds,
-  then copies the log (PC details, errors, folder steps) to the clipboard, ready to paste.
+- **Copy diagnostic log** (developer settings) copies the last two runs from the log; **Open log folder**
+  shows the whole file (`%APPDATA%\MammyFrame\log.txt`). The log records the PC and every screen,
+  everything printed by the app and its libraries, every freeze or stutter over 100 ms with what
+  the app was doing, frame rate every 10 s and slow frames, every click / key / window event and
+  screen change, memory every 30 s, errors, and Java crash reports from earlier runs.
 
 ## Build
 `.github/workflows/build-mammy-frame-windows.yml` builds it on a Windows machine whenever

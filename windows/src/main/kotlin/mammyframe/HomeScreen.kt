@@ -139,6 +139,9 @@ fun HomeScreen(
                         OutlinedButton(onClick = { onCopyLog(); note = "Measuring, then copying the diagnostic log…" }) {
                             Text("Copy diagnostic log", fontSize = 16.sp)
                         }
+                        OutlinedButton(onClick = { Log.i("Home: Open log folder"); Log.openFolder() }) {
+                            Text("Open log folder", fontSize = 16.sp)
+                        }
                     }
                 }
             }
