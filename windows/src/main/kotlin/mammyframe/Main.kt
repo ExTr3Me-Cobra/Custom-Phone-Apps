@@ -79,13 +79,18 @@ private val blankPointer: PointerIcon by lazy {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    // The AI helper program (started by Ai Rotate): no window, just answers.
+    if ("--ai-worker" in args) WorkerEngine.runWorker()
+    // Prefer the graphics card over the processor's built-in graphics (both exist on many desktops;
+    // drawing on the built-in one and showing on the card's screens is slow).
+    if (System.getProperty("skiko.directx.gpu.priority") == null) System.setProperty("skiko.directx.gpu.priority", "discrete")
     // Drawing waits for each screen refresh (smooth, and no wasted work). MAMMYFRAME_VSYNC=0 turns that off.
     if (System.getenv("MAMMYFRAME_VSYNC") == "0") System.setProperty("skiko.vsync.enabled", "false")
-    // The drawing library's own frame-rate counter and slow-frame reports, every 10 s, into the log.
+    // The drawing library's own frame-rate counter, every 10 s, into the log.
     System.setProperty("skiko.fps.enabled", "true")
     System.setProperty("skiko.fps.periodSeconds", "10")
-    System.setProperty("skiko.fps.longFrames.show", "true")
-    System.setProperty("skiko.fps.longFrames.millis", "40")
+    // (No "long frame" reports: they count idle time between redraws as long frames, which is noise.
+    // Real hold-ups are caught by the freeze watch.)
     Log.startup(args)
     runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
         .onFailure { Log.e("look and feel", it) }
@@ -137,7 +142,15 @@ fun main(args: Array<String>) {
             }
             LaunchedEffect(Unit) {
                 Log.i("Window open: drawing with ${runCatching { window.renderApi }.getOrNull()}, " +
-                    "size ${window.width}x${window.height}, vsync ${System.getProperty("skiko.vsync.enabled") ?: "on"}")
+                    "size ${window.width}x${window.height}, vsync ${System.getProperty("skiko.vsync.enabled") ?: "on"}, " +
+                    "GPU preference ${System.getProperty("skiko.directx.gpu.priority")}")
+                // Which graphics card is actually drawing (written once it has drawn something).
+                delay(1500)
+                fun findLayer(c: java.awt.Component): org.jetbrains.skiko.SkiaLayer? =
+                    c as? org.jetbrains.skiko.SkiaLayer ?: (c as? java.awt.Container)?.components?.firstNotNullOfOrNull(::findLayer)
+                runCatching { findLayer(window)?.renderInfo?.trim()?.replace("\n", " | ") }
+                    .onSuccess { Log.i("Drawing details: ${it ?: "(not found)"}") }
+                    .onFailure { Log.e("reading drawing details", it) }
                 // Which screen the window is on (and how fast that screen refreshes), whenever it changes.
                 var lastScreen: String? = null
                 while (true) {
@@ -311,6 +324,8 @@ private fun App(
     }
 
     val scope = rememberCoroutineScope()
+    // The pointer handler below lives for the whole app; this keeps it seeing the current screen.
+    val currentScreen = androidx.compose.runtime.rememberUpdatedState(screen)
 
     // ---- Automatic test (build machine only): every screen, a real click, screenshots, timings.
     LaunchedEffect(Unit) {
@@ -372,6 +387,14 @@ private fun App(
             recs.sortedBy { it.name }.forEach { r ->
                 Log.i("AUTOTEST   ${r.name}: AI ${r.fix}° (${(r.certainty * 100).toInt()}%) ${AiRotate.kind(r, st.threshold)}, applied ${r.applied}°, tag now ${Photos.exifOrientation(java.io.File(r.path))}")
             }
+            // If the test asked the AI helper to crash on one photo: the check must have carried on,
+            // with that photo sent to review.
+            System.getenv("MAMMYFRAME_TEST_CRASH_ON")?.let { name ->
+                val r = recs.find { it.name == name }
+                if (System.getProperty("jpackage.app-path") == null) Log.i("AUTOTEST (no helper program here, crash test skipped)")
+                else if (r == null || r.certainty != 0f) { notFull += "AI helper crash on $name wasn't recovered from"; Log.i("AUTOTEST PROBLEM: AI helper crash on $name wasn't recovered from ($r)") }
+                else Log.i("AUTOTEST AI helper crash on $name was recovered from: photo sent to review, check carried on")
+            }
             shot("ai-rotate-done")
             setScreen(Screen.REVIEW); mustBeFull("review"); shot("review")
             setScreen(Screen.ROTATE); delay(500)
@@ -421,13 +444,13 @@ private fun App(
                                 PointerEventType.Press -> {
                                     lastTouch = AiRotate.now(); lastMove[0] = lastTouch
                                     val c = e.changes.firstOrNull()
-                                    Log.i("Press ${e.buttons} ${c?.type} at ${c?.position} on $screen")
+                                    Log.i("Press ${e.buttons} ${c?.type} at ${c?.position} on ${currentScreen.value}")
                                 }
                                 PointerEventType.Release -> {
                                     val c = e.changes.firstOrNull()
-                                    Log.i("Release ${c?.type} at ${c?.position} on $screen")
+                                    Log.i("Release ${c?.type} at ${c?.position} on ${currentScreen.value}")
                                 }
-                                PointerEventType.Scroll -> Log.i("Scroll on $screen")
+                                PointerEventType.Scroll -> Log.i("Scroll on ${currentScreen.value}")
                                 PointerEventType.Move -> lastMove[0] = AiRotate.now()
                                 else -> {}
                             }

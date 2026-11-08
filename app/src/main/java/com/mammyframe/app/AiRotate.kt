@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -408,7 +409,9 @@ object AiRotate {
                 d.setTargetSize(OrientationModel.RESIZE, OrientationModel.RESIZE)
             }
         }.getOrNull() ?: return null
-        val result = withContext(Dispatchers.Default) {
+        // Not cancellable: if checking is stopped, this photo finishes first, so the AI is never
+        // closed while it's still working (that could crash the AI library).
+        val result = withContext(NonCancellable + Dispatchers.Default) {
             try { model.predict(square) } finally { square.recycle() }
         }
         val method = when (f.mime) {

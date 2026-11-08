@@ -62,6 +62,8 @@ jobs:
           $exe = Get-ChildItem -Path "$env:LOCALAPPDATA", "$env:ProgramFiles" -Recurse -Filter "Mammy Frame.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $exe) { throw "Installed Mammy Frame.exe not found" }
           "Installed at $($exe.FullName)"
+          # Also prove an AI crash is survived: the AI helper is told to crash on one test photo.
+          $env:MAMMYFRAME_TEST_CRASH_ON = "p12.jpg"
           $app = Start-Process -FilePath $exe.FullName -ArgumentList "--autotest", "$out", "$env:GITHUB_WORKSPACE\windows\testdata" -PassThru
           if (-not $app.WaitForExit(540000)) { $app.Kill(); "The app didn't finish in time" }
           "App finished with code $($app.ExitCode)"

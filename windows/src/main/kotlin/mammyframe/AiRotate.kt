@@ -306,7 +306,7 @@ object AiRotate {
 
     private suspend fun scan(folder: String) {
         ensureLoaded()
-        var model: OrientationModel? = null
+        var engine: AiEngine? = null
         val started = now()
         _status.update { it.copy(startedAt = started, toAnalyze = 0, analyzed = 0, analyzeStartedAt = 0L) }
         var analyzed = 0
@@ -328,8 +328,16 @@ object AiRotate {
                 val known = records[f.path]
                 if (known == null || known.modified != f.modified || known.size != f.size) {
                     if (known != null) backupFile(f.path).delete()
-                    if (model == null) model = withContext(Dispatchers.Default) { OrientationModel.open() }
-                    val rec = analyze(model, f, folder)
+                    // The AI runs in its own helper program when installed, so an AI crash can't take the app down.
+                    if (engine == null) engine = System.getProperty("jpackage.app-path")?.let { WorkerEngine(it) } ?: InProcessEngine()
+                    // One photo at a time; a photo that can't be read or checked doesn't stop the rest.
+                    val rec = try {
+                        engine.check(File(f.path))?.let { a -> recFor(f, folder, a) }
+                    } catch (e: AiCrashed) {
+                        recFor(f, folder, AiAnswer(Photos.exifOrientation(File(f.path)), 0, 0f)) // goes to review
+                    } catch (e: Exception) {
+                        Log.e("couldn't check ${f.path}", e); null
+                    }
                     if (rec != null) {
                         put(rec)
                         writeFile(rec)
@@ -345,7 +353,8 @@ object AiRotate {
         } catch (e: Throwable) {
             _status.update { it.copy(message = "Something went wrong while checking: ${e.message ?: e.javaClass.simpleName}") }
         } finally {
-            model?.close()
+            // Only closed once the photo being checked is finished (checks run on this same thread).
+            runCatching { engine?.close() }
             _status.update {
                 it.copy(running = false, lastRunMs = now() - started, lastRunAnalyzed = analyzed, lastRunTotal = total,
                     lastRunFinished = finished, lastRunEndedAt = System.currentTimeMillis())
@@ -355,20 +364,13 @@ object AiRotate {
         }
     }
 
-    private suspend fun analyze(model: OrientationModel, f: PhotoFile, folder: String): Rec? {
-        val file = File(f.path)
-        val exif = Photos.exifOrientation(file)
-        // Read at about twice the AI's size, put the right way up for its camera tag, then squash to 416x416.
-        val img = Photos.read(file, OrientationModel.RESIZE * 2) ?: return null
-        val (flip, rot) = Orientation.toFlipRotate(exif)
-        val square = Photos.scaleTo(Photos.transform(img, flip, rot), OrientationModel.RESIZE, OrientationModel.RESIZE)
-        val result = withContext(Dispatchers.Default) { model.predict(square) }
+    private fun recFor(f: PhotoFile, folder: String, a: AiAnswer): Rec {
         val method = when (f.ext) {
             "jpg", "jpeg" -> Method.EXIF
             "png", "bmp" -> Method.PIXELS
             else -> Method.APP
         }
-        return Rec(f.path, folder, f.name, f.ext, f.modified, f.size, exif, result.fixCw, result.certainty, method = method)
+        return Rec(f.path, folder, f.name, f.ext, f.modified, f.size, a.exif, a.fixCw, a.certainty, method = method)
     }
 
     // ---------------------------------------------------------------- writing the files
