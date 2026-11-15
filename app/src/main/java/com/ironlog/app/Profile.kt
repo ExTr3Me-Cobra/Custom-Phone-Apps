@@ -298,6 +298,9 @@ fun SettingsScreen() {
             Text("Recycle Bin", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("Deleted routines, workouts, exercises and pictures wait here for 30 days, so you can put them back.", color = Sub, fontSize = 13.sp)
             RecycleBinButton()
+            Spacer(4)
+            Text("Import from the Hevy app", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            GreyButton("Import Hevy App data (.csv)") { import.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }
             // Backup and restore results show briefly at the bottom of the screen instead of staying on the page.
             LaunchedEffect(message) { message?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() } }
             val info = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull() }
