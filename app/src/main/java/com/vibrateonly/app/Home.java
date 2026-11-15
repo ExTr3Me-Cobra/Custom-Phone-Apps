@@ -141,31 +141,61 @@ final class Home {
     private static final String KEY_LAST_CHECK = "home_last_check";
     private static LocationCallback backup;
 
+    /** Within this far of home's edge (about a mile), checks are frequent; further away they space out. */
+    private static final float NEAR_M = 1609f;
+    /** Fast enough to stay ahead of highway speed (about 70 mph) while far away. */
+    private static final float FAST_MPS = 31f;
+    private static long currentInterval;
+
     /**
-     * A second, independent way to notice leaving and getting home: a location reading every
-     * couple of minutes (or after moving ~50 m), compared with the home spot. Android's area
-     * watching can be slow or unavailable on some phones; this catches what it misses.
+     * How often to check, from how far you were from home at the last reading: about every minute within a mile of
+     * home (so leaving or getting back is noticed within about 2 minutes), and further out only as often as needed
+     * to catch you before you can reach that mile at highway speed (at most every 15 minutes).
+     */
+    private static long intervalFor(Context c) {
+        SharedPreferences p = Prefs.get(c);
+        if (!p.contains(KEY_LAST_DISTANCE)) return 60_000L;
+        float beyond = p.getFloat(KEY_LAST_DISTANCE, 0f) - Prefs.homeRadius(c) - NEAR_M;
+        if (beyond <= 0) return 60_000L;
+        long ms = (long) (beyond / FAST_MPS * 1000);
+        return Math.max(120_000L, Math.min(900_000L, ms));
+    }
+
+    /**
+     * A second, independent way to notice leaving and getting home: location readings compared with the home spot.
+     * Android's area watching can be slow or unavailable on some phones; this catches what it misses. It uses
+     * Wi-Fi and cell towers rather than GPS (much less battery, and still accurate enough near home), and how
+     * often it checks depends on how far away you are (see [intervalFor]).
      */
     @SuppressLint("MissingPermission")
     static synchronized void startBackup(Context c) {
         Context app = c.getApplicationContext();
-        if (backup != null) return;
-        boolean fast = Prefs.fastCheck(app);
-        // Fast: GPS every ~20 s (or after moving 15 m). Normal: low-power, every ~2 minutes.
-        LocationRequest request = fast
-                ? new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 20_000L)
-                        .setMinUpdateIntervalMillis(10_000L)
-                        .setMinUpdateDistanceMeters(15f)
-                        .build()
-                : new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 120_000L)
-                        .setMinUpdateIntervalMillis(30_000L)
-                        .setMinUpdateDistanceMeters(40f)
-                        .build();
+        long interval = intervalFor(app);
+        if (backup != null && interval == currentInterval) return;
+        stopBackup(app);
+        currentInterval = interval;
+        LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, interval)
+                .setMinUpdateIntervalMillis(Math.min(interval, 30_000L))
+                // Readings are batched up to the interval, so the phone can stay asleep in between.
+                .setMaxUpdateDelayMillis(interval)
+                .build();
         backup = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult result) {
                 Location loc = result.getLastLocation();
-                if (loc != null) checkLocation(app, loc, "backup check");
+                if (loc == null) return;
+                // Near home but the reading is too rough to judge (no Wi-Fi around): one quick GPS fix instead.
+                if (loc.hasAccuracy() && loc.getAccuracy() > 400f && currentInterval <= 60_000L) {
+                    try {
+                        LocationServices.getFusedLocationProviderClient(app)
+                                .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                                .addOnSuccessListener(fix -> { if (fix != null) checkLocation(app, fix, "GPS check"); });
+                    } catch (SecurityException ignored) { }
+                    return;
+                }
+                checkLocation(app, loc, "backup check");
+                // Closer or further away now: check more or less often.
+                if (intervalFor(app) != currentInterval) startBackup(app);
             }
         };
         try {
@@ -180,6 +210,7 @@ final class Home {
         if (backup == null) return;
         LocationServices.getFusedLocationProviderClient(c.getApplicationContext()).removeLocationUpdates(backup);
         backup = null;
+        currentInterval = 0;
     }
 
     /** Compares a location with home and switches the mode if you've clearly left or come back. */

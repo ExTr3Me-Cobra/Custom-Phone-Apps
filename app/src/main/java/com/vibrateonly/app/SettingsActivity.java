@@ -87,16 +87,10 @@ public class SettingsActivity extends Activity {
                     "Off: no notification at all. Vibrate Only still stays running through its "
                             + "button listener (which Android keeps on), with the same keep-awake and checks.",
                     Prefs.READY_NOTIFICATION, true);
-            toggle("Keep the processor awake",
-                    "Never lets the phone fully sleep, so location checks aren't delayed while it's "
-                            + "locked. Uses more battery.",
-                    Prefs.KEEP_AWAKE, true);
         }
-        toggle("Fast home checking",
-                "Checks your location with GPS about every 20 seconds (or after moving 15 m) instead "
-                        + "of every 2 minutes, so leaving and getting home are noticed sooner. Uses "
-                        + "more battery.",
-                Prefs.FAST_CHECK, true);
+        content.addView(text("Home checks pace themselves: about every minute within a mile of home (so leaving "
+                + "or getting back is noticed within about 2 minutes), less often the further away you are. They use "
+                + "Wi-Fi and cell towers rather than GPS to save battery.", 14));
         content.addView(text("Tip: also set Settings → Battery → Background usage limits so Vibrate "
                 + "Only is under \"Never auto sleeping apps\".", 14));
 

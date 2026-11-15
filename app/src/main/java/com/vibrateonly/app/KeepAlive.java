@@ -23,7 +23,8 @@ public class KeepAlive extends Service {
     private static final String CHANNEL = "ready";
     private static final String CHANNEL_HIDDEN = "ready_hidden";
     private static final int ID = 7;
-    private static final long WATCH_MS = 60_000L;
+    /** How often to make sure the home check is still running (it adjusts its own pace in between). */
+    private static final long WATCH_MS = 15 * 60_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private PowerManager.WakeLock wakeLock;

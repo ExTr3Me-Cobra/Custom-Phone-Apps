@@ -72,7 +72,7 @@ final class Prefs {
 
     /** Never let the processor fully sleep (fastest reactions, more battery). */
     static boolean keepAwake(Context c) {
-        return get(c).getBoolean(KEEP_AWAKE, true);
+        return false; // Removed: it kept the phone from ever sleeping. Checks now space themselves out instead.
     }
 
     static boolean readyNotification(Context c) {
