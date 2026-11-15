@@ -460,7 +460,14 @@ fun OneRmTestScreen(id: String) {
             // Developer trial: standard vs personal 1 Rep Max estimate, above the next set to do.
             val est = if (p.dev1rm && !squeeze && !reps) remember(workouts, id) { Personal1Rm.estimate(id, workouts, p) } else null
             val next = OneRm.rows.indexOfFirst { !it.done }
+            // Your last 1 Rep Max test of this exercise: its numbers show greyed out in the boxes (only here, not in workouts).
+            val lastTest = remember(workouts, id) { Stats.sessions(id, workouts.filter { it.test }).lastOrNull() }
+            val prevSets = lastTest?.sets.orEmpty()
+            lastTest?.let { t ->
+                Text("Greyed-out numbers: your last test (${Units.date(t.workout.start)})", color = Sub, fontSize = 12.sp, modifier = Modifier.quakeRattle(rattle, 6))
+            }
             OneRm.rows.forEachIndexed { i, s ->
+                val pv = prevSets.getOrNull(i)
                 if (est != null && i == next) PersonalEstimateCard(est, s.weight, Standards.stackFactor(id))
                 val k = "$id:$i:$refresh"
                 // Ticking a set plays the effect picked in developer settings (it finishes even if you untick straight away).
@@ -474,14 +481,14 @@ fun OneRmTestScreen(id: String) {
                 val tickColor by animateColorAsState(if (s.done) Green else Card2, tween(160), label = "tick")
                 Row(Modifier.quakeRattle(rattle, 7 + i).tickRow(tfx), verticalAlignment = Alignment.CenterVertically) {
                     Text("${i + 1}", Modifier.weight(0.6f), color = Sub)
-                    if (!reps) NumField(Units.weight(s.weight), "0", "$k:w", Modifier.weight(1.4f).padding(end = 6.dp), outlined = true) { v ->
+                    if (!reps) NumField(Units.weight(s.weight), pv?.weight?.let { Units.weight(it) } ?: "0", "$k:w", Modifier.weight(1.4f).padding(end = 6.dp), outlined = true) { v ->
                         OneRm.rows[i] = OneRm.rows[i].copy(weight = v.toDoubleOrNull()?.let(Units::fromShown))
                     }
                     if (squeeze) Text(when (Standards.hands(OneRm.rows)[i]) { true -> "Right"; false -> "Left"; null -> "Warm-up" }, Modifier.weight(1.2f), color = Sub)
-                    else if (timed) NumField(s.seconds?.toString() ?: "", "0", "$k:s", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
+                    else if (timed) NumField(s.seconds?.toString() ?: "", pv?.seconds?.toString() ?: "0", "$k:s", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
                         OneRm.rows[i] = OneRm.rows[i].copy(seconds = v.toIntOrNull())
                     }
-                    else NumField(s.reps?.toString() ?: "", "0", "$k:r", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
+                    else NumField(s.reps?.toString() ?: "", pv?.reps?.toString() ?: "0", "$k:r", Modifier.weight(1.2f).padding(end = 6.dp), KeyboardType.Number, outlined = true) { v ->
                         OneRm.rows[i] = OneRm.rows[i].copy(reps = v.toIntOrNull())
                     }
                     Row(Modifier.weight(1.2f), verticalAlignment = Alignment.CenterVertically) {

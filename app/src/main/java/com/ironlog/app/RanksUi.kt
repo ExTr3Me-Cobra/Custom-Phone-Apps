@@ -324,6 +324,7 @@ private fun GripTestButton() {
 fun RankUpOverlay() {
     val c = Ranks.celebrations.firstOrNull() ?: return
     if (c.down) { RankDownView(c); return }
+    if (c.title == "Overall rank") { OverallRankUpView(c); return }
     val context = LocalContext.current
     val pop = remember(c) { Animatable(0f) }
     val burst = remember(c) { Animatable(0f) }
@@ -550,3 +551,98 @@ fun NameText(
 
 /** Kept outside the screen so the muscle-group list is still open when you come back from an exercise. */
 private val homeRanksOpen = mutableStateOf(false)
+
+/**
+ * Your overall rank going up: a bigger moment than one exercise's. A flash, confetti raining down, a glowing ring
+ * pulsing behind a larger badge, a longer buzz, and it stays up longer.
+ */
+@Composable
+private fun OverallRankUpView(c: Ranks.Celebration) {
+    val context = LocalContext.current
+    val pop = remember(c) { Animatable(0f) }
+    val flash = remember(c) { Animatable(1f) }
+    val fall = remember(c) { Animatable(0f) }
+    LaunchedEffect(c) {
+        runCatching {
+            context.getSystemService(android.os.Vibrator::class.java)
+                ?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 80, 70, 80, 70, 80, 120, 400), -1))
+        }
+        kotlinx.coroutines.coroutineScope {
+            launch { flash.animateTo(0f, tween(700)) }
+            launch { pop.animateTo(1f, spring(dampingRatio = 0.38f, stiffness = Spring.StiffnessVeryLow)) }
+            launch { fall.animateTo(1f, tween(6000, easing = LinearEasing)) }
+        }
+        delay(1500)
+        Ranks.celebrations.remove(c)
+    }
+    val spin = rememberInfiniteTransition(label = "overall")
+    val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Restart), label = "angle")
+    val pulse by spin.animateFloat(0f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "pulse")
+    val color = Color(c.tier.color)
+    val gold = Color(0xFFFFD54F)
+    // Confetti: where each piece starts, how fast it falls and sways, its size and colour.
+    val bits = remember(c) {
+        val rnd = kotlin.random.Random(c.hashCode())
+        List(90) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * -0.6f, 0.6f + rnd.nextFloat() * 0.9f, rnd.nextFloat() * 6.28f, 4f + rnd.nextFloat() * 6f, rnd.nextInt(3).toFloat()) }
+    }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f))
+            .clickable(remember { MutableInteractionSource() }, null) { Ranks.celebrations.remove(c) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2, size.height * 0.46f)
+            // The opening flash in the rank's colour.
+            drawRect(color.copy(alpha = 0.55f * flash.value))
+            // Wide turning rays, two layers turning opposite ways.
+            val r = size.maxDimension * 0.7f
+            for (layer in 0..1) rotate(if (layer == 0) angle else -angle * 0.6f, center) {
+                for (i in 0 until 20) {
+                    val a = Math.toRadians(i * 18.0).toFloat()
+                    val a2 = a + if (layer == 0) 0.10f else 0.05f
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(center.x, center.y)
+                        lineTo(center.x + r * cos(a), center.y + r * sin(a))
+                        lineTo(center.x + r * cos(a2), center.y + r * sin(a2))
+                        close()
+                    }
+                    drawPath(path, (if (layer == 0) color else gold).copy(alpha = 0.16f * pop.value))
+                }
+            }
+            // A glowing ring pulsing behind the badge.
+            val ringR = 130.dp.toPx() + pulse * 14.dp.toPx()
+            drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
+                listOf(Color.Transparent, color.copy(alpha = 0.45f * pop.value), Color.Transparent), center, ringR * 1.25f), ringR * 1.25f, center)
+            drawCircle(gold.copy(alpha = 0.7f * pop.value), ringR, center, style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx()))
+            // Confetti raining down.
+            val t = fall.value
+            bits.forEach { b ->
+                val y = (b[1] + t * b[2] * 1.6f) * size.height
+                if (y < -20 || y > size.height + 20) return@forEach
+                val x = b[0] * size.width + sin(b[3] + t * 14f) * 18.dp.toPx()
+                val col = when (b[5].toInt()) { 0 -> color; 1 -> gold; else -> Color.White }
+                rotate(b[3] * 57f + t * 720f * b[2], Offset(x, y)) {
+                    val w = b[4].dp.toPx()
+                    drawRect(col, Offset(x - w / 2, y - w / 4), androidx.compose.ui.geometry.Size(w, w / 2))
+                }
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("OVERALL RANK UP!", color = gold, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.graphicsLayer {
+                    alpha = pop.value.coerceIn(0f, 1f); val s = 1f + pulse * 0.06f; scaleX = s; scaleY = s
+                })
+            Spacer(14)
+            RankBadge(c.tier, 230.dp, Modifier.graphicsLayer {
+                scaleX = pop.value; scaleY = pop.value; rotationZ = (1 - pop.value) * 360f
+            })
+            Spacer(12)
+            Text(c.tier.label, color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
+            Text(topLabel(c.percentile), color = Color.White, fontSize = 20.sp)
+            Spacer(6)
+            Text("Your overall rank across all your lifts", color = Sub, fontSize = 15.sp, textAlign = TextAlign.Center, modifier = Modifier.width(300.dp))
+            Spacer(22)
+            Text("Tap to continue", color = Sub, fontSize = 12.sp)
+        }
+    }
+}
