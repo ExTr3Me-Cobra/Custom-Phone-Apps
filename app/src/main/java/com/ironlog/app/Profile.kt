@@ -285,8 +285,8 @@ fun SettingsScreen() {
                 GreyButton("Save backup now", Modifier.weight(1f)) {
                     if (AutoSave.active().isEmpty()) export.launch("loadout-backup.zip")
                     else {
-                        message = "Saving…"
-                        scope.launch { message = withContext(Dispatchers.IO) { AutoSave.saveNow(context) } }
+                        // Success shows as the "Last saved" times above; only a problem pops up.
+                        scope.launch { message = withContext(Dispatchers.IO) { AutoSave.saveNow(context) }?.takeIf { !it.startsWith("Auto-save complete") } }
                     }
                 }
                 RestoreButton("Restore", Modifier.weight(1f), big = false, show = { message = it },
