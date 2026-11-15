@@ -261,10 +261,11 @@ object Store {
      * Returns how many pictures went in.
      */
     fun writeBackup(out: java.io.OutputStream): Int {
-        // Skip copies of built-in pictures (e.g. from an imported picture pack): the app already has those.
-        fun sameAsBuiltIn(f: File) = f.name in bundled && runCatching {
+        // Skip copies of built-in pictures (e.g. from an imported picture pack): a new install has those already.
+        // Only pictures you've changed (your photos, made or edited ones) are kept.
+        fun sameAsBuiltIn(f: File) = f.name in bundled && (runCatching {
             assets?.open("pictures/" + f.name)?.use { it.readBytes() }?.contentEquals(f.readBytes()) == true
-        }.getOrDefault(false)
+        }.getOrDefault(false) || looksSame(f))
         val pics = imagesDir().listFiles { f -> f.name.endsWith(".jpg") }?.filterNot(::sameAsBuiltIn)?.sortedBy { it.name } ?: emptyList()
         java.util.zip.ZipOutputStream(out).use { zip ->
             zip.putNextEntry(java.util.zip.ZipEntry("backup.json"))
@@ -310,6 +311,39 @@ object Store {
             }
         }
     }.getOrNull()
+
+    // Pictures that look the same as the built-in one (saved again slightly differently), remembered per file.
+    private val sameCache = HashMap<String, Boolean>()
+    private var sameLoaded = false
+
+    /** True when a picture looks the same as its built-in one (small, blurred comparison; re-saving doesn't matter). */
+    private fun looksSame(f: File): Boolean {
+        val cacheFile = File(safeDir, "picture_checks.json")
+        if (!sameLoaded) {
+            sameLoaded = true
+            runCatching { val o = JSONObject(cacheFile.readText()); o.keys().forEach { sameCache[it] = o.getBoolean(it) } }
+        }
+        val key = "${f.name}:${f.length()}:${f.lastModified()}"
+        sameCache[key]?.let { return it }
+        val same = runCatching {
+            fun tiny(b: android.graphics.Bitmap?) = b?.let { android.graphics.Bitmap.createScaledBitmap(it, 24, 24, true) }
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 }
+            val mine = tiny(android.graphics.BitmapFactory.decodeFile(f.path, opts)) ?: return@runCatching false
+            val orig = tiny(assets?.open("pictures/" + f.name)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }) ?: return@runCatching false
+            var diff = 0L
+            for (y in 0 until 24) for (x in 0 until 24) {
+                val a = mine.getPixel(x, y); val b = orig.getPixel(x, y)
+                diff += kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+                    kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+                    kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+            }
+            // Average difference per colour channel: a few levels is re-compression; a different picture is far more.
+            diff / (24.0 * 24 * 3) < 8.0
+        }.getOrDefault(false)
+        sameCache[key] = same
+        runCatching { cacheFile.writeText(JSONObject(sameCache as Map<*, *>).toString()) }
+        return same
+    }
 
     /** The last restore was a full (exact copy) backup: the app restarts to load it. */
     var lastFull = false
