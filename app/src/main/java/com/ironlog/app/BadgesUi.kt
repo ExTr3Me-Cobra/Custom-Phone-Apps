@@ -349,12 +349,18 @@ fun BadgeArtScreen() {
             var n = 0
             context.contentResolver.openOutputStream(uri)!!.use { os ->
                 java.util.zip.ZipOutputStream(os).use { z ->
-                    Badges.pictureFile("x").parentFile?.listFiles { f -> f.name.endsWith(".png") }?.forEach { file ->
-                        z.putNextEntry(java.util.zip.ZipEntry("badges/${file.name}")); file.inputStream().use { it.copyTo(z) }; z.closeEntry(); n++
+                    // Shrunk to 384 px (badges never show bigger than 110 dp), as WebP: small enough to send.
+                    Badges.pictureFile("x").parentFile?.listFiles { f -> f.name.endsWith(".png") }?.sortedBy { it.name }?.forEach { file ->
+                        val full = android.graphics.BitmapFactory.decodeFile(file.path) ?: return@forEach
+                        val small = if (full.width > 384) android.graphics.Bitmap.createScaledBitmap(full, 384, 384 * full.height / full.width, true) else full
+                        z.putNextEntry(java.util.zip.ZipEntry("badges/${file.nameWithoutExtension}.webp"))
+                        small.compress(android.graphics.Bitmap.CompressFormat.WEBP_LOSSY, 92, z)
+                        z.closeEntry(); n++
+                        if (small !== full) small.recycle(); full.recycle()
                     }
                 }
             }
-            "Saved $n badge pictures."
+            "Saved $n badge pictures (small copies, ready to send)."
         }.getOrElse { "Couldn't save: ${it.message}" }
     }
     val missing = remember(v) { Badges.all.filter { !BadgePictures.hasPicture(it.id) } }
@@ -393,7 +399,7 @@ fun BadgeArtScreen() {
                         local = null
                         BadgeGen.start(context, missing.sortedWith(compareBy({ Badges.families.indexOf(it.family) }, { it.tier })))
                     }
-                    GreyButton("Save as zip", Modifier.weight(1f)) { zip.launch("loadout-badges.zip") }
+                    GreyButton("Save as zip", Modifier.weight(1f)) { zip.launch("loadout-badges-small.zip") }
                 }
                 GreyButton("Undo all", Modifier.fillMaxWidth().padding(top = 8.dp), Red) { confirmAll = 1 }
                 status?.let { Text(it, color = Blue, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
