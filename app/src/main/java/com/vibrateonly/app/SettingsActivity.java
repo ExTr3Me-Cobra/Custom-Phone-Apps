@@ -257,6 +257,30 @@ public class SettingsActivity extends Activity {
             });
             content.addView(map);
         }
+        // Home Wi-Fi: the main way to know you're home; location is the double check.
+        java.util.Set<String> wifi = HomeWifi.networks(this);
+        content.addView(bold(wifi.isEmpty() ? "Home Wi-Fi: not set" : "Home Wi-Fi: " + String.join(", ", wifi)));
+        content.addView(text("Connecting to it means you're home. When it drops, Vibrate Only waits 2 minutes, "
+                + "then checks your location: away turns it on; still home (power or internet out) keeps it off and "
+                + "keeps watching until the Wi-Fi is back. Uses almost no battery.", 14));
+        TextView addWifi = link("Use the Wi-Fi I'm on now as home");
+        addWifi.setOnClickListener(v -> {
+            String ssid = HomeWifi.currentSsid(this);
+            if (ssid == null) {
+                Toast.makeText(this, "Connect to your home Wi-Fi first (and allow location).", Toast.LENGTH_LONG).show();
+                return;
+            }
+            HomeWifi.add(this, ssid);
+            Toast.makeText(this, "Home Wi-Fi: " + ssid, Toast.LENGTH_SHORT).show();
+            changed();
+            render();
+        });
+        content.addView(addWifi);
+        if (!wifi.isEmpty()) {
+            TextView clearWifi = link("Forget home Wi-Fi");
+            clearWifi.setOnClickListener(v -> { HomeWifi.clear(this); changed(); render(); });
+            content.addView(clearWifi);
+        }
         choice("Home size",
                 "How far from that spot still counts as being home. Bigger is more reliable "
                         + "(no switching on while you're in the garden); smaller is more exact.",

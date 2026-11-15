@@ -68,7 +68,8 @@ final class Home {
             stopBackup(app);
             return;
         }
-        // Restart the backup check so a change to "fast checking" takes effect.
+        HomeWifi.start(app);
+        // Restart the backup check so a change in settings takes effect.
         stopBackup(app);
         startBackup(app);
         Geofence fence = new Geofence.Builder()
@@ -153,6 +154,7 @@ final class Home {
      * to catch you before you can reach that mile at highway speed (at most every 15 minutes).
      */
     private static long intervalFor(Context c) {
+        if (HomeWifi.checking()) return 60_000L; // home Wi-Fi just dropped: decide quickly
         SharedPreferences p = Prefs.get(c);
         if (!p.contains(KEY_LAST_DISTANCE)) return 60_000L;
         float beyond = p.getFloat(KEY_LAST_DISTANCE, 0f) - Prefs.homeRadius(c) - NEAR_M;
@@ -170,6 +172,8 @@ final class Home {
     @SuppressLint("MissingPermission")
     static synchronized void startBackup(Context c) {
         Context app = c.getApplicationContext();
+        // Home Wi-Fi decides while Wi-Fi is on: location only runs for the double check after it drops.
+        if (HomeWifi.inCharge(app) && !HomeWifi.checking()) { stopBackup(app); return; }
         long interval = intervalFor(app);
         if (backup != null && interval == currentInterval) return;
         stopBackup(app);
@@ -206,6 +210,26 @@ final class Home {
         }
     }
 
+    /** One location check right now (the Wi-Fi double check): Wi-Fi/cell first, GPS if that's too rough. */
+    @SuppressLint("MissingPermission")
+    static void checkNow(Context c) {
+        Context app = c.getApplicationContext();
+        if (!hasLocationPermission(app)) return;
+        try {
+            LocationServices.getFusedLocationProviderClient(app)
+                    .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                    .addOnSuccessListener(loc -> {
+                        if (loc != null && (!loc.hasAccuracy() || loc.getAccuracy() <= 400f)) {
+                            checkLocation(app, loc, "location double check");
+                        } else {
+                            LocationServices.getFusedLocationProviderClient(app)
+                                    .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                                    .addOnSuccessListener(fix -> { if (fix != null) checkLocation(app, fix, "GPS double check"); });
+                        }
+                    });
+        } catch (SecurityException ignored) { }
+    }
+
     static synchronized void stopBackup(Context c) {
         if (backup == null) return;
         LocationServices.getFusedLocationProviderClient(c.getApplicationContext()).removeLocationUpdates(backup);
@@ -230,6 +254,8 @@ final class Home {
             arrived(c, true, how);
         } else if (distance > radius + margin) {
             arrived(c, false, how);
+            // Away is settled: from here, home Wi-Fi (or Android's home area) notices you getting back.
+            if (HomeWifi.checking()) { HomeWifi.settledAway(); stopBackup(c); }
         }
         // In between: not sure yet, leave it as it is.
     }
