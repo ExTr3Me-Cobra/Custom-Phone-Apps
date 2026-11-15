@@ -64,9 +64,9 @@ object Stats {
             if (sets.isEmpty()) null else Session(w, sets)
         }
 
-    /** The sets from the last time this exercise was done. */
+    /** The sets from the last time this exercise was done (in a normal workout: 1 Rep Max tests don't count). */
     fun previous(exId: String, workouts: List<Workout>, exclude: String? = null): List<DoneSet> =
-        sessions(exId, workouts.filter { it.id != exclude }).lastOrNull()?.sets ?: emptyList()
+        sessions(exId, workouts.filter { it.id != exclude && !it.test }).lastOrNull()?.sets ?: emptyList()
 
 
     /** One line in the summary's What improved / What got worse: [label] went from [was] to [now]. */
