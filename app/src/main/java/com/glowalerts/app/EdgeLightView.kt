@@ -131,6 +131,8 @@ class EdgeLightView(context: Context, spec: LightSpec, private val onDone: () ->
     private val ring = Path()
     private val ringRect = RectF()
     private val rotate = Matrix()
+    private var crackShader: Shader? = null
+    private var crackShaderKey: String? = null
     private val line = strokePaint()
     private val glow = strokePaint()
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -496,6 +498,8 @@ class EdgeLightView(context: Context, spec: LightSpec, private val onDone: () ->
         // Lightning from the camera uses the fine-tuned camera position.
         val cx = if (lightning) camX + c.camDx * previewScale() else camX
         val cy = if (lightning) camY + c.camDy * previewScale() else camY
+        // Lines keep apart by about their glow's width, so they never look like they touch.
+        Cracks.clearance = max(6f, c.lineWidthPx * 2.5f)
         val shape = crackShape ?: Cracks.build(
             spec.effect, width.toFloat(), height.toFloat(), c.origin, c.detail, c.fixedSeed ?: seed, cx, cy,
             c.jagged, c.branchLength, c.count, if (lightning) c.landing else Tilt.BOTTOM,
@@ -538,6 +542,18 @@ class EdgeLightView(context: Context, spec: LightSpec, private val onDone: () ->
             path.lineTo(x1 + (pts[i * 4 + 2] - x1) * f, y1 + (pts[i * 4 + 3] - y1) * f)
         }
 
+        // Colours on cracks and lightning: a still gradient outward from where it starts (the spinning one used
+        // round the screen edge looked like it swept from points across the lightning).
+        if (spec.effect == LightEffect.RAINBOW || spec.rainbow || spec.colors.size > 1) {
+            val cols = if (spec.colors.size > 1 && !spec.rainbow) intArrayOf(spec.colors[0], spec.colors[1]) else RAINBOW
+            val key = "${shape.originX},${shape.originY},$width,$height,${cols.joinToString()}"
+            if (key != crackShaderKey) {
+                val r = max(1f, hypot(width.toFloat(), height.toFloat()) * 0.8f)
+                crackShader = RadialGradient(shape.originX, shape.originY, r, cols, null, Shader.TileMode.CLAMP)
+                crackShaderKey = key
+            }
+            for (p in arrayOf(line, glow, dot)) { p.shader = crackShader; p.color = Color.WHITE }
+        }
         val unit = min(width, height).toFloat()
         // The screen "shudders" while the crack runs.
         val quakeMs = if (c.allAtOnce) 450f else spreadMs + 250f

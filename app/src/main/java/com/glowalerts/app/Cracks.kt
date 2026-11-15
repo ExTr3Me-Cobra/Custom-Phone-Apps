@@ -61,7 +61,17 @@ object Cracks {
         return CrackShape(pts, view.dist, view.length, view.level, view.maxDist, o[0], o[1])
     }
 
+    /**
+     * How far apart (in pixels) separate lines must stay, so their glows don't visibly touch. Set from the line
+     * width before building; 0 = only exact crossings are prevented.
+     */
+    @Volatile var clearance = 0f
+
     private class Builder(val w: Float, val h: Float, val rnd: Random, val jag: Float, val branchLen: Float) {
+        val clear = clearance
+        /** Where the crack being grown started: lines may meet there (a branch leaves its parent). */
+        var forkX = Float.NaN
+        var forkY = Float.NaN
         val pts = ArrayList<Float>()
         val dist = ArrayList<Float>()
         val len = ArrayList<Float>()
@@ -104,11 +114,30 @@ object Cracks {
                     if (hit || !checked.add(j)) return@forEach
                     val qx1 = pts[j * 4]; val qy1 = pts[j * 4 + 1]; val qx2 = pts[j * 4 + 2]; val qy2 = pts[j * 4 + 3]
                     if (sharesEnd(x1, y1, x2, y2, qx1, qy1, qx2, qy2)) return@forEach
-                    if (intersect(x1, y1, x2, y2, qx1, qy1, qx2, qy2)) hit = true
+                    if (intersect(x1, y1, x2, y2, qx1, qy1, qx2, qy2)) { hit = true; return@forEach }
+                    // Too close to another line (their glows would touch). Near where this crack leaves its
+                    // parent the lines start together, so only real crossings count there.
+                    if (clear > 0f) {
+                        val nearFork = !forkX.isNaN() && (hypot(x1 - forkX, y1 - forkY) < clear * 2.5f ||
+                            min(hypot(qx1 - forkX, qy1 - forkY), hypot(qx2 - forkX, qy2 - forkY)) < clear * 2.5f)
+                        if (!nearFork && segDist(x1, y1, x2, y2, qx1, qy1, qx2, qy2) < clear) hit = true
+                    }
                 }
             }
             return hit
         }
+
+        private fun pointSeg(px: Float, py: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
+            val dx = bx - ax; val dy = by - ay
+            val l2 = dx * dx + dy * dy
+            val t = if (l2 <= 0f) 0f else (((px - ax) * dx + (py - ay) * dy) / l2).coerceIn(0f, 1f)
+            return hypot(px - (ax + t * dx), py - (ay + t * dy))
+        }
+
+        /** Shortest distance between two segments that don't cross. */
+        private fun segDist(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, dx: Float, dy: Float): Float =
+            min(min(pointSeg(ax, ay, cx, cy, dx, dy), pointSeg(bx, by, cx, cy, dx, dy)),
+                min(pointSeg(cx, cy, ax, ay, bx, by), pointSeg(dx, dy, ax, ay, bx, by)))
 
         private fun sharesEnd(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, dx: Float, dy: Float): Boolean {
             val e = 0.5f
@@ -138,6 +167,8 @@ object Cracks {
             x0: Float, y0: Float, angle: Float, length: Float, d0: Float, lvl: Int,
             branchChance: Float, wobble: Float = 0.55f, tx: Float = Float.NaN, ty: Float = Float.NaN,
         ) {
+            val savedFx = forkX; val savedFy = forkY
+            forkX = x0; forkY = y0
             var x = x0
             var y = y0
             var a = angle
@@ -177,6 +208,7 @@ object Cracks {
                 travelled += s
                 if (lvl < 2 && rnd.nextFloat() < branchChance) forks += floatArrayOf(x, y, a, d)
             }
+            forkX = savedFx; forkY = savedFy
             for (f in forks) {
                 val side = if (rnd.nextBoolean()) 1 else -1
                 val ba = f[2] + side * (0.4f + rnd.nextFloat() * 0.7f)
