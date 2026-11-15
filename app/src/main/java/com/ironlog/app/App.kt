@@ -346,7 +346,7 @@ private fun ResumeBar(pad: Modifier = Modifier) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("Workout in progress", fontWeight = FontWeight.Bold)
-            Text(a.name + if (a.start > 0) " · " + Units.clock(now - a.start) else " · not started", color = Sub, fontSize = 13.sp)
+            Text(a.name + if (a.start > 0) " · " + Units.clock(Workouts.activeMs(a, now)) + (if (a.paused > 0) " (paused)" else "") else " · not started", color = Sub, fontSize = 13.sp)
         }
         Text("Resume", color = Blue, fontWeight = FontWeight.Bold)
     }

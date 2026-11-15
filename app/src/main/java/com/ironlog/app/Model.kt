@@ -124,6 +124,8 @@ data class Workout(
     /** In progress: when you last touched the app (0 = not yet), and the idle time beyond 5 minutes left out so far. */
     val lastTouch: Long = 0,
     val idleMs: Long = 0,
+    /** Paused by hand: when the pause began (0 = running). */
+    val paused: Long = 0,
 ) {
     val doneSets get() = items.sumOf { i -> i.sets.count { it.done } }
 }
@@ -231,7 +233,7 @@ object Json {
     fun doneSet(o: JSONObject) = DoneSet(o.optDoubleOrNull("w"), o.optIntOrNull("r"), o.optIntOrNull("t"), o.optDoubleOrNull("d"), o.optBoolean("f"), o.optBoolean("x"), o.optBoolean("wu"))
 
     fun workout(w: Workout) = JSONObject().put("id", w.id).putOpt2("routine", w.routineId).put("name", w.name)
-        .put("start", w.start).putOpt2("end", w.end).putOpt2("bw", w.bodyweight).apply { if (w.test) put("test", true); if (w.end == null) { put("lt", w.lastTouch); put("idle", w.idleMs) } }
+        .put("start", w.start).putOpt2("end", w.end).putOpt2("bw", w.bodyweight).apply { if (w.test) put("test", true); if (w.end == null) { put("lt", w.lastTouch); put("idle", w.idleMs); if (w.paused > 0) put("pz", w.paused) } }
         .put("items", JSONArray(w.items.map { i ->
             JSONObject().put("ex", i.exerciseId).put("rest", i.restSec).put("note", i.note).put("sets", JSONArray(i.sets.map(::doneSet)))
         }))
@@ -243,7 +245,7 @@ object Json {
         },
         o.optDoubleOrNull("bw"),
         o.optBoolean("test"),
-        o.optLong("lt"), o.optLong("idle"),
+        o.optLong("lt"), o.optLong("idle"), o.optLong("pz"),
     )
 
     /** A time: milliseconds, or (in imports) a local date-time like "2026-10-12T20:12" read in the phone's time zone. */

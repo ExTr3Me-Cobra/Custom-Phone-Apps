@@ -96,7 +96,50 @@ object Workouts {
         val last = if (w.lastTouch > 0) w.lastTouch else w.start
         // Saved at most every 10 s (a gap that short can't be over 5 minutes).
         if (at - last < 10_000) return
-        Store.setActive(w.copy(lastTouch = at, idleMs = w.idleMs + (at - last - IDLE_MS).coerceAtLeast(0)))
+        Store.setActive(settle(w, at))
+    }
+
+    /** Ends the idle stretch at [at]: any of it beyond 5 minutes is left out. (While paused nothing is counted anyway.) */
+    private fun settle(w: Workout, at: Long): Workout {
+        if (w.paused > 0) return w.copy(lastTouch = at)
+        val last = if (w.lastTouch > 0) w.lastTouch else w.start
+        return w.copy(lastTouch = at, idleMs = w.idleMs + (at - last - IDLE_MS).coerceAtLeast(0))
+    }
+
+    /** The workout's time so far, as Duration shows it: pauses and idle time beyond 5 minutes are left out. */
+    fun activeMs(w: Workout, now: Long = System.currentTimeMillis()): Long {
+        if (w.paused > 0) return (w.paused - w.start - w.idleMs).coerceAtLeast(0)
+        val last = if (w.lastTouch > 0) w.lastTouch else w.start
+        return (now - w.start - w.idleMs - (now - last - IDLE_MS).coerceAtLeast(0)).coerceAtLeast(0)
+    }
+
+    fun pause(c: Context) {
+        val w = Store.active.value ?: return
+        if (w.paused > 0) return
+        val now = System.currentTimeMillis()
+        Store.setActive(settle(w, now).copy(paused = now))
+        WorkoutService.start(c)
+    }
+
+    fun resume(c: Context) {
+        val w = Store.active.value ?: return
+        if (w.paused == 0L) return
+        val now = System.currentTimeMillis()
+        Store.setActive(w.copy(idleMs = w.idleMs + (now - w.paused), paused = 0, lastTouch = now))
+        WorkoutService.start(c)
+    }
+
+    /** Sets Duration to [ms] (it carries on from there, or stays paused). */
+    fun setDuration(c: Context, ms: Long) {
+        val w0 = Store.active.value ?: return
+        val now = System.currentTimeMillis()
+        val w = settle(w0, now)
+        val ref = if (w.paused > 0) w.paused else now
+        val target = ms.coerceAtLeast(0)
+        val idle = ref - w.start - target
+        // Longer than it's been: the workout started earlier.
+        Store.setActive(if (idle >= 0) w.copy(idleMs = idle) else w.copy(start = ref - target, idleMs = 0))
+        WorkoutService.start(c)
     }
 
     /** Stopwatches running in timed sets: set key -> when it started. Kept here so scrolling away doesn't stop them. */
@@ -166,14 +209,13 @@ object Workouts {
     /** Ends the workout: keeps finished sets, saves it, and returns its id (null if nothing was done). */
     fun finish(c: Context): String? {
         val now = System.currentTimeMillis()
-        touched(now)
         val w = Store.active.value ?: return null
         Rest.stop(c)
         WorkoutService.stop(c)
         timers.clear(); chimed.clear()
         val kept = w.copy(
-            // The saved duration is your active time: long idle stretches (beyond 5 minutes each) are left out.
-            end = (now - w.idleMs).coerceAtLeast(w.start),
+            // The saved duration is your active time, as Duration showed it: pauses and long idle stretches left out.
+            end = w.start + activeMs(w, now), lastTouch = 0, idleMs = 0, paused = 0,
             items = w.items.map { it.copy(sets = it.sets.filter { s -> s.done }) }.filter { it.sets.isNotEmpty() },
         )
         Store.setActive(null)
@@ -213,6 +255,7 @@ fun ActiveWorkoutScreen() {
     var restFor by remember { mutableStateOf<Int?>(null) }
     var confirmEnd by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var editDuration by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         // Top bar: calculator, reference weights, Discard, Finish (the phone's back button leaves the workout running).
@@ -221,6 +264,7 @@ fun ActiveWorkoutScreen() {
         // The four buttons spaced evenly across the bar.
         Row(Modifier.fillMaxWidth().background(Card).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            PausePlayButton(w.paused > 0) { if (w.paused > 0) Workouts.resume(context) else Workouts.pause(context) }
             CalculatorIcon(Modifier.clip(RoundedCornerShape(8.dp)).clickable { calc = true }.padding(horizontal = 8.dp, vertical = 6.dp))
             ReferenceButton()
             OutlinedLabel("Discard", 17.sp, Modifier.clip(RoundedCornerShape(8.dp)).background(Red).clickable { confirmDiscard = true }
@@ -229,11 +273,17 @@ fun ActiveWorkoutScreen() {
                 .padding(horizontal = 18.dp, vertical = 9.dp), bg = Blue)
         }
         if (calc) Calculator { calc = false }
+        if (editDuration) DurationDialog(Workouts.activeMs(w, now), { Workouts.setDuration(context, it); editDuration = false }) { editDuration = false }
         // Stats row with the live muscle map (tap it to enlarge).
         val doneSets = w.items.flatMap { it.sets }.filter { it.done }
         val load = remember(w.items) { Stats.muscleLoad(w) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1.2f)) { Text("Duration", color = Sub, fontSize = 13.sp); Text(Units.clock(now - w.start), color = Blue, fontSize = 17.sp) }
+            // Tap to change it.
+            val paused = w.paused > 0
+            Column(Modifier.weight(1.2f).clip(RoundedCornerShape(6.dp)).clickable { editDuration = true }) {
+                Text(if (paused) "Paused" else "Duration", color = if (paused) Color(0xFFFFB020) else Sub, fontSize = 13.sp)
+                Text(Units.clock(Workouts.activeMs(w, now)), color = if (paused) Color(0xFFFFB020) else Blue, fontSize = 17.sp)
+            }
             StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1.3f))
             StatBox("Sets", "${doneSets.size}", Modifier.weight(0.8f))
             StatBox("Reps", "${doneSets.sumOf { it.reps ?: 0 }}", Modifier.weight(0.8f))
@@ -491,6 +541,8 @@ private fun ActiveSetRow(ex: Exercise, i: Int, n: Int, s: DoneSet, prev: DoneSet
                                     done = true,
                                 )
                             }
+                            // Paused and you finished a set: you forgot to unpause, so it carries on.
+                            Workouts.resume(context)
                             Store.active.value?.let { Ranks.onSetDone(it, ex.id) }
                             // Two quick thuds, like a 1 Rep Max set.
                             ringScope.launch {
@@ -715,4 +767,61 @@ fun HeatKey(modifier: Modifier = Modifier) {
         HSpacer(6)
         Text("Hardest", color = Sub, fontSize = 12.sp)
     }
+}
+
+/** The workout's pause / carry on button (top left). */
+@Composable
+fun PausePlayButton(paused: Boolean, onClick: () -> Unit) {
+    Box(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+            val c = if (paused) Color(0xFFFFB020) else Color.White
+            if (paused) {
+                // Play: a triangle.
+                val p = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(size.width * 0.2f, size.height * 0.08f); lineTo(size.width * 0.92f, size.height / 2); lineTo(size.width * 0.2f, size.height * 0.92f); close()
+                }
+                drawPath(p, c)
+            } else {
+                // Pause: two bars.
+                val bw = size.width * 0.26f
+                drawRoundRect(c, androidx.compose.ui.geometry.Offset(size.width * 0.14f, size.height * 0.08f), androidx.compose.ui.geometry.Size(bw, size.height * 0.84f), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
+                drawRoundRect(c, androidx.compose.ui.geometry.Offset(size.width * 0.60f, size.height * 0.08f), androidx.compose.ui.geometry.Size(bw, size.height * 0.84f), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
+            }
+        }
+    }
+}
+
+/** Change the workout's duration: hours, minutes and seconds. */
+@Composable
+fun DurationDialog(ms: Long, onSet: (Long) -> Unit, onDismiss: () -> Unit) {
+    val total = ms / 1000
+    var h by remember { mutableStateOf((total / 3600).toString()) }
+    var m by remember { mutableStateOf((total / 60 % 60).toString()) }
+    var s by remember { mutableStateOf((total % 60).toString()) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Duration") },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                @Composable
+                fun box(v: String, label: String, set: (String) -> Unit) = Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    androidx.compose.material3.OutlinedTextField(v, { t -> set(t.filter { it.isDigit() }.take(3)) }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center, color = Color.White))
+                    Text(label, color = Sub, fontSize = 12.sp)
+                }
+                box(h, "hours") { h = it }
+                Text(":", fontSize = 22.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                box(m, "minutes") { m = it }
+                Text(":", fontSize = 22.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                box(s, "seconds") { s = it }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onSet(((h.toLongOrNull() ?: 0) * 3600 + (m.toLongOrNull() ?: 0) * 60 + (s.toLongOrNull() ?: 0)) * 1000)
+            }) { Text("Set", color = Blue) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = Sub) } },
+    )
 }
