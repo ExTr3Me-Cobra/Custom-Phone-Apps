@@ -498,8 +498,10 @@ class EdgeLightView(context: Context, spec: LightSpec, private val onDone: () ->
         // Lightning from the camera uses the fine-tuned camera position.
         val cx = if (lightning) camX + c.camDx * previewScale() else camX
         val cy = if (lightning) camY + c.camDy * previewScale() else camY
-        // Lines keep apart by about their glow's width, so they never look like they touch.
-        Cracks.clearance = max(6f, c.lineWidthPx * 2.5f)
+        // Lines keep apart: mostly a fixed gap (10 dp, scaled for the small preview), plus a little more for thicker
+        // lines so their glows don't touch.
+        val dp = context.resources.displayMetrics.density
+        Cracks.clearance = CRACK_GAP_DP * dp * previewScale() + c.lineWidthPx * 0.6f
         val shape = crackShape ?: Cracks.build(
             spec.effect, width.toFloat(), height.toFloat(), c.origin, c.detail, c.fixedSeed ?: seed, cx, cy,
             c.jagged, c.branchLength, c.count, if (lightning) c.landing else Tilt.BOTTOM,
@@ -834,6 +836,8 @@ class EdgeLightView(context: Context, spec: LightSpec, private val onDone: () ->
     }
 
     companion object {
+        /** The set gap between separate lightning / crack lines (dp); thicker lines add a little to it. */
+        const val CRACK_GAP_DP = 10f
         private val RAINBOW = intArrayOf(
             0xFFFF3B30.toInt(), 0xFFFF9500.toInt(), 0xFFFFCC00.toInt(), 0xFF34C759.toInt(),
             0xFF00C7BE.toInt(), 0xFF007AFF.toInt(), 0xFFAF52DE.toInt(), 0xFFFF2D55.toInt(), 0xFFFF3B30.toInt(),
