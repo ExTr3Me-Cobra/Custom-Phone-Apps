@@ -92,7 +92,7 @@ class BadgeGenService : Service() {
             BadgeGen.message = "Making ${b.name}… (${BadgeGen.done} of ${BadgeGen.total} done)"
             update(b.name)
             val hadOthers = b.tier == 0 && b.family.targets.indices.drop(1).any { BadgePictures.hasPicture("${b.family.id}_${it + 1}") }
-            val err = makeBadgePicture(b)
+            val err = makeBadgePicture(b, applicationContext)
             if (err == null) {
                 BadgeGen.done++
                 // Remade level I of a set that has other levels (and isn't redoing them already): offer to redo them.

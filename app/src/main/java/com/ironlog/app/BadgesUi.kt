@@ -78,12 +78,15 @@ object BadgePictures {
         val stamp = if (f.exists()) f.lastModified() else -1L
         cache[id]?.takeIf { it.first == stamp }?.let { return it.second }
         val img = runCatching {
-            if (f.exists()) BitmapFactory.decodeFile(f.path)
-            else c.assets.open("badges/$id.png").use { BitmapFactory.decodeStream(it) }
+            if (f.exists()) BitmapFactory.decodeFile(f.path) else builtIn(c, id)
         }.getOrNull()?.asImageBitmap()
         cache[id] = stamp to img
         return img
     }
+
+    /** The picture that comes with the app (assets/badges), or null. */
+    fun builtIn(c: android.content.Context, id: String): Bitmap? =
+        runCatching { c.assets.open("badges/$id.webp").use { BitmapFactory.decodeStream(it) } }.getOrNull()
 
     /** Earlier pictures of a badge, newest last (Undo steps back through them, then to the emoji). */
     private fun historyDir(id: String) = java.io.File(Badges.pictureFile(id).parentFile, "history/$id")
@@ -269,11 +272,15 @@ fun BadgesEarned(w: Workout) {
  * Makes a badge's picture with OpenAI (transparent PNG). Level I from its prompt; higher levels from level I's picture
  * plus the prompt (an image edit), so the whole set shares one design. Null when it worked, else why not.
  */
-suspend fun makeBadgePicture(b: Badges.Badge): String? = withContext(Dispatchers.IO) {
+suspend fun makeBadgePicture(b: Badges.Badge, c: android.content.Context? = null): String? = withContext(Dispatchers.IO) {
     val p = Store.profile.value
     if (p.apiKey.isBlank()) return@withContext "Add your OpenAI API key in Settings first."
     val first = Badges.pictureFile("${b.family.id}_1")
-    if (b.tier > 0 && !first.exists()) return@withContext "Make ${b.family.name} I first – the other levels are based on it."
+    // Level I: your own picture, else the built-in one.
+    val firstBytes = if (first.exists()) first.readBytes() else c?.let { BadgePictures.builtIn(it, "${b.family.id}_1") }?.let { bmp ->
+        java.io.ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+    if (b.tier > 0 && firstBytes == null) return@withContext "Make ${b.family.name} I first – the other levels are based on it."
     runCatching {
         val model = p.imageModel.ifBlank { "gpt-image-1" }
         val conn: HttpURLConnection
@@ -301,7 +308,7 @@ suspend fun makeBadgePicture(b: Badges.Badge): String? = withContext(Dispatchers
                 field("background", "transparent"); field("output_format", "png")
                 if (p.imageQuality.isNotBlank()) field("quality", p.imageQuality)
                 os.write("--$boundary\r\nContent-Disposition: form-data; name=\"image\"; filename=\"level1.png\"\r\nContent-Type: image/png\r\n\r\n".toByteArray())
-                os.write(first.readBytes())
+                os.write(firstBytes!!)
                 os.write("\r\n--$boundary--\r\n".toByteArray())
             }
         }
@@ -363,7 +370,10 @@ fun BadgeArtScreen() {
             "Saved $n badge pictures (small copies, ready to send)."
         }.getOrElse { "Couldn't save: ${it.message}" }
     }
-    val missing = remember(v) { Badges.all.filter { !BadgePictures.hasPicture(it.id) } }
+    // Pictures that come with the app.
+    val builtInIds = remember { context.assets.list("badges").orEmpty().map { it.substringBeforeLast('.') }.toSet() }
+    // No picture at all: neither your own nor a built-in one.
+    val missing = remember(v) { Badges.all.filter { !BadgePictures.hasPicture(it.id) && it.id !in builtInIds } }
 
     redoSet?.let { f ->
         androidx.compose.material3.AlertDialog(
@@ -407,7 +417,7 @@ fun BadgeArtScreen() {
             items(Badges.all.size) { i ->
                 val b = Badges.all[i]
                 var text by remember(b.id) { mutableStateOf(Badges.prompt(b)) }
-                val firstMissing = b.tier > 0 && !BadgePictures.hasPicture("${b.family.id}_1")
+                val firstMissing = b.tier > 0 && !BadgePictures.hasPicture("${b.family.id}_1") && !builtInIds.contains("${b.family.id}_1")
                 val prev = remember(b.id, v) { BadgePictures.previous(b.id) }
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(b.name, fontWeight = FontWeight.Bold)
