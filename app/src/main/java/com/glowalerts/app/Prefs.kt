@@ -292,6 +292,51 @@ object Prefs {
         it.copy(recentColors = (listOf(color) + it.recentColors.filter { c -> c != color }).take(12))
     }
 
+    /** Every setting as a small JSON file (Save settings), keeping each value's type. */
+    fun exportJson(context: Context): String {
+        val o = org.json.JSONObject().put("app", "Glow Alerts").put("version", 1)
+        val values = org.json.JSONObject()
+        for ((k, v) in prefs(context).all) {
+            val e = org.json.JSONObject()
+            when (v) {
+                is Boolean -> e.put("t", "b").put("v", v)
+                is Int -> e.put("t", "i").put("v", v)
+                is Long -> e.put("t", "l").put("v", v)
+                is Float -> e.put("t", "f").put("v", v.toDouble())
+                is String -> e.put("t", "s").put("v", v)
+                is Set<*> -> e.put("t", "set").put("v", org.json.JSONArray(v.map { it.toString() }))
+                else -> continue
+            }
+            values.put(k, e)
+        }
+        return o.put("settings", values).toString(1)
+    }
+
+    /** Puts saved settings back (Restore settings). False if the file isn't a Glow Alerts settings file. */
+    fun importJson(context: Context, text: String): Boolean {
+        val o = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return false
+        if (o.optString("app") != "Glow Alerts") return false
+        val values = o.optJSONObject("settings") ?: return false
+        val ed = prefs(context).edit().clear()
+        for (k in values.keys()) {
+            val e = values.getJSONObject(k)
+            when (e.optString("t")) {
+                "b" -> ed.putBoolean(k, e.getBoolean("v"))
+                "i" -> ed.putInt(k, e.getInt("v"))
+                "l" -> ed.putLong(k, e.getLong("v"))
+                "f" -> ed.putFloat(k, e.getDouble("v").toFloat())
+                "s" -> ed.putString(k, e.getString("v"))
+                "set" -> { val a = e.getJSONArray("v"); ed.putStringSet(k, (0 until a.length()).map { a.getString(it) }.toSet()) }
+            }
+        }
+        ed.commit()
+        // Read them back in and pass them on, as if they'd been changed on screen.
+        loaded = false
+        val s = get(context)
+        update(context) { s }
+        return true
+    }
+
     private inline fun <reified E : Enum<E>> SharedPreferences.enum(key: String, default: E): E =
         runCatching { enumValueOf<E>(getString(key, null) ?: return default) }.getOrDefault(default)
 

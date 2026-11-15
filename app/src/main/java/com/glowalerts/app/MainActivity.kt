@@ -16,6 +16,7 @@ import android.provider.Settings as AndroidSettings
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -358,6 +359,9 @@ private fun Screen() {
             AppList(s.excluded) { pkg, on -> set { it.copy(excluded = if (on) it.excluded - pkg else it.excluded + pkg) } }
         }
 
+        Fold("Save & restore settings", summary = "Keep your settings for a reinstall or a new phone") {
+            SettingsBackup()
+        }
         Fold("Recent activity", summary = Log.lines.firstOrNull() ?: "Nothing yet") {
             if (Log.lines.isEmpty()) Note("Nothing yet. New notifications will be listed here with what Glow Alerts did.")
             Log.lines.take(20).forEach {
@@ -380,6 +384,36 @@ private fun Screen() {
                 picking = 0
             },
         )
+    }
+}
+
+/** Save settings to a file (Documents by default) and restore them, e.g. after reinstalling. */
+@Composable
+private fun SettingsBackup() {
+    val context = LocalContext.current
+    val docs = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents")
+    val save = rememberLauncherForActivityResult(object : androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json") {
+        override fun createIntent(c: Context, input: String) = super.createIntent(c, input).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docs)
+    }) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching { context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Prefs.exportJson(context).toByteArray()) } }.isSuccess
+        android.widget.Toast.makeText(context, if (ok) "Settings saved" else "Couldn't save the settings", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    val restore = rememberLauncherForActivityResult(object : androidx.activity.result.contract.ActivityResultContracts.OpenDocument() {
+        override fun createIntent(c: Context, input: Array<String>) = super.createIntent(c, input).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docs)
+    }) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            Prefs.importJson(context, context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) })
+        }.getOrDefault(false)
+        android.widget.Toast.makeText(context, if (ok) "Settings restored" else "That isn't a Glow Alerts settings file", android.widget.Toast.LENGTH_LONG).show()
+    }
+    Note("Saves every setting (effect, colours, look, when to light up, switched-off apps) to a small file, "
+        + "in Documents unless you pick somewhere else. After reinstalling, tap Restore and pick that file. "
+        + "Permissions (notification access, accessibility) have to be given again after a reinstall.")
+    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { save.launch("glow-alerts-settings.json") }) { Text("Save settings") }
+        OutlinedButton(onClick = { restore.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("Restore settings") }
     }
 }
 
