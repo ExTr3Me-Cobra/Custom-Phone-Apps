@@ -32,6 +32,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -297,10 +298,8 @@ fun SettingsScreen() {
             Text("Recycle Bin", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("Deleted routines, workouts, exercises and pictures wait here for 30 days, so you can put them back.", color = Sub, fontSize = 13.sp)
             RecycleBinButton()
-            Spacer(4)
-            Text("Import from the Hevy app", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            GreyButton("Import Hevy App data (.csv)") { import.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }
-            message?.let { Text(it, color = Blue) }
+            // Backup and restore results show briefly at the bottom of the screen instead of staying on the page.
+            LaunchedEffect(message) { message?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() } }
             val info = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull() }
             // Tap the build number 10 times quickly to unlock the developer settings.
             var taps by remember { mutableStateOf(0) }
