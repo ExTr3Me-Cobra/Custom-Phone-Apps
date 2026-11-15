@@ -343,31 +343,44 @@ object Badges {
         Store.writeFile("badge_prompts.json", o.toString())
     }
 
-    /** How grand each level looks, from a plain bronze medal up to a radiant legendary emblem. */
+    /** How grand each level looks, matching the rank tiers: wood up to the legend crystal. */
     private val LOOKS = listOf(
-        "Level 1 of 8: a simple, plain bronze medallion with a thin rim and minimal detail",
-        "Level 2 of 8: a polished silver medallion with a raised decorative rim and a little engraved detail",
-        "Level 3 of 8: a shining gold medallion framed by a laurel wreath, with finer engraving",
-        "Level 4 of 8: a platinum medallion with teal enamel, small inset gems around the rim and an ornate frame",
-        "Level 5 of 8: a brilliant blue diamond-crystal emblem with faceted gems and small wings spreading from the sides",
-        "Level 6 of 8: a rose-gold champion emblem with pink gems, a crown on top, wings and a soft glow",
-        "Level 7 of 8: a legendary deep-purple emblem with violet gems, large ornate wings, a crown and a cosmic, starry aura",
-        "Level 8 of 8: the ultimate radiant white-gold emblem, intricately detailed, with a halo of light, majestic wings, a jewelled crown and sparkling rays",
+        "Wood: a carved, polished warm-brown wood medallion with a simple thin rim and minimal detail",
+        "Bronze: a bronze medallion with a raised rim and a little engraved detail",
+        "Silver: a polished silver medallion with a decorative rim and finer engraving",
+        "Gold: a shining gold medallion framed by a laurel wreath, with rich engraving",
+        "Platinum: a platinum medallion with teal enamel, small inset gems around the rim and an ornate frame",
+        "Diamond: a brilliant blue faceted diamond-crystal emblem with sparkling gems and small wings spreading from the sides",
+        "Champion: a glowing rose-pink faceted crystal emblem with gold trim, a crown on top, wings and a soft pink glow",
+        "Legend: a radiant violet-purple faceted crystal emblem with large ornate wings, a jewelled crown and a starry cosmic aura",
     )
 
-    /** This badge's look: its level spread over the eight looks (a family with fewer levels still ends grand). */
-    fun look(b: Badge): String {
+    /**
+     * Which of the eight looks (and ring colours) a badge gets: its level spread over wood to legend, so every
+     * family's top level is legend. A single-level badge is gold.
+     */
+    fun step(b: Badge): Int {
         val n = b.family.targets.size
-        val i = if (n == 1) 2 else Math.round(b.tier * (LOOKS.size - 1) / (n - 1).toFloat())
-        return LOOKS[i]
+        return if (n == 1) 3 else Math.round(b.tier * (LOOKS.size - 1) / (n - 1).toFloat())
     }
 
-    fun defaultPrompt(b: Badge) =
+    fun look(b: Badge): String = LOOKS[step(b)]
+
+    /**
+     * Level I: a picture from scratch. Higher levels: an edit of level I's picture (sent along with the prompt), so
+     * they keep its design and change the material, colour and grandeur.
+     */
+    fun defaultPrompt(b: Badge) = if (b.tier == 0)
         "A single achievement badge icon for a weightlifting app, centred and seen straight on, filling most of the square. " +
-            "The emblem shows ${b.family.art}. ${look(b)}; higher levels look clearly more impressive and detailed than lower ones, " +
-            "keeping the same central design. Style: premium mobile game achievement, glossy metal and enamel, crisp bevelled edges, " +
-            "soft studio lighting, bold simple silhouette that reads clearly at small sizes. Fully transparent background, " +
-            "no shadow under it, no text, no letters, no numbers, no watermark."
+            "The emblem shows ${b.family.art}. Material and style – ${look(b)}. Premium mobile game achievement style, " +
+            "crisp bevelled edges, soft studio lighting, bold simple silhouette that reads clearly at small sizes. " +
+            "Fully transparent background, no shadow under it, no text, no letters, no numbers, no watermark."
+    else
+        "Recreate the attached badge as a higher level of the same badge. Keep its design almost identical: the same " +
+            "emblem, the same composition, shapes, proportions and framing, centred and seen straight on. Change its " +
+            "material and colour to – ${look(b)}. Make it grander than the lower levels with a few added details that " +
+            "suit this level (richer rim, more ornament, more shine), while it stays clearly the same badge. " +
+            "Fully transparent background, no shadow under it, no text, no letters, no numbers, no watermark."
 
     /** A badge's own picture (badges/<family>_<level>.png); without one, its family's picture is used. */
     fun pictureFile(id: String) = File(Store.dataDir(), "badges/$id.png")
