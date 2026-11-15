@@ -631,6 +631,7 @@ fun SummaryScreen(id: String) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(cheer, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp)
             Text("${w.name} · ${Units.date(w.start)}", color = Sub)
+            FeelPanel(w)
             WorkoutStats(w)
             WorkoutHeatmap(w)
             MuscleBreakdown(w)
@@ -825,3 +826,24 @@ fun DurationDialog(ms: Long, onSet: (Long) -> Unit, onDismiss: () -> Unit) {
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = Sub) } },
     )
 }
+
+/** How you felt about a workout: 1–5 stars, tap to set (tap the same star again to clear). */
+@Composable
+fun FeelPanel(w: Workout) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text("How did you feel?", color = Sub, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            for (n in 1..5) {
+                Text(
+                    "★", fontSize = 34.sp, color = if (n <= w.rating) Color(0xFFFFC107) else Color(0xFF48484A),
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                        .clickable { Store.saveWorkout(w.copy(rating = if (w.rating == n) 0 else n)) }.padding(horizontal = 4.dp),
+                )
+            }
+            HSpacer(8)
+            Text(FEELS.getOrElse(w.rating) { "" }, color = if (w.rating > 0) Color.White else Sub, fontSize = 15.sp)
+        }
+    }
+}
+
+private val FEELS = listOf("Not rated", "Felt awful", "Felt bad", "Felt okay", "Felt good", "Felt great")

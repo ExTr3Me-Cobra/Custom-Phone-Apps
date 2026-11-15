@@ -169,6 +169,8 @@ fun WorkoutDetailScreen(id: String) {
             Text(w.name, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text(Units.date(w.start), color = Sub)
             Spacer(10)
+            FeelPanel(w)
+            Spacer(10)
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(16.dp)) {
                 StatBox("Duration", Units.duration((w.end ?: w.start) - w.start), Modifier.weight(1f))
                 StatBox("Volume", "${Units.volume(Stats.volume(w))} ${Units.w}", Modifier.weight(1f))
