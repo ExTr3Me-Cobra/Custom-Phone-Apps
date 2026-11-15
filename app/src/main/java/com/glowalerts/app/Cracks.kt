@@ -72,6 +72,8 @@ object Cracks {
         /** Where the crack being grown started: lines may meet there (a branch leaves its parent). */
         var forkX = Float.NaN
         var forkY = Float.NaN
+        /** The crack being grown's last few segments: it naturally runs right next to those, so they don't count. */
+        var recent = ArrayDeque<Int>()
         val pts = ArrayList<Float>()
         val dist = ArrayList<Float>()
         val len = ArrayList<Float>()
@@ -101,6 +103,8 @@ object Cracks {
             len += hypot(x2 - x1, y2 - y1)
             level += lvl
             cells(x1, y1, x2, y2) { grid.getOrPut(it) { ArrayList() } += i }
+            recent.addLast(i)
+            while (recent.size > 4) recent.removeFirst()
             return true
         }
 
@@ -117,7 +121,7 @@ object Cracks {
                     if (intersect(x1, y1, x2, y2, qx1, qy1, qx2, qy2)) { hit = true; return@forEach }
                     // Too close to another line (their glows would touch). Near where this crack leaves its
                     // parent the lines start together, so only real crossings count there.
-                    if (clear > 0f) {
+                    if (clear > 0f && j !in recent) {
                         val nearFork = !forkX.isNaN() && (hypot(x1 - forkX, y1 - forkY) < clear * 2.5f ||
                             min(hypot(qx1 - forkX, qy1 - forkY), hypot(qx2 - forkX, qy2 - forkY)) < clear * 2.5f)
                         if (!nearFork && segDist(x1, y1, x2, y2, qx1, qy1, qx2, qy2) < clear) hit = true
@@ -168,7 +172,9 @@ object Cracks {
             branchChance: Float, wobble: Float = 0.55f, tx: Float = Float.NaN, ty: Float = Float.NaN,
         ) {
             val savedFx = forkX; val savedFy = forkY
+            val savedRecent = recent
             forkX = x0; forkY = y0
+            recent = ArrayDeque()
             var x = x0
             var y = y0
             var a = angle
@@ -209,6 +215,7 @@ object Cracks {
                 if (lvl < 2 && rnd.nextFloat() < branchChance) forks += floatArrayOf(x, y, a, d)
             }
             forkX = savedFx; forkY = savedFy
+            recent = savedRecent
             for (f in forks) {
                 val side = if (rnd.nextBoolean()) 1 else -1
                 val ba = f[2] + side * (0.4f + rnd.nextFloat() * 0.7f)
