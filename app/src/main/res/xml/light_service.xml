@@ -3,6 +3,7 @@
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeAnnouncement"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:isAccessibilityTool="true"
     android:canRetrieveWindowContent="false"
     android:description="@string/light_description"
     android:notificationTimeout="1000"
