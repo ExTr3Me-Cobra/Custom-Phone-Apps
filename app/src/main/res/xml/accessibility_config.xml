@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:isAccessibilityTool="true"
     android:packageNames="com.screentint.app"
     android:notificationTimeout="100"
     android:description="@string/accessibility_description"
