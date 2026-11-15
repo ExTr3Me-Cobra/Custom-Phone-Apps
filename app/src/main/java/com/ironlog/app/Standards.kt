@@ -509,17 +509,21 @@ object Ranks {
         if (!Standards.covers(exerciseId, p)) return
         val ex = Store.exercise(exerciseId) ?: return
         val after = live(w, p)
+        // Warm-up and working sets don't drop a rank: only once the exercise's last set is ticked does a lower rank show
+        // (your top set usually comes last and would put it straight back).
+        val lastSetDone = w.items.lastOrNull { it.exerciseId == exerciseId }?.sets?.lastOrNull()?.done == true
         after[exerciseId]?.let { a ->
             val was = shownTier[exerciseId] ?: -1
             val t = a.tier.ordinal
             if (holdDowns) heldDowns.removeAll { it.title == ex.name }
             when {
+                t < was && !lastSetDone -> return@let
                 t > was -> celebrations += Celebration(ex.name, if (was < 0) "Ranked!" else "Rank up!", a.tier, a.percentile)
                 t < was && holdDowns -> heldDowns += Celebration(ex.name, "Rank down", a.tier, a.percentile, down = true, from = Tier.entries[was])
                 t < was -> celebrations += Celebration(ex.name, "Rank down", a.tier, a.percentile, down = true, from = Tier.entries[was])
             }
             // A held rank-down keeps the old rank as the one on show, so only a real rise past it pops up.
-            if (!(holdDowns && t < was)) shownTier[exerciseId] = t
+            if (!(holdDowns && t < was) && !(t < was && !lastSetDone)) shownTier[exerciseId] = t
         }
         val o = overallOf(after) ?: return
         val ot = Tier.of(o).ordinal
@@ -527,6 +531,7 @@ object Ranks {
         if (shownOverall >= 0 && ot > shownOverall)
             celebrations += Celebration("Overall rank", "Your overall rank went up!", Tier.of(o), o)
         else if (shownOverall >= 0 && ot < shownOverall) {
+            if (!lastSetDone) return
             val c = Celebration("Overall rank", "Rank down", Tier.of(o), o, down = true, from = Tier.entries[shownOverall])
             if (holdDowns) { heldDowns += c; return } else celebrations += c
         }
