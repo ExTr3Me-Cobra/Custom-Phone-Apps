@@ -126,7 +126,7 @@ fun BadgeIcon(b: Badges.Badge, earned: Boolean, size: Dp, modifier: Modifier = M
     val v = BadgePictures.version
     val img = if (usePicture) picture else remember(b.id, v) { BadgePictures.get(c, b) }
     val ring = badgeColor(b)
-    val grey = remember { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }
+    val silhouette = remember { ColorFilter.tint(Color(0xFF5A5A5E), androidx.compose.ui.graphics.BlendMode.SrcIn) }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Box(
             Modifier.size(size).clip(CircleShape).background(Card2)
@@ -134,7 +134,8 @@ fun BadgeIcon(b: Badges.Badge, earned: Boolean, size: Dp, modifier: Modifier = M
                 .alpha(if (earned) 1f else 0.45f),
             contentAlignment = Alignment.Center,
         ) {
-            if (img != null) Image(img, b.name, Modifier.size(size * 0.82f), colorFilter = if (earned) null else grey)
+            // Not earned yet: just its silhouette.
+            if (img != null) Image(img, b.name, Modifier.size(size * 0.82f), colorFilter = if (earned) null else silhouette)
             else Text(b.family.emoji, fontSize = (size.value * 0.42f).sp)
         }
         if (b.family.targets.size > 1) Text(
@@ -157,7 +158,7 @@ fun rememberBadges(): Badges.State? {
     }.value
 }
 
-/** All badges, by category: earned in colour, the rest greyed out. Tap one for its requirement and progress. */
+/** All badges, a heading per set: earned in colour, the rest as silhouettes. Tap one for its requirement and progress. */
 @Composable
 fun BadgesScreen() {
     val state = rememberBadges()
@@ -179,11 +180,12 @@ fun BadgesScreen() {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text("${state.earned.size} of ${Badges.all.size} earned", color = Sub, modifier = Modifier.padding(horizontal = 4.dp))
             }
-            for ((cat, fams) in Badges.families.groupBy { it.category }) {
+            // One heading per badge set.
+            for (f in Badges.families) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(cat, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                    Text(f.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
                 }
-                for (f in fams) for (i in f.targets.indices) {
+                for (i in f.targets.indices) {
                     val b = Badges.Badge(f, i)
                     item(key = b.id) {
                         Column(Modifier.clip(RoundedCornerShape(10.dp)).clickable { open = b }.padding(4.dp),
@@ -324,44 +326,26 @@ fun BadgeArtScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val v = BadgePictures.version
-    var status by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf<String?>(null) }
+    var local by remember { mutableStateOf<String?>(null) }
+    // Work runs in the background (keeps going if you leave); its progress shows here.
+    val status = local ?: BadgeGen.message
+    val busy = BadgeGen.current
     var picking by remember { mutableStateOf<Badges.Badge?>(null) }
-    // Level I was just remade: offer to redo the rest of its set to match.
-    var redoSet by remember { mutableStateOf<Badges.Family?>(null) }
     var confirmAll by remember { mutableIntStateOf(0) }
-
-    suspend fun make(list: List<Badges.Badge>): Int {
-        var made = 0
-        for (b in list) {
-            busy = b.id; status = "Making ${b.name}… ($made done)"
-            val err = makeBadgePicture(b)
-            if (err != null) { status = "${b.name}: $err"; if (err.contains("API key")) break } else made++
-        }
-        busy = null
-        return made
-    }
-    fun generate(b: Badges.Badge) {
-        if (busy != null) return
-        val hadOthers = b.tier == 0 && b.family.targets.indices.drop(1).any { BadgePictures.hasPicture("${b.family.id}_${it + 1}") }
-        scope.launch {
-            busy = b.id
-            val err = makeBadgePicture(b); busy = null
-            status = err?.let { "${b.name}: $it" } ?: "Made ${b.name}."
-            if (err == null && hadOthers) redoSet = b.family
-        }
-    }
+    // Level I was just remade: offer to redo the rest of its set to match.
+    val redoSet = BadgeGen.askRedo?.let { id -> Badges.families.firstOrNull { it.id == id } }
+    fun generate(b: Badges.Badge) { local = null; BadgeGen.start(context, listOf(b)) }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val b = picking ?: return@rememberLauncherForActivityResult
         picking = null
         if (uri != null) runCatching {
             context.contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it) }?.let { BadgePictures.save(b.id, it) }
-        }.onFailure { status = "Couldn't use that picture: ${it.message}" }
+        }.onFailure { local = "Couldn't use that picture: ${it.message}" }
     }
     val zip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        status = runCatching {
+        local = runCatching {
             var n = 0
             context.contentResolver.openOutputStream(uri)!!.use { os ->
                 java.util.zip.ZipOutputStream(os).use { z ->
@@ -377,13 +361,13 @@ fun BadgeArtScreen() {
 
     redoSet?.let { f ->
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { redoSet = null },
+            onDismissRequest = { BadgeGen.askRedo = null },
             text = { Text("Redo the other ${f.name} levels so they match the new ${f.name} I?") },
             confirmButton = { androidx.compose.material3.TextButton(onClick = {
-                redoSet = null
-                scope.launch { val n = make(f.targets.indices.drop(1).map { Badges.Badge(f, it) }); status = "Redid $n ${f.name} levels." }
+                BadgeGen.askRedo = null
+                BadgeGen.start(context, f.targets.indices.drop(1).map { Badges.Badge(f, it) })
             }) { Text("Redo them", color = Blue) } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { redoSet = null }) { Text("Keep them", color = Sub) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { BadgeGen.askRedo = null }) { Text("Keep them", color = Sub) } },
         )
     }
     if (confirmAll > 0) androidx.compose.material3.AlertDialog(
@@ -391,7 +375,7 @@ fun BadgeArtScreen() {
         text = { Text(if (confirmAll == 1) "Undo all? Every badge picture you've made goes, and all badges show their emoji again."
             else "Are you sure? This deletes all ${Badges.all.size - missing.size} badge pictures and their history. It can't be undone.") },
         confirmButton = { androidx.compose.material3.TextButton(onClick = {
-            if (confirmAll == 1) confirmAll = 2 else { confirmAll = 0; BadgePictures.undoAll(); status = "All badges are back to their emoji." }
+            if (confirmAll == 1) confirmAll = 2 else { confirmAll = 0; BadgeGen.stop(context); BadgePictures.undoAll(); local = "All badges are back to their emoji." }
         }) { Text(if (confirmAll == 1) "Yes, undo all" else "Delete them all", color = Red) } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmAll = 0 }) { Text("Cancel", color = Sub) } },
     )
@@ -403,11 +387,11 @@ fun BadgeArtScreen() {
                 Text("Make level I of a set first; the higher levels are made from it (same design, grander material). " +
                     "${Badges.all.size - missing.size} of ${Badges.all.size} done.", color = Sub, fontSize = 13.sp)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GreyButton(if (busy != null) "Making…" else "Generate all ${missing.size} missing", Modifier.weight(1f)) {
-                        if (busy != null) return@GreyButton
+                    GreyButton(if (BadgeGen.running) "Stop making" else "Generate all ${missing.size} missing", Modifier.weight(1f)) {
+                        if (BadgeGen.running) { BadgeGen.stop(context); return@GreyButton }
                         // Each set's level I first, then the rest of that set from it.
-                        val order = missing.sortedWith(compareBy({ Badges.families.indexOf(it.family) }, { it.tier }))
-                        scope.launch { val n = make(order); status = "Made $n pictures." }
+                        local = null
+                        BadgeGen.start(context, missing.sortedWith(compareBy({ Badges.families.indexOf(it.family) }, { it.tier })))
                     }
                     GreyButton("Save as zip", Modifier.weight(1f)) { zip.launch("loadout-badges.zip") }
                 }
@@ -441,10 +425,10 @@ fun BadgeArtScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         GreyButton("Copy", Modifier.weight(1f)) {
                             val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Badge prompt", text)); status = "Copied the ${b.name} prompt."
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Badge prompt", text)); local = "Copied the ${b.name} prompt."
                         }
                         GreyButton(if (busy == b.id) "Making…" else "Generate", Modifier.weight(1.3f), if (firstMissing) Sub else Color.White) {
-                            if (firstMissing) status = "Make ${b.family.name} I first." else generate(b)
+                            if (firstMissing) local = "Make ${b.family.name} I first." else generate(b)
                         }
                         GreyButton("Pick", Modifier.weight(1f)) {
                             picking = b; pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))

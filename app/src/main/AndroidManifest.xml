@@ -50,6 +50,15 @@
         </service>
 
         <service
+            android:name=".BadgeGenService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Makes badge pictures with OpenAI in the background, as asked by the user" />
+        </service>
+
+        <service
             android:name=".WorkoutService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
