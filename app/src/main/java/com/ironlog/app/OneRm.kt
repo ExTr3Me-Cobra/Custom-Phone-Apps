@@ -416,6 +416,7 @@ fun OneRmTestScreen(id: String) {
                 Bullet("2–3 minutes of easy movement to get warm (a brisk walk, bike or rower).")
                 notes?.prep?.firstOrNull { !it.contains(Regex("min\\b|cardio|bike|rowing|row\\b|walk|jog", RegexOption.IGNORE_CASE)) }?.let { Bullet(it) }
                 if (squeeze) {
+                    Bullet("Finger placement: wrap your whole hand around the handle, with the middle of your fingers (between the first and second knuckles) on the bar you squeeze and the base of your palm against the other side. Your second knuckles should bend to about a right angle. If only your fingertips reach, the handle is too wide; if your fingers curl right around, it's too narrow – move it a notch.")
                     Bullet("One practice squeeze with each hand at about half effort.")
                     Bullet("Then 3 all-out squeezes with each hand, resting about a minute before using the same hand again.")
                 } else if (timed) {
