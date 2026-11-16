@@ -8,7 +8,6 @@ import android.media.AudioManager;
 final class Prefs {
     static final String FILE = "vibrate_only";
 
-    static final String SCREEN_OFF = "screen_off";
     static final String COMBO_MS = "combo_ms";
     static final String MUTE_MEDIA = "mute_media";
     static final String VIB_STRENGTH = "vib_strength";
@@ -29,10 +28,6 @@ final class Prefs {
 
     static SharedPreferences get(Context c) {
         return c.getApplicationContext().getSharedPreferences(FILE, Context.MODE_PRIVATE);
-    }
-
-    static boolean screenOff(Context c) {
-        return get(c).getBoolean(SCREEN_OFF, true);
     }
 
     static int comboWindowMs(Context c) {

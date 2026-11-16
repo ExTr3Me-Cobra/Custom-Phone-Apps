@@ -35,7 +35,6 @@ public class VibrateOnlyService extends AccessibilityService {
     private static final long REMUTE_DELAY_MS = 30_000;
 
     private AudioManager audio;
-    private ScreenOffKeyCatcher screenOffCatcher;
 
     /** Buttons whose press we swallowed, so we also swallow their release and repeats. */
     private final Set<Integer> consumedDown = new HashSet<>();
@@ -56,11 +55,7 @@ public class VibrateOnlyService extends AccessibilityService {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-                screenOffCatcher.enable();
-            } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
-                screenOffCatcher.disable();
-            } else if (AudioManager.RINGER_MODE_CHANGED_ACTION.equals(action)) {
+            if (AudioManager.RINGER_MODE_CHANGED_ACTION.equals(action)) {
                 if (ModeController.isActive(context)
                         && audio.getRingerMode() != AudioManager.RINGER_MODE_VIBRATE) {
                     if (Prefs.keepVibrate(context)) {
@@ -74,14 +69,6 @@ public class VibrateOnlyService extends AccessibilityService {
                     }
                 }
             }
-        }
-    };
-
-    private final AudioManager.OnModeChangedListener audioModeListener = mode -> {
-        if (mode != AudioManager.MODE_NORMAL) {
-            screenOffCatcher.disable();
-        } else if (!isScreenOn()) {
-            screenOffCatcher.enable();
         }
     };
 
@@ -140,18 +127,13 @@ public class VibrateOnlyService extends AccessibilityService {
     protected void onServiceConnected() {
         instance = this;
         audio = getSystemService(AudioManager.class);
-        screenOffCatcher = new ScreenOffKeyCatcher(this, () -> ModeController.buttonsPressed(this));
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_SCREEN_OFF);
-        filter.addAction(Intent.ACTION_SCREEN_ON);
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
-        audio.addOnModeChangedListener(getMainExecutor(), audioModeListener);
         audio.registerAudioDeviceCallback(deviceCallback, handler);
         audio.registerAudioPlaybackCallback(playbackCallback, handler);
 
-        if (!isScreenOn()) screenOffCatcher.enable();
         // Catch up with anything connected or disconnected while the service wasn't running.
         ModeController.setDeviceConnected(this, AudioRouting.mediaDeviceConnected(this));
         ModeController.apply(this);
@@ -161,11 +143,8 @@ public class VibrateOnlyService extends AccessibilityService {
 
     /** Called by the app screens after permissions or settings change. */
     void refresh() {
-        if (isScreenOn() || !Prefs.screenOff(this)) {
-            screenOffCatcher.disable();
-        } else {
-            screenOffCatcher.enable();
-        }
+        // Nothing to update here any more. (The two-button press only works with the screen on: with the screen off,
+        // Android keeps both volume buttons pressed together for its own shortcuts, so no app sees the pair.)
     }
 
     @Override
@@ -173,10 +152,8 @@ public class VibrateOnlyService extends AccessibilityService {
         instance = null;
         if (audio != null) {
             unregisterReceiver(receiver);
-            audio.removeOnModeChangedListener(audioModeListener);
             audio.unregisterAudioDeviceCallback(deviceCallback);
             audio.unregisterAudioPlaybackCallback(playbackCallback);
-            screenOffCatcher.disable();
         }
         handler.removeCallbacks(forwardPending);
         handler.removeCallbacks(resumeAfterDisconnect);

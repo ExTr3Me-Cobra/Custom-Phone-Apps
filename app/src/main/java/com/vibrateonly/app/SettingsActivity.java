@@ -47,10 +47,6 @@ public class SettingsActivity extends Activity {
         content.addView(title);
 
         heading("Button shortcut");
-        toggle("Work with the screen off",
-                "Catch the two-button press while the screen is off. Turn this off if it "
-                        + "causes problems with other apps.",
-                Prefs.SCREEN_OFF, true);
         choice("Press timing",
                 "How close together the two buttons must be pressed. Longer is easier to hit, "
                         + "but single volume presses respond a little slower.",
