@@ -26,6 +26,16 @@ for r in src['rows']:
     d = now.get(e['i'], e['e'] in ('Dumbbell', 'Kettlebell') and not SINGLE.search(r['n']))
     out.append({'i': e['i'], 'lift': r['n'], 'ln': r['n'], 'm': m, 'f': f, 'r': r['u'] == 'reps', 'd': d, 'k': r['k'],
                 'ai': False, 'a': None, 'note': 'Purged dataset: the app\'s standards before October 2026.'})
+# Owner's corrections (Nov 2026). One-arm and two-arm dumbbell preacher curls are the same lift per dumbbell: both use
+# Strength Level's one-arm dumbbell preacher curl table (inputs/sl_one_arm_dumbbell_preacher_curl.json) as it is.
+# The preacher hammer curl (one dumbbell per arm only) is 1.1x that: hammer curls run about 10% heavier than curls.
+pc = json.load(open(os.path.join(HERE, 'inputs/sl_one_arm_dumbbell_preacher_curl.json')))
+for s in out:
+    if s['lift'] in ('One Arm Dumbbell Preacher Curl', 'Two-Arm Dumbbell Preacher Curl'):
+        s.update(m=pc['m'], f=pc['f'], k=1.0, d=True)
+    elif s['lift'] == 'Preacher Hammer Dumbbell Curl':
+        s.update(m=[[r[0]] + [round(v * 1.1, 1) for v in r[1:]] for r in pc['m']],
+                 f=[[r[0]] + [round(v * 1.1, 1) for v in r[1:]] for r in pc['f']], k=1.0, d=True)
 out.sort(key=lambda s: s['lift'])
 json.dump(out, open(OUT, 'w'), separators=(',', ':'))
 print(len(out), 'exercises;', sum(1 for s in out if not s['m'] or not s['f']), 'with one sex only')
