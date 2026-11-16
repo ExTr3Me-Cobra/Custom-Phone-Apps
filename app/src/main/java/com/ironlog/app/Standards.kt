@@ -56,9 +56,12 @@ object Standards {
         val rows = (if (p.male) s.male else s.female) ?: return null
         val problems = mutableListOf<String>()
         val lo = rows.first().first; val hi = rows.last().first
-        if (bw < lo || bw > hi) problems += "Your body weight (${Units.weightU(bw)}) is outside the body weights the standard covers " +
+        // Your real weight must be inside the rows. The body-fat adjustment may reach a little past the end (up to 10%):
+        // the rows change smoothly there, so that small stretch doesn't make the rank an estimate.
+        if (bw0 < lo || bw0 > hi || bw < lo * 0.9 || bw > hi * 1.1) problems += "Your body weight (${Units.weightU(bw0)}" +
+            (if (bw != bw0) ", compared as ${Units.estU(bw)} for body fat" else "") + ") is outside the body weights the standard covers " +
             "(${Units.weightU(lo)}–${Units.weightU(hi)}), so it's stretched beyond the data."
-        else {
+        else if (bw in lo..hi) {
             // Inside the range: the two rows either side must be close enough to blend reliably.
             val below = rows.last { it.first <= bw }.first; val above = rows.first { it.first >= bw }.first
             if (above - below > 50) problems += "The nearest rows (${Units.weightU(below)} and ${Units.weightU(above)}) " +
