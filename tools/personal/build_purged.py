@@ -36,6 +36,15 @@ for s in out:
     elif s['lift'] == 'Preacher Hammer Dumbbell Curl':
         s.update(m=[[r[0]] + [round(v * 1.1, 1) for v in r[1:]] for r in pc['m']],
                  f=[[r[0]] + [round(v * 1.1, 1) for v in r[1:]] for r in pc['f']], k=1.0, d=True)
+# Weighted-vest standing calf raise (owner's choice, Nov 2026): ranked on the standing dumbbell calf raise table with the
+# vest counting as both dumbbells together (that table is per dumbbell, so it's doubled). Full range off a ledge is
+# harder than most logged machine and barbell calf raises, and a vest isn't limited by grip like heavy barbell work isn't.
+dcr = next((x for x in out if x['lift'] == 'Standing Dumbbell Calf Raise'), None)
+if dcr:
+    dbl = lambda rows: [[r[0]] + [round(v * 2 * dcr['k'], 1) for v in r[1:]] for r in rows] if rows else rows
+    for s in out:
+        if s['lift'] == 'Standing Calf Raise (Weighted Vest)':
+            s.update(m=dbl(dcr['m']), f=dbl(dcr['f']), k=1.0, d=False)
 out.sort(key=lambda s: s['lift'])
 json.dump(out, open(OUT, 'w'), separators=(',', ':'))
 print(len(out), 'exercises;', sum(1 for s in out if not s['m'] or not s['f']), 'with one sex only')
