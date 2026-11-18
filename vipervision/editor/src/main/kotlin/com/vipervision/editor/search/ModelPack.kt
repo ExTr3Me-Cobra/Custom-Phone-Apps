@@ -17,6 +17,7 @@ import androidx.work.WorkerParameters
 import com.t8rin.imagetoolbox.core.domain.remote.DownloadManager
 import com.t8rin.imagetoolbox.feature.ai_tools.domain.AiToolsRepository
 import com.t8rin.imagetoolbox.feature.ai_tools.domain.model.NeuralModel
+import com.t8rin.neural_tools.ModelFileSpec
 import com.t8rin.neural_tools.bgremover.BgRemover
 import com.t8rin.neural_tools.bgremover.Sam2
 import com.t8rin.neural_tools.depth.DepthAnything
@@ -46,7 +47,14 @@ import java.io.File
  */
 object ModelPack {
 
-    class Item(val name: String, val size: Long, val isHere: (Context) -> Boolean, val fetch: suspend (Context, Deps, suspend (Float) -> Unit) -> Unit)
+    class Item(
+        val name: String,
+        val size: Long,
+        val isHere: (Context) -> Boolean,
+        /** Its files and where each goes ([ModelFinder] looks for lost copies of them). */
+        val files: (Context) -> List<ModelFileSpec> = { emptyList() },
+        val fetch: suspend (Context, Deps, suspend (Float) -> Unit) -> Unit
+    )
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -67,6 +75,7 @@ object ModelPack {
         name = model.title,
         size = model.downloadSize,
         isHere = { File(File(it.filesDir, "ai_models"), model.name).let { f -> f.isFile && f.length() == model.downloadSize } },
+        files = { listOf(ModelFileSpec(model.name, model.downloadSize, model.checksum.takeIf { c -> c.length == 64 }, File(File(it.filesDir, "ai_models"), model.name))) },
         fetch = { _, deps, progress -> deps.aiTools().downloadModel(model).follow(progress) }
     )
 
@@ -108,22 +117,24 @@ object ModelPack {
             .map { it.model }
             .distinctBy { it.name }
         editorModels.map(::neural) + listOf(
-            Item("LaMa (Blemish remover)", 205_294_245, { LaMaProcessor.isDownloaded.value }) { _, _, progress ->
+            Item("LaMa (Blemish remover)", 205_294_245, { LaMaProcessor.isDownloaded.value },
+                files = { listOf(ModelFileSpec("LaMa_dynamic.onnx", 205_294_245, null, LaMaProcessor.modelPath)) }) { _, _, progress ->
                 LaMaProcessor.startDownload().followTool(progress)
             },
-            Item("Depth Anything V2 (Portrait blur)", DepthAnything.SIZE, { DepthAnything.isDownloaded() }) { _, _, progress ->
+            Item("Depth Anything V2 (Portrait blur)", DepthAnything.SIZE, { DepthAnything.isDownloaded() }, { DepthAnything.files() }) { _, _, progress ->
                 DepthAnything.download(progress)
             },
-            Item("YuNet (finds faces)", YuNet.SIZE, { YuNet.isDownloaded() }) { _, _, progress -> YuNet.download(progress) },
-            Item("BiSeNet (Face retouch)", FaceParser.SIZE, { FaceParser.isDownloaded() }) { _, _, progress -> FaceParser.download(progress) },
-            Item("RIFE (smooth slow motion)", Rife.SIZE, { Rife.isDownloaded() }) { _, _, progress -> Rife.download(progress) },
-            Item("SAM 2.1 (Smart select)", Sam2.SIZE, { Sam2.isDownloaded() }) { _, _, progress ->
+            Item("YuNet (finds faces)", YuNet.SIZE, { YuNet.isDownloaded() }, { YuNet.files() }) { _, _, progress -> YuNet.download(progress) },
+            Item("BiSeNet (Face retouch)", FaceParser.SIZE, { FaceParser.isDownloaded() }, { FaceParser.files() }) { _, _, progress -> FaceParser.download(progress) },
+            Item("RIFE (smooth slow motion)", Rife.SIZE, { Rife.isDownloaded() }, { Rife.files() }) { _, _, progress -> Rife.download(progress) },
+            Item("SAM 2.1 (Smart select)", Sam2.SIZE, { Sam2.isDownloaded() }, { Sam2.files() }) { _, _, progress ->
                 Sam2.download(progress)
             },
             Item("PaddleOCR (reads text, AI search)", 12_265_739, { PaddleOCR.isModelDownloaded(PaddleOCR.Model.English) }) { _, _, progress ->
                 PaddleOCR.startDownload(PaddleOCR.Model.English).followTool(progress)
             },
-            Item("SigLIP 2 (AI search)", Siglip.files.sumOf { it.size }, { Siglip.isDownloaded(it) }) { context, deps, progress ->
+            Item("SigLIP 2 (AI search)", Siglip.files.sumOf { it.size }, { Siglip.isDownloaded(it) },
+                files = { c -> Siglip.files.map { ModelFileSpec(it.name, it.size, null, File(Siglip.folder(c), it.name)) } }) { context, deps, progress ->
                 Siglip.download(context, deps.downloadManager(), progress)
             }
         )

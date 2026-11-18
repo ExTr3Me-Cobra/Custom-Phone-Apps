@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import com.vipervision.editor.ViperLog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +77,7 @@ class AiModelsActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Back from allowing Viper Vision to install apps.
+        resumeFind()
         if (switchWhenAllowed && canInstall()) {
             switchWhenAllowed = false
             switchToSlim()
@@ -280,6 +283,10 @@ class AiModelsActivity : ComponentActivity() {
                     }
                 }
             }
+            if (s != null && !s.running) {
+                Spacer(Modifier.height(4.dp))
+                FindButton(accent)
+            }
             Spacer(Modifier.height(16.dp))
             LazyColumn(Modifier.weight(1f)) {
                 items(items.indices.toList()) { i ->
@@ -295,6 +302,117 @@ class AiModelsActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private var finding by mutableStateOf<String?>(null)
+    private var found by mutableStateOf<ModelFinder.Result?>(null)
+    private var askAccess by mutableStateOf(false)
+    private var findAfterAccess = false
+
+    /** Back from the all-files access page: search, if it was allowed (or anyway, app-only). */
+    private fun resumeFind() {
+        if (!findAfterAccess) return
+        findAfterAccess = false
+        find()
+    }
+
+    private fun find() {
+        if (finding != null) return
+        finding = "Starting…"
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { ModelFinder.search(this@AiModelsActivity) { finding = it } }
+                    .onFailure { ViperLog.error("MODELS", "Find failed", it) }
+                    .getOrNull()
+            }
+            finding = null
+            if (result == null) android.widget.Toast.makeText(this@AiModelsActivity, "The search stopped with an error (see Diagnostic log)", android.widget.Toast.LENGTH_LONG).show()
+            found = result
+        }
+    }
+
+    /** Settings → AI models → Find models on this phone ([ModelFinder]), and what it found. */
+    @Composable
+    private fun FindButton(accent: Color) {
+        val busy = finding
+        TextButton(
+            onClick = {
+                if (ModelFinder.canSearchSharedStorage(this)) find() else askAccess = true
+            },
+            enabled = busy == null,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+        ) {
+            Text(busy ?: "Find models on this phone", color = if (busy == null) accent else Color.Gray, fontSize = 14.sp)
+        }
+        if (askAccess) {
+            AlertDialog(
+                onDismissRequest = { askAccess = false },
+                title = { Text("Search the whole phone?") },
+                text = { Text("To look through all of your phone's storage (Downloads, other folders, SD card) Viper Vision needs \"All files access\". Without it, only the app's own storage is searched.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        askAccess = false
+                        findAfterAccess = true
+                        val opened = Build.VERSION.SDK_INT >= 30 && runCatching {
+                            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+                        }.isSuccess
+                        if (!opened) resumeFind()
+                    }) { Text("Allow", color = accent) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        askAccess = false
+                        find()
+                    }) { Text("App storage only", color = accent) }
+                }
+            )
+        }
+        val result = found ?: return
+        val dupBytes = result.duplicates.sumOf { it.size }
+        AlertDialog(
+            onDismissRequest = { found = null },
+            title = { Text("Search finished") },
+            text = {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    Text("Looked at ${"%,d".format(result.looked)} files" + if (result.skippedSharedStorage) " (the app's own storage only)." else " on the whole phone.")
+                    Spacer(Modifier.height(8.dp))
+                    if (result.restored.isNotEmpty()) {
+                        Text("Found and put back:", fontWeight = FontWeight.SemiBold)
+                        result.restored.forEach { Text("• $it", fontSize = 13.sp) }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (result.missing.isNotEmpty()) {
+                        Text("Still missing (no copy found):", fontWeight = FontWeight.SemiBold)
+                        result.missing.forEach { Text("• $it", fontSize = 13.sp) }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (result.duplicates.isEmpty()) {
+                        Text("No duplicate copies.")
+                    } else {
+                        Text("Duplicate copies (${mb(dupBytes)}). Each is identical to the one the app uses, which is kept:", fontWeight = FontWeight.SemiBold)
+                        result.duplicates.forEach { Text("• ${it.file.path} (${mb(it.size)})", fontSize = 12.sp) }
+                    }
+                    if (result.restored.isEmpty() && result.missing.isEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Every model is in place.")
+                    }
+                }
+            },
+            confirmButton = {
+                if (result.duplicates.isNotEmpty()) TextButton(onClick = {
+                    val list = result.duplicates
+                    found = null
+                    lifecycleScope.launch {
+                        val freed = withContext(Dispatchers.IO) { ModelFinder.delete(list) }
+                        android.widget.Toast.makeText(this@AiModelsActivity, "Deleted duplicates: freed ${mb(freed)}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("Delete duplicates (${mb(dupBytes)})", color = accent) }
+                else TextButton(onClick = { found = null }) { Text("OK", color = accent) }
+            },
+            dismissButton = {
+                if (result.duplicates.isNotEmpty()) TextButton(onClick = { found = null }) { Text("Keep them", color = accent) }
+            }
+        )
     }
 
     /** On a metered connection (mobile data, or a hotspot Android counts as one). */

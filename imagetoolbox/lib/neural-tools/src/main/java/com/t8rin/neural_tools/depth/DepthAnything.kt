@@ -32,6 +32,7 @@ object DepthAnything : NeuralTool() {
     private val std = floatArrayOf(0.229f, 0.224f, 0.225f)
 
     fun isDownloaded() = models.isDownloaded()
+    fun files() = models.specs()
     suspend fun download(onProgress: suspend (Float) -> Unit) = models.download(onProgress)
     fun deleteModels() = models.delete()
 

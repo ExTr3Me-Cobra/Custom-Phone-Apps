@@ -26,6 +26,7 @@ object YuNet : NeuralTool() {
     )
     const val SIZE = 232_589L
     fun isDownloaded() = models.isDownloaded()
+    fun files() = models.specs()
     suspend fun download(onProgress: suspend (Float) -> Unit) = models.download(onProgress)
     val path: String get() = models.file("face_detection_yunet_2023mar.onnx").absolutePath
 }
@@ -47,6 +48,7 @@ object FaceParser : NeuralTool() {
     private val std = floatArrayOf(0.229f, 0.224f, 0.225f)
 
     fun isDownloaded() = models.isDownloaded()
+    fun files() = models.specs()
     suspend fun download(onProgress: suspend (Float) -> Unit) = models.download(onProgress)
 
     /** A session for parsing several faces in a row. */
@@ -107,6 +109,7 @@ object Rife : NeuralTool() {
     const val SIZE = 21_458_882L
 
     fun isDownloaded() = models.isDownloaded()
+    fun files() = models.specs()
     suspend fun download(onProgress: suspend (Float) -> Unit) = models.download(onProgress)
 
     fun open(): Session = Session()

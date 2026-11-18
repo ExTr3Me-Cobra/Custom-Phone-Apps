@@ -101,6 +101,15 @@ object LaMaProcessor : NeuralTool() {
     private val _isDownloaded = MutableStateFlow(modelFile.exists() && modelFile.length() > 0L)
     val isDownloaded: StateFlow<Boolean> = _isDownloaded
 
+    /** Viper Vision: where the model goes, and a re-check after it was put there another way. */
+    val modelPath: File get() = modelFile
+
+    fun recheck() = synchronized(this) {
+        sessionHolder?.close()
+        sessionHolder = null
+        _isDownloaded.update { modelFile.exists() && modelFile.length() > 0L }
+    }
+
     fun startDownload(): Flow<DownloadProgress> = channelFlow {
         val destination = modelFile
         downloader.download(

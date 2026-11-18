@@ -43,6 +43,9 @@ internal class ModelFiles(
 
     fun file(name: String) = File(directory, name)
 
+    /** Viper Vision: every file this tool needs and where it goes (for Settings → AI models → Find). */
+    fun specs(): List<ModelFileSpec> = models.map { ModelFileSpec(it.name, it.size, it.sha256, file(it.name)) }
+
     fun isDownloaded(): Boolean = models.all { isValid(it, file(it.name)) }
 
     private fun isValid(model: Model, file: File): Boolean {
@@ -107,3 +110,6 @@ internal class ModelFiles(
         synchronized(verified) { verified.clear() }
     }
 }
+
+/** Viper Vision: one model file: its name, exact size, SHA-256 (if known) and where the app keeps it. */
+class ModelFileSpec(val name: String, val size: Long, val sha256: String?, val file: File)

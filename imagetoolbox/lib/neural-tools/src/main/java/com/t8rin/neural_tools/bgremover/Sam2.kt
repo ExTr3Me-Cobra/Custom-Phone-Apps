@@ -47,6 +47,7 @@ object Sam2 : NeuralTool() {
     private const val MASK = 256
 
     fun isDownloaded() = models.isDownloaded()
+    fun files() = models.specs()
     suspend fun download(onProgress: suspend (Float) -> Unit) = models.download(onProgress)
     fun deleteModels() = models.delete()
 
