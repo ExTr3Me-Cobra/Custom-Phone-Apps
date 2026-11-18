@@ -196,6 +196,7 @@ object ModelPack {
         runCatching { deleteUnused(context) }.onFailure { ViperLog.error("MODELS", "couldn't delete unused models", it) }
         runCatching { Siglip.replaceTokenizer(context) }.onFailure { ViperLog.error("MODELS", "couldn't shrink the search vocabulary", it) }
         val (here, complete) = state(context)
+        runCatching { noteChanges(context) }.onFailure { ViperLog.error("MODELS", "couldn't check the model files", it) }
         prefs(context).edit()
             .putBoolean(KEY_COMPLETE, complete)
             .putLong(KEY_HERE_BYTES, here)
@@ -206,6 +207,41 @@ object ModelPack {
         if (!complete && isAllInOne(context) && !isRunning(context)) start(context, allowMobileData = true)
         ViperLog.i("MODELS", "AI models on the phone: ${here / 1_000_000} of ${totalSize / 1_000_000} MB" + if (complete) " (all)" else "")
     }
+
+    /**
+     * Notes in the diagnostic log every model file that isn't in place and why (by size only, so
+     * it's quick), and loudly any that were there the last time the app started but are gone now.
+     */
+    private fun noteChanges(context: Context) {
+        val prefs = prefs(context)
+        val before = prefs.getStringSet(KEY_FILES_HERE, null)
+        val lastTime = prefs.getLong(KEY_FILES_CHECKED_AT, 0L)
+        val now = mutableSetOf<String>()
+        val missing = mutableListOf<String>()
+        for (item in items) for (spec in runCatching { item.files(context) }.getOrDefault(emptyList())) {
+            val f = spec.file
+            val key = f.absolutePath
+            when {
+                f.isFile && f.length() == spec.size -> now += key
+                else -> {
+                    val why = if (!f.exists()) "no file" else "wrong size (${f.length()} of ${spec.size} bytes)"
+                    missing += "${spec.name} ($why)"
+                    if (before != null && key in before) {
+                        ViperLog.i(
+                            "MODELS", "WENT MISSING: $key ($why). It was here when the app last started" +
+                                    (if (lastTime > 0) " (${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(lastTime))})" else "") +
+                                    ". Folder: " + (f.parentFile?.let { d -> if (d.exists()) "exists, ${d.list()?.size ?: 0} files" else "gone" } ?: "?")
+                        )
+                    }
+                }
+            }
+        }
+        if (missing.isNotEmpty()) ViperLog.i("MODELS", "Not in place: " + missing.joinToString(", "))
+        prefs.edit().putStringSet(KEY_FILES_HERE, now).putLong(KEY_FILES_CHECKED_AT, System.currentTimeMillis()).apply()
+    }
+
+    private const val KEY_FILES_HERE = "vv_model_files_here"
+    private const val KEY_FILES_CHECKED_AT = "vv_model_files_checked_at"
 
     fun isRunning(context: Context) = prefs(context).getBoolean(KEY_RUNNING, false) && workRunning(context)
 

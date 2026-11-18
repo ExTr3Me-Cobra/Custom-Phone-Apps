@@ -62,6 +62,7 @@ class ImageToolboxApplication : ComposeApplication() {
         super.onCreate()
         // Viper Vision: the diagnostic log (Settings → Diagnostic log), first so it sees everything.
         com.vipervision.editor.ViperLog.install(this)
+        com.t8rin.imagetoolbox.core.data.remote.DownloadLog.sink = { com.vipervision.editor.ViperLog.i("DOWNLOAD", it) }
         runSetup()
         com.vipervision.editor.ViperLog.catchCrashes()
     }

@@ -62,14 +62,26 @@ internal class AndroidDownloadManager @Inject constructor(
         onProgress: suspend (DownloadProgress) -> Unit,
         onFinish: suspend (Throwable?) -> Unit
     ): Unit = withContext(defaultDispatcher) {
+        // Viper Vision: every model download is noted in the diagnostic log.
+        val name = url.substringBefore('?').substringAfterLast('/')
+        val started = System.currentTimeMillis()
+        DownloadLog.log("Downloading $name → $destinationPath")
+        val finish: suspend (Throwable?) -> Unit = { error ->
+            val seconds = (System.currentTimeMillis() - started) / 1000
+            DownloadLog.log(
+                if (error == null) "Got $name (${File(destinationPath).let { if (it.isDirectory) it.walkTopDown().filter(File::isFile).sumOf(File::length) else it.length() } / 1_000_000} MB) in ${seconds} s"
+                else "Couldn't get $name after ${seconds} s: ${error.message ?: error.javaClass.simpleName}"
+            )
+            onFinish(error)
+        }
         var temporaryFile: File? = null
 
         // Viper Vision: the all-in-one APK carries every AI model, so it's copied from there.
-        if (copyBundled(url, destinationPath, onStart, onProgress, onFinish)) return@withContext
+        if (copyBundled(url, destinationPath, onStart, onProgress, finish)) return@withContext
 
         if (!appContext.isNetworkAvailable()) {
             failureNotifier.sendNoConnection()
-            onFinish(UnknownHostException())
+            finish(UnknownHostException())
             return@withContext
         }
 
@@ -82,7 +94,7 @@ internal class AndroidDownloadManager @Inject constructor(
             onCancel = {
                 temporaryFile?.delete()
             },
-            onFailure = onFinish
+            onFailure = finish
         ) {
             channelFlow {
                 onStart()
@@ -125,12 +137,12 @@ internal class AndroidDownloadManager @Inject constructor(
                         }.exceptionOrNull()
                         if (lastError == null) break
                         if (lastError is kotlinx.coroutines.CancellationException) throw lastError
-                        "$source failed (${lastError.message}), trying the next source".makeLog("Download")
+                        "$source failed (${lastError.message}), trying the next source".also { DownloadLog.log(it) }.makeLog("Download")
                     }
                     lastError?.let { throw it }
 
                     tmp.replaceAtomically(destination)
-                    onFinish(null)
+                    finish(null)
                 } finally {
                     tmp.delete()
                     temporaryFile = null
@@ -154,9 +166,17 @@ internal class AndroidDownloadManager @Inject constructor(
         onFailure: (Throwable) -> Unit,
         downloadOnlyNewData: Boolean
     ): Unit = withContext(defaultDispatcher) {
+        // Viper Vision: every model download is noted in the diagnostic log.
+        val name = url.substringBefore('?').substringAfterLast('/')
+        val started = System.currentTimeMillis()
+        DownloadLog.log("Downloading (zip) $name → $destinationPath")
+        val failed: (Throwable) -> Unit = { error ->
+            DownloadLog.log("Couldn't get $name after ${(System.currentTimeMillis() - started) / 1000} s: ${error.message ?: error.javaClass.simpleName}")
+            onFailure(error)
+        }
         if (!appContext.isNetworkAvailable()) {
             failureNotifier.sendNoConnection()
-            onFailure(UnknownHostException())
+            failed(UnknownHostException())
             return@withContext
         }
 
@@ -166,7 +186,7 @@ internal class AndroidDownloadManager @Inject constructor(
                     title = getString(R.string.downloading)
                 )
             },
-            onFailure = onFailure
+            onFailure = failed
         ) {
             channelFlow {
                 onStart()
@@ -225,6 +245,7 @@ internal class AndroidDownloadManager @Inject constructor(
                         }
                     }
                 )
+                DownloadLog.log("Got $name in ${(System.currentTimeMillis() - started) / 1000} s")
 
                 close()
             }.throttleLatest(50).collect {
@@ -336,3 +357,13 @@ internal fun mirrorUrl(url: String): String? {
 }
 
 private const val MIRROR_BASE = "https://github.com/ExTr3Me-Cobra/Custom-Phone-Apps/releases/download/vipervision-ai-models/"
+
+/** Viper Vision: where model downloads are reported (the app sends them to its diagnostic log). */
+object DownloadLog {
+    @Volatile
+    var sink: ((String) -> Unit)? = null
+
+    fun log(message: String) {
+        runCatching { sink?.invoke(message) }
+    }
+}
