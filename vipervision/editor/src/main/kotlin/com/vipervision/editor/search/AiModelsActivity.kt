@@ -63,6 +63,7 @@ class AiModelsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Opened from Settings → AI models, it can always be left.
         // Offered once: opening this screen counts.
         getSharedPreferences("Prefs", MODE_PRIVATE).edit().putBoolean(ModelPack.KEY_PROMPTED, true).apply()
         setContent { Screen() }
@@ -147,7 +148,7 @@ class AiModelsActivity : ComponentActivity() {
         // reopens it if it's left anyway). Back works once the
         // download is under way or waiting for Wi-Fi (it carries on in the background), or when
         // all are here; the all-in-one APK's only while unpacking, until it has switched.
-        val canLeave = s != null && if (allInOne) s.running else complete || s.running || s.waitingForWifi ||
+        val canLeave = intent.getBooleanExtra("from_settings", false) || s != null && if (allInOne) s.running else complete || s.running || s.waitingForWifi ||
                 ModelPack.isRequested(this)
         androidx.activity.compose.BackHandler(enabled = !canLeave) {}
 

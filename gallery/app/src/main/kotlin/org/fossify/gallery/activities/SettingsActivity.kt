@@ -190,6 +190,12 @@ class SettingsActivity : SimpleActivity() {
                 startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
+        binding.settingsVvAiModelsHolder.setOnClickListener {
+            startActivity(
+                Intent().setClassName(packageName, "com.vipervision.editor.search.AiModelsActivity")
+                    .putExtra("from_settings", true)
+            )
+        }
         binding.settingsVvDiagnosticsHolder.setOnClickListener {
             startActivity(Intent().setClassName(packageName, "com.vipervision.editor.DiagnosticsActivity"))
         }

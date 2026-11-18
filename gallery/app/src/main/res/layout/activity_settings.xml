@@ -113,6 +113,29 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_vv_ai_models_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_vv_ai_models_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/vv_ai_models" />
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_vv_ai_models"
+                    style="@style/SettingsTextValueStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@+id/settings_vv_ai_models_label"
+                    android:text="@string/vv_ai_models_about" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_vv_diagnostics_holder"
                 style="@style/SettingsHolderTextViewStyle"
                 android:layout_width="match_parent"

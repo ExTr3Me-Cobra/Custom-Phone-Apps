@@ -36,6 +36,8 @@
     <string name="vv_select_folder">Select folder</string>
     <string name="vv_restore_all_again">Are you really sure you want to restore all %1$d items?</string>
     <string name="vv_diagnostics">Diagnostic log</string>
+    <string name="vv_ai_models">AI models</string>
+    <string name="vv_ai_models_about">Download, check, or find lost models and remove duplicate copies</string>
     <string name="vv_clear_cache_confirm">Clear</string>
     <string name="vv_originals">Originals kept for "Revert to original"</string>
     <string name="vv_originals_size">%1$s for %2$d photo(s). Tap to delete them</string>
