@@ -22,7 +22,8 @@ import java.security.MessageDigest
  */
 object ModelFinder {
 
-    class Duplicate(val file: File, val model: String) {
+    /** [file] is byte-for-byte the same as [kept], the copy the app uses (which stays). */
+    class Duplicate(val file: File, val model: String, val kept: File) {
         val size: Long get() = file.length()
     }
 
@@ -45,7 +46,9 @@ object ModelFinder {
         val items = ModelPack.items
         val specs = items.flatMap { item -> runCatching { item.files(context) }.getOrDefault(emptyList()).map { item to it } }
         val bySize = specs.groupBy { it.second.size }
-        val targets = specs.map { it.second.file.absoluteFile }.toSet()
+        // Compared by real (canonical) path: the app's folder has two names on Android
+        // (/data/user/0/… and /data/data/…), and the search walks the real one.
+        val targets = specs.map { canonical(it.second.file) }.toSet()
         val shared = canSearchSharedStorage(context)
 
         // Every file on the phone whose size is exactly a model file's size.
@@ -60,11 +63,11 @@ object ModelFinder {
                     if (!f.isFile) return@forEach
                     looked++
                     if (looked % 2000 == 0) onProgress("Looked at $looked files…")
-                    if (f.length() in bySize && f.absoluteFile !in targets) found += f.absoluteFile
+                    if (f.length() in bySize && canonical(f) !in targets) found += File(canonical(f))
                 }
             currentCoroutineContext().ensureActive()
         }
-        val candidates = found.distinctBy { runCatching { it.canonicalPath }.getOrDefault(it.path) }
+        val candidates = found.distinctBy { it.path }
         ViperLog.i("MODELS", "Find: looked at $looked files, ${candidates.size} the size of a model file")
 
         val hashes = mutableMapOf<String, String?>()
@@ -106,11 +109,12 @@ object ModelFinder {
             if (!ok) continue
             // Copies identical to the one in place (checked byte for byte through their SHA-256).
             val kept = hash(spec.file) ?: continue
+            val keptPath = canonical(spec.file)
             for (f in same) {
-                if (f.absolutePath in claimed) continue
+                if (f.absolutePath in claimed || f.path == keptPath || f.path in targets) continue
                 if (hash(f) == kept) {
                     claimed += f.absolutePath
-                    duplicates += Duplicate(f, item.name)
+                    duplicates += Duplicate(f, item.name, spec.file)
                 }
             }
         }
@@ -122,11 +126,22 @@ object ModelFinder {
         return Result(looked, restored, duplicates, missing.distinct(), skippedSharedStorage = !shared)
     }
 
-    /** Deletes [duplicates] (only ones still identical in size); returns the bytes freed. */
-    fun delete(duplicates: List<Duplicate>): Long {
+    /**
+     * Deletes [duplicates]; returns the bytes freed. Each is checked again first: never a file
+     * the app uses, and only while the copy the app keeps is still there, separate and the same size.
+     */
+    fun delete(context: Context, duplicates: List<Duplicate>): Long {
+        val protected = ModelPack.items.flatMap { item -> runCatching { item.files(context) }.getOrDefault(emptyList()) }
+            .map { canonical(it.file) }.toSet()
         var freed = 0L
         for (d in duplicates) {
+            val path = canonical(d.file)
             val size = d.file.length()
+            val keptPath = canonical(d.kept)
+            if (path in protected || path == keptPath || !d.kept.isFile || d.kept.length() != size) {
+                ViperLog.i("MODELS", "Find: not deleting ${d.file.path} (it's the copy the app uses, or that copy isn't there)")
+                continue
+            }
             if (d.file.delete()) {
                 freed += size
                 ViperLog.i("MODELS", "Find: deleted duplicate ${d.file.path}")
@@ -208,4 +223,6 @@ object ModelFinder {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
+
+    private fun canonical(f: File): String = runCatching { f.canonicalPath }.getOrDefault(f.absolutePath)
 }

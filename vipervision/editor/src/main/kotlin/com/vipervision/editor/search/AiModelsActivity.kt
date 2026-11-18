@@ -404,7 +404,7 @@ class AiModelsActivity : ComponentActivity() {
                     val list = result.duplicates
                     found = null
                     lifecycleScope.launch {
-                        val freed = withContext(Dispatchers.IO) { ModelFinder.delete(list) }
+                        val freed = withContext(Dispatchers.IO) { ModelFinder.delete(this@AiModelsActivity, list) }
                         android.widget.Toast.makeText(this@AiModelsActivity, "Deleted duplicates: freed ${mb(freed)}", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }) { Text("Delete duplicates (${mb(dupBytes)})", color = accent) }
