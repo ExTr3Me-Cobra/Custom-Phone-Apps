@@ -6,6 +6,14 @@
 
 package com.t8rin.imagetoolbox.feature.markup_layers.presentation
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import com.t8rin.imagetoolbox.core.resources.icons.Eyedropper
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import net.engawapg.lib.zoomable.toggleScale
@@ -83,6 +91,8 @@ class ViperMarkupUiState {
     var showTextDialog by mutableStateOf(false)
     var showEmojiPicker by mutableStateOf(false)
     var showShapePicker by mutableStateOf(false)
+    /** Eyedropper: the next tap on the photo picks the selected shape's colour. */
+    var pickingColor by mutableStateOf(false)
     /** The small see-through bar (delete, nudge) shown after holding a layer. */
     var showQuickActions by mutableStateOf(false)
     internal var pickImageRequests by mutableIntStateOf(0)
@@ -261,6 +271,28 @@ fun ViperMarkupCanvas(
                     )
                 }
                 LayerSnapGuides(snapResult)
+                if (uiState.pickingColor) {
+                    // Eyedropper: a tap picks the photo's colour there for the selected shape.
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures { p ->
+                                    val photo = component.bitmap
+                                    val picked = photo?.let { bmp ->
+                                        runCatching {
+                                            val readable = if (bmp.config == android.graphics.Bitmap.Config.HARDWARE) bmp.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else bmp
+                                            val x = (p.x / size.width * readable.width).toInt().coerceIn(0, readable.width - 1)
+                                            val y = (p.y / size.height * readable.height).toInt().coerceIn(0, readable.height - 1)
+                                            readable.getPixel(x, y) or (0xFF shl 24)
+                                        }.getOrNull()
+                                    }
+                                    if (picked != null) setShapeColor(component, picked, commit = true)
+                                    uiState.pickingColor = false
+                                }
+                            }
+                    )
+                }
             }
         }
     }
@@ -359,4 +391,148 @@ fun ViperMarkupSheets(
         onDismiss = { uiState.showTextDialog = false },
         onAddLayer = component::addLayer
     )
+}
+
+/** The selected layer, if it's a shape. */
+private fun selectedShape(component: MarkupLayersComponent): Pair<Int, LayerType.Shape>? {
+    val index = component.layers.indexOfFirst { it.state.isActive }
+    val type = component.layers.getOrNull(index)?.type as? LayerType.Shape ?: return null
+    return index to type
+}
+
+private fun setShapeColor(component: MarkupLayersComponent, color: Int, commit: Boolean) {
+    val (index, type) = selectedShape(component) ?: return
+    val layer = component.layers[index]
+    component.updateLayerAt(index = index, layer = layer.copy(type = type.copy(color = color)), commitToHistory = commit)
+}
+
+/** Black, the rainbow, then white: what the shape colour slider runs through. */
+private val ColorStops = intArrayOf(
+    0xFF000000.toInt(), 0xFFFF0000.toInt(), 0xFFFF8000.toInt(), 0xFFFFFF00.toInt(), 0xFF00FF00.toInt(),
+    0xFF00FFFF.toInt(), 0xFF0000FF.toInt(), 0xFFFF00FF.toInt(), 0xFFFFFFFF.toInt()
+)
+
+private fun colorAt(t: Float): Int {
+    val f = t.coerceIn(0f, 1f) * (ColorStops.size - 1)
+    val i = f.toInt().coerceAtMost(ColorStops.size - 2)
+    val k = f - i
+    val a = ColorStops[i]
+    val b = ColorStops[i + 1]
+    fun ch(shift: Int) = (((a shr shift) and 255) + (((b shr shift) and 255) - ((a shr shift) and 255)) * k).toInt()
+    return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+}
+
+/** Where on the slider [color] is (closest match). */
+private fun positionOf(color: Int): Float {
+    var best = 0f
+    var bestDistance = Int.MAX_VALUE
+    for (step in 0..400) {
+        val t = step / 400f
+        val c = colorAt(t)
+        val d = listOf(16, 8, 0).sumOf { s -> val x = ((c shr s) and 255) - ((color shr s) and 255); x * x }
+        if (d < bestDistance) { bestDistance = d; best = t }
+    }
+    return best
+}
+
+/**
+ * Viper Vision: with a shape selected, a thin colour slider (black, the rainbow, white) and an
+ * eyedropper that picks a colour from the photo. Nothing shows for other layers.
+ */
+@Composable
+fun ViperShapeColorBar(
+    component: MarkupLayersComponent,
+    uiState: ViperMarkupUiState,
+    modifier: Modifier = Modifier
+) {
+    val selected = selectedShape(component) ?: run {
+        if (uiState.pickingColor) uiState.pickingColor = false
+        return
+    }
+    val layerId = component.layers[selected.first].id
+    var position by remember(layerId) { mutableFloatStateOf(positionOf(selected.second.color)) }
+    // Follows the eyedropper (and undo) when the colour changes from elsewhere.
+    LaunchedEffect(selected.second.color) {
+        if (colorAt(position) != selected.second.color) position = positionOf(selected.second.color)
+    }
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)
+    ) {
+        Box(
+            Modifier
+                .size(26.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(Color(selected.second.color))
+                .border(1.dp, Color.White.copy(alpha = 0.6f), androidx.compose.foundation.shape.CircleShape)
+        )
+        Spacer(Modifier.size(10.dp))
+        val brush = remember { androidx.compose.ui.graphics.Brush.horizontalGradient(ColorStops.map { Color(it) }) }
+        Box(
+            Modifier
+                .weight(1f)
+                .height(28.dp)
+                .pointerInput(layerId) {
+                    fun at(x: Float) = (x / size.width).coerceIn(0f, 1f)
+                    detectTapGestures { p ->
+                        position = at(p.x)
+                        setShapeColor(component, colorAt(position), commit = true)
+                    }
+                }
+                .pointerInput(layerId) {
+                    fun at(x: Float) = (x / size.width).coerceIn(0f, 1f)
+                    detectHorizontalDragGestures(
+                        onDragStart = { p ->
+                            component.beginHistoryTransaction()
+                            position = at(p.x)
+                            setShapeColor(component, colorAt(position), commit = false)
+                        },
+                        onDragEnd = { component.commitHistoryTransaction() },
+                        onDragCancel = { component.commitHistoryTransaction() }
+                    ) { change, _ ->
+                        change.consume()
+                        position = at(change.position.x)
+                        setShapeColor(component, colorAt(position), commit = false)
+                    }
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            // A thin bar with a round thumb.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val thumb = 20.dp
+                Box(
+                    Modifier
+                        .offset(x = (maxWidth - thumb) * position)
+                        .size(thumb)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(colorAt(position)))
+                        .border(2.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                )
+            }
+        }
+        Spacer(Modifier.size(10.dp))
+        val accent = MaterialTheme.colorScheme.primary
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(if (uiState.pickingColor) accent else Color.White.copy(alpha = 0.12f))
+                .pointerInput(Unit) { detectTapGestures { uiState.pickingColor = !uiState.pickingColor } },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Eyedropper,
+                contentDescription = "Pick a colour from the photo",
+                tint = if (uiState.pickingColor) MaterialTheme.colorScheme.onPrimary else Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
 }

@@ -281,18 +281,7 @@ internal fun MarkupLayersSideMenu(
                                             }
                                         }
                                         Box {
-                                            EnhancedIconButton(
-                                                onClick = {
-                                                    onContextOptionsVisibleChange(true)
-                                                },
-                                                enabled = activeLayer?.isBackground != true &&
-                                                        (activeLayer != null || component.isGroupingSelectionMode)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Build,
-                                                    contentDescription = null
-                                                )
-                                            }
+                                            // Viper Vision: no wrench (its big tools menu isn't used).
                                             MarkupLayersContextActions(
                                                 visible = showContextActions,
                                                 onDismiss = { onContextOptionsVisibleChange(false) },

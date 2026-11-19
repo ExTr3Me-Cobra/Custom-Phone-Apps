@@ -106,6 +106,12 @@ internal fun MarkupScreen(
                 .fillMaxWidth()
         )
 
+        // With a shape selected: its colour slider and eyedropper.
+        com.t8rin.imagetoolbox.feature.markup_layers.presentation.ViperShapeColorBar(
+            component = component,
+            uiState = ui,
+            modifier = Modifier.padding(top = 8.dp)
+        )
         // Snap: a wide, short on/off pill above the bubbles.
         val accent = LocalAccent.current
         Box(
