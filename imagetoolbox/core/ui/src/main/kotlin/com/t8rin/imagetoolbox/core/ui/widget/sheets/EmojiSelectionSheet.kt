@@ -17,6 +17,10 @@
 
 package com.t8rin.imagetoolbox.core.ui.widget.sheets
 
+import com.t8rin.imagetoolbox.core.resources.emoji.EmojiSearch
+import com.t8rin.imagetoolbox.core.resources.icons.Close
+import com.t8rin.imagetoolbox.core.resources.icons.Search
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
@@ -158,6 +162,9 @@ fun EmojiSelectionSheet(
 
     val emojiEnabled = selectedEmojiIndex != -1
     val scope = rememberCoroutineScope()
+    // Viper Vision: search by words (see EmojiSearch).
+    var query by rememberSaveable(visible) { mutableStateOf("") }
+    val results = remember(query) { EmojiSearch.search(query) }
 
     EnhancedModalBottomSheet(
         confirmButton = {
@@ -264,7 +271,54 @@ fun EmojiSelectionSheet(
                     contentPadding = contentPadding,
                     flingBehavior = enhancedFlingBehavior()
                 ) {
-                    emojiWithCategories.forEach { (title, icon, emojis) ->
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "search") {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            enabled = emojiEnabled,
+                            singleLine = true,
+                            placeholder = { Text("Search emoji (e.g. happy, love, car)") },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    EnhancedIconButton(onClick = { query = "" }) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            shape = ShapeDefaults.default,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        )
+                    }
+                    if (query.isNotBlank()) {
+                        if (results.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "none") {
+                                Text(
+                                    "No emoji found for \"$query\"",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        }
+                        items(items = results, key = { "found $it" }) { emoji ->
+                            val index = emojiIndices[emoji] ?: -1
+                            val selected = index == selectedEmojiIndex
+                            EmojiCell(
+                                emoji = emoji,
+                                selected = selected,
+                                color = if (selected) MaterialTheme.colorScheme.primaryContainer else SafeLocalContainerColor,
+                                borderColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f)
+                                else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f),
+                                emojiEnabled = emojiEnabled,
+                                useAnimatedEmojis = useAnimatedEmojis,
+                                animatedEmoji = animatedEmojiPaths[emoji],
+                                onClick = { onEmojiPicked(index) },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+                    } else emojiWithCategories.forEach { (title, icon, emojis) ->
                         item(
                             span = { GridItemSpan(maxLineSpan) },
                             key = icon.name
@@ -338,43 +392,17 @@ fun EmojiSelectionSheet(
                                         alpha = 0.1f
                                     )
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .animateItem()
-                                        .aspectRatio(1f)
-                                        .container(
-                                            color = color,
-                                            shape = CloverShape,
-                                            borderColor = borderColor,
-                                            resultPadding = 0.dp
-                                        )
-                                        .hapticsClickable(enabled = emojiEnabled) {
-                                            onEmojiPicked(index)
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    val animatedEmoji = animatedEmojiPaths[emoji]
-                                    EmojiItem(
-                                        emoji = emoji.toString(),
-                                        animatedEmoji = animatedEmoji.takeIf {
-                                            useAnimatedEmojis && emojiEnabled
-                                        },
-                                        fontSize = MaterialTheme.typography.headlineLarge.fontSize,
-                                        filterQuality = FilterQuality.Medium,
-                                        animateEmojiChange = false
-                                    )
-                                    if (useAnimatedEmojis && animatedEmoji != null) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.MotionMode,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary.copy(0.6f),
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .offset((-6).dp, 6.dp)
-                                                .size(12.dp)
-                                        )
-                                    }
-                                }
+                                EmojiCell(
+                                    emoji = emoji,
+                                    selected = selected,
+                                    color = color,
+                                    borderColor = borderColor,
+                                    emojiEnabled = emojiEnabled,
+                                    useAnimatedEmojis = useAnimatedEmojis,
+                                    animatedEmoji = animatedEmojiPaths[emoji],
+                                    onClick = { onEmojiPicked(index) },
+                                    modifier = Modifier.animateItem()
+                                )
                             }
                             item(
                                 span = { GridItemSpan(maxLineSpan) }
@@ -436,6 +464,54 @@ fun EmojiSelectionSheet(
                     topPadding = 16.dp
                 }
             }
+        }
+    }
+}
+
+/** One emoji in the sheet's grid. */
+@Composable
+private fun EmojiCell(
+    emoji: android.net.Uri,
+    selected: Boolean,
+    color: Color,
+    borderColor: Color,
+    emojiEnabled: Boolean,
+    useAnimatedEmojis: Boolean,
+    animatedEmoji: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .container(
+                color = color,
+                shape = CloverShape,
+                borderColor = borderColor,
+                resultPadding = 0.dp
+            )
+            .hapticsClickable(enabled = emojiEnabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        EmojiItem(
+            emoji = emoji.toString(),
+            animatedEmoji = animatedEmoji.takeIf {
+                useAnimatedEmojis && emojiEnabled
+            },
+            fontSize = MaterialTheme.typography.headlineLarge.fontSize,
+            filterQuality = FilterQuality.Medium,
+            animateEmojiChange = false
+        )
+        if (useAnimatedEmojis && animatedEmoji != null) {
+            Icon(
+                imageVector = Icons.Outlined.MotionMode,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary.copy(0.6f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset((-6).dp, 6.dp)
+                    .size(12.dp)
+            )
         }
     }
 }
