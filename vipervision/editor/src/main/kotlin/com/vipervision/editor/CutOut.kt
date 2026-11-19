@@ -42,6 +42,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,23 +97,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** The Cut out tool's modes (its bottom bubbles). */
-enum class CutTool(val label: String) {
-    Smart("Smart select"),
-    /** The brushes; with [CutOutSession.manualRestore] on they paint the photo back. */
-    Erase("Manual select")
-}
 
-/** Brush shapes for Manual select's brush (erasing, or restoring), as in Image Toolbox's Background Remover. */
-private val CutShapes: List<Pair<String, DrawPathMode>> = listOf(
-    "Free" to DrawPathMode.Free,
-    "Line" to DrawPathMode.Line,
-    "Lasso" to DrawPathMode.Lasso,
-    "Rectangle" to DrawPathMode.Rect(),
-    "Oval" to DrawPathMode.Oval,
-    "Fill" to DrawPathMode.FloodFill(),
-    "Spray" to DrawPathMode.Spray()
-)
 
 /**
  * One use of the Cut out tool. It runs Image Toolbox's Background Remover ([component]) on the
@@ -123,7 +108,8 @@ class CutOutSession internal constructor(
     val component: EraseBackgroundComponent,
     private val lifecycle: LifecycleRegistry
 ) {
-    var tool by mutableStateOf(CutTool.Smart)
+    /** Bumped to set Smart select up again (after its model was downloaded). */
+    var setupRuns by mutableIntStateOf(0)
     var shape by mutableStateOf<DrawPathMode>(DrawPathMode.Free)
     var strokeWidth by mutableFloatStateOf(20f)
     var softness by mutableFloatStateOf(0f)
@@ -149,9 +135,6 @@ class CutOutSession internal constructor(
 
     /** Smart select's Restore: what's selected is brought back (from the original photo) instead of kept alone. */
     var smartRestore by mutableStateOf(false)
-
-    /** Manual select's Restore: the brush paints the photo back instead of erasing. */
-    var manualRestore by mutableStateOf(false)
     internal val samLock = Mutex()
 
     /** Forget Smart select's prepared photo (after the cut-out changed). */
@@ -334,8 +317,8 @@ private fun CutOutContent(
     }
 
     // Smart select: prepare SAM 2.1 on the current cut-out, then re-segment after every stroke.
-    LaunchedEffect(session.tool, component.bitmap, session.smartRestore) {
-        if (session.tool != CutTool.Smart || component.bitmap == null) return@LaunchedEffect
+    LaunchedEffect(session.setupRuns, component.bitmap, session.smartRestore) {
+        if (component.bitmap == null) return@LaunchedEffect
         if (!Sam2.isDownloaded()) {
             onNeedSamDownload()
             return@LaunchedEffect
@@ -399,25 +382,15 @@ private fun CutOutContent(
         ) {
             IconButton(onClick = onCancel) { Icon(Icons.Rounded.Close, "Cancel", tint = Color.White) }
             Text("Manual background remover", color = Color.White, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (session.tool == CutTool.Smart) {
-                IconButton(
-                    onClick = { session.smartPaint.strokes.removeLastOrNull() },
-                    enabled = session.smartPaint.strokes.isNotEmpty()
-                ) { Icon(Icons.Rounded.Undo, "Undo", tint = if (session.smartPaint.strokes.isNotEmpty()) Color.White else Color.Gray) }
-            } else {
-                val canUndo = component.paths.isNotEmpty() || component.lastPaths.isNotEmpty()
-                IconButton(onClick = component::undo, enabled = canUndo) {
-                    Icon(Icons.Rounded.Undo, "Undo", tint = if (canUndo) Color.White else Color.Gray)
-                }
-                IconButton(onClick = component::redo, enabled = component.undonePaths.isNotEmpty()) {
-                    Icon(Icons.Rounded.Redo, "Redo", tint = if (component.undonePaths.isNotEmpty()) Color.White else Color.Gray)
-                }
-            }
+            IconButton(
+                onClick = { session.smartPaint.strokes.removeLastOrNull() },
+                enabled = session.smartPaint.strokes.isNotEmpty()
+            ) { Icon(Icons.Rounded.Undo, "Undo", tint = if (session.smartPaint.strokes.isNotEmpty()) Color.White else Color.Gray) }
             // ✓ also applies a Smart select that was painted but not cut out yet, so the green
             // preview isn't silently thrown away.
             IconButton(onClick = {
                 if (session.busyMessage != null) return@IconButton
-                if (session.tool == CutTool.Smart && session.smartPaint.strokes.any { !it.exclude }) {
+                if (session.smartPaint.strokes.any { !it.exclude }) {
                     scope.launch { if (cutOutSmart()) onApply() }
                 } else {
                     onApply()
@@ -434,7 +407,8 @@ private fun CutOutContent(
             contentAlignment = Alignment.Center
         ) {
             val bitmap = component.bitmap
-            if (session.tool == CutTool.Smart) {
+            val shownSource = session.samPreviewSource
+            if (shownSource != null) {
                 // The whole photo while marking, with what would be kept tinted green; nothing is
                 // removed until Cut out (or ✓).
                 val shown = session.samPreviewSource
@@ -478,9 +452,8 @@ private fun CutOutContent(
                             .padding(end = 6.dp)
                     )
                 }
-            } else if (session.tool == CutTool.Smart && bitmap != null) {
-                // Smart select isn't ready (still preparing, not downloaded, or it failed):
-                // still show the photo.
+            } else if (bitmap != null) {
+                // Smart select isn't ready yet (preparing or downloading): still show the photo.
                 val plain = remember(bitmap) { bitmap.scaledToFit(1536).asImageBitmap() }
                 Image(
                     bitmap = plain,
@@ -488,42 +461,6 @@ private fun CutOutContent(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().padding(16.dp)
                 )
-            } else if (bitmap != null) {
-                val imageBitmap = remember(bitmap) { bitmap.copy(Bitmap.Config.ARGB_8888, true).asImageBitmap() }
-                Checkerboard(
-                    Modifier
-                        .padding(16.dp)
-                        .aspectRatio(bitmap.width.toFloat() / bitmap.height)
-                        .fillMaxSize(),
-                    bitmap.width, bitmap.height
-                )
-                BitmapEraser(
-                    imageBitmap = imageBitmap,
-                    imageBitmapForShader = component.internalBitmap?.asImageBitmap(),
-                    paths = component.paths,
-                    brushSoftness = session.softness.pt,
-                    originalImagePreviewAlpha = session.ghostAlpha,
-                    onAddPath = component::addPath,
-                    drawPathMode = session.shape,
-                    strokeWidth = session.strokeWidth.pt,
-                    isRecoveryOn = session.manualRestore,
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .aspectRatio(bitmap.width.toFloat() / bitmap.height)
-                        .fillMaxSize(),
-                    panEnabled = session.panEnabled,
-                    helperGridParams = component.helperGridParams
-                )
-                if (session.tool == CutTool.Erase && session.shape.canChangeStrokeWidth) {
-                    SideSlider(
-                        value = session.strokeWidth,
-                        range = 1f..100f,
-                        onValueChange = { session.strokeWidth = it },
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 6.dp)
-                    )
-                }
             }
             val busy = session.busyMessage ?: if (component.isErasingBG) "Removing background…" else null
             if (busy != null || component.isImageLoading || bitmap == null) {
@@ -543,91 +480,41 @@ private fun CutOutContent(
             }
         }
 
-        // Settings for the current mode.
+        // Smart select's controls (it's the whole tool).
         Column(
             Modifier
                 .fillMaxWidth()
-                // At least the usual height, taller when Smart select's extra row needs it.
-                .heightIn(min = 132.dp)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            when (session.tool) {
-                CutTool.Smart -> {
-                    Text(
-                        if (session.smartRestore) "Roughly paint over what to bring back — the AI finds its exact edge."
-                        else "Roughly paint over what to keep — the AI finds its exact edge.",
-                        color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        // Buttons that act every time they're tapped (not on/off).
-                        Pill(if (session.smartRestore) "Bring back" else "Cut out", selected = false) {
-                            if (session.busyMessage == null) scope.launch { cutOutSmart() }
-                        }
-                        Pill("Refine edges", selected = false) {
-                            if (EdgeRefiner.isDownloaded) scope.launch { refineNow() } else askRefineDownload = true
-                        }
-                        // Switching starts the selection over (it then works on a different photo); never
-                        // while Smart select is mid-run (closing it then crashes in native code).
-                        Pill("Restore", session.smartRestore) {
-                            if (session.busyMessage == null) scope.launch {
-                                session.samLock.withLock { session.resetSmart() }
-                                session.smartRestore = !session.smartRestore
-                            }
-                        }
-                    }
+            Text(
+                if (session.smartRestore) "Roughly paint over what to bring back — the AI finds its exact edge."
+                else "Roughly paint over what to keep — the AI finds its exact edge.",
+                color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Buttons that act every time they're tapped (not on/off).
+                Pill(if (session.smartRestore) "Bring back" else "Cut out", selected = false) {
+                    if (session.busyMessage == null) scope.launch { cutOutSmart() }
                 }
-
-                CutTool.Erase -> {
-                    Pill("Restore", session.manualRestore) { session.manualRestore = !session.manualRestore }
-                    Spacer(Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(CutShapes) { (label, mode) ->
-                            Pill(label, session.shape::class == mode::class) { session.shape = mode }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    LabeledSlider("Softness", session.softness, 0f..100f) { session.softness = it }
+                Pill("Refine edges", selected = false) {
+                    if (EdgeRefiner.isDownloaded) scope.launch { refineNow() } else askRefineDownload = true
                 }
-
-            }
-        }
-
-        // Mode bubbles.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            CutTool.entries.forEach { tool ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(68.dp)) {
-                    Box(
-                        Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(if (session.tool == tool) accent else BubbleGrey)
-                            .clickable { session.tool = tool },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(tool.icon, tool.label, tint = if (session.tool == tool) accent.contentOn() else Color.White, modifier = Modifier.size(24.dp))
+                // Switching starts the selection over (it then works on a different photo); never
+                // while Smart select is mid-run (closing it then crashes in native code).
+                Pill("Restore", session.smartRestore) {
+                    if (session.busyMessage == null) scope.launch {
+                        session.samLock.withLock { session.resetSmart() }
+                        session.smartRestore = !session.smartRestore
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(tool.label, color = Color.White, fontSize = 11.sp, maxLines = 1)
                 }
             }
         }
     }
 }
-
-private val CutTool.icon: ImageVector
-    get() = when (this) {
-        CutTool.Smart -> Icons.Rounded.TouchApp
-        CutTool.Erase -> Icons.Rounded.Eraser
-    }
 
 @Composable
 internal fun Pill(text: String, selected: Boolean, filled: Boolean = false, onClick: () -> Unit) {

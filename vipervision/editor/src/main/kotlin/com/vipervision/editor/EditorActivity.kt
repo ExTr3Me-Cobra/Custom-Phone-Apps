@@ -218,7 +218,8 @@ class EditorActivity : ComposeActivity() {
                     AlertDialog(
                         onDismissRequest = {
                             pendingSamDownload = false
-                            controller.cutOut?.tool = CutTool.Erase
+                            // Smart select is the whole tool, so without its model it closes.
+                            closeCutOut()
                         },
                         title = { Text("Download Smart select?") },
                         text = {
@@ -237,7 +238,7 @@ class EditorActivity : ComposeActivity() {
                         dismissButton = {
                             TextButton(onClick = {
                                 pendingSamDownload = false
-                                controller.cutOut?.tool = CutTool.Erase
+                                closeCutOut()
                             }) { Text("Cancel") }
                         }
                     )
@@ -1071,12 +1072,11 @@ class EditorActivity : ComposeActivity() {
         }.onSuccess {
             session.busyMessage = null
             // Re-run Smart select's setup now that the model is here.
-            session.tool = CutTool.Erase
-            session.tool = CutTool.Smart
+            session.setupRuns++
         }.onFailure {
             ViperLog.error("EDITOR", "downloadSam failed", it)
             session.busyMessage = null
-            session.tool = CutTool.Erase
+            closeCutOut()
             Toast.makeText(this@EditorActivity, "Couldn't download Smart select: ${it.message}", Toast.LENGTH_LONG).show()
         }
     }
