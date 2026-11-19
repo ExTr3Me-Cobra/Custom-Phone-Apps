@@ -191,11 +191,10 @@ fun ViperMarkupCanvas(
     ) {
         Box(
             modifier = Modifier
-                .padding(16.dp)
+                // As big as the space allows, edge to edge (no margin or frame).
                 .aspectRatio(canvasAspectRatio)
                 .fillMaxSize()
-                .clip(ShapeDefaults.extremeSmall)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant(), ShapeDefaults.extremeSmall)
+                .clipToBounds()
                 .background(MaterialTheme.colorScheme.surfaceContainerLow),
             contentAlignment = Alignment.Center
         ) {
