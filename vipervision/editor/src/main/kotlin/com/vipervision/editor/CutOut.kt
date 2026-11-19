@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -72,7 +73,6 @@ import com.t8rin.imagetoolbox.core.resources.icons.Done
 import com.t8rin.imagetoolbox.core.resources.icons.Eraser
 import com.t8rin.imagetoolbox.core.resources.icons.MoreVert
 import com.t8rin.imagetoolbox.core.resources.icons.Redo
-import com.t8rin.imagetoolbox.core.resources.icons.SettingsBackupRestore
 import com.t8rin.imagetoolbox.core.resources.icons.TouchApp
 import com.t8rin.imagetoolbox.core.resources.icons.Undo
 import com.t8rin.imagetoolbox.core.settings.presentation.provider.LocalSettingsState
@@ -99,11 +99,11 @@ import kotlin.math.roundToInt
 /** The Cut out tool's modes (its bottom bubbles). */
 enum class CutTool(val label: String) {
     Smart("Smart select"),
-    Erase("Erase"),
-    Restore("Restore")
+    /** The brushes; with [CutOutSession.manualRestore] on they paint the photo back. */
+    Erase("Manual select")
 }
 
-/** Brush shapes for the Erase and Restore brushes, as in Image Toolbox's Background Remover. */
+/** Brush shapes for Manual select's brush (erasing, or restoring), as in Image Toolbox's Background Remover. */
 private val CutShapes: List<Pair<String, DrawPathMode>> = listOf(
     "Free" to DrawPathMode.Free,
     "Line" to DrawPathMode.Line,
@@ -131,7 +131,7 @@ class CutOutSession internal constructor(
     var panEnabled by mutableStateOf(false)
     var busyMessage by mutableStateOf<String?>(null)
 
-    /** Smart select: what's painted (include, or exclude with [PaintSession.excludeMode]). */
+    /** Smart select: what's painted (always what to keep, or with Restore on, what to bring back). */
     val smartPaint = PaintSession(PaintPurpose.Heal).apply { brushRadiusDp = 22f }
 
     /** The photo Smart select works on (the current cut-out state), full size and screen size. */
@@ -147,8 +147,11 @@ class CutOutSession internal constructor(
         internal set
     internal var samSession: Sam2.Session? = null
 
-    /** Smart select: let BiRefNet redraw the edge when cutting out (see [EdgeRefiner]). */
-    var refineEdges by mutableStateOf(false)
+    /** Smart select's Restore: what's selected is brought back (from the original photo) instead of kept alone. */
+    var smartRestore by mutableStateOf(false)
+
+    /** Manual select's Restore: the brush paints the photo back instead of erasing. */
+    var manualRestore by mutableStateOf(false)
     internal val samLock = Mutex()
 
     /** Forget Smart select's prepared photo (after the cut-out changed). */
@@ -232,25 +235,53 @@ private fun CutOutContent(
         if (strokes.none { !it.exclude }) return false
         session.busyMessage = "Cutting out…"
         val (points, box) = samPrompt(strokes, session.smartPaint.shownWidthPx, preview.width.toFloat() / preview.height)
-        val refine = session.refineEdges && EdgeRefiner.isDownloaded
+        val restore = session.smartRestore
         val done = runCatching {
             withContext(Dispatchers.Default) {
                 val selection = session.samLock.withLock { sam.segment(points = points, box = box, outputImage = source) }
-                if (!refine) return@withContext selection
-                withContext(Dispatchers.Main) { session.busyMessage = "Refining edges… (this can take a minute)" }
-                EdgeRefiner.refine(source, selection).also { if (it !== selection) selection.recycle() }
+                if (!restore) return@withContext selection
+                // Restore: the cut-out so far, plus what's selected brought back from the original.
+                val current = (component.getErasedBitmap(false) ?: error("no photo")).scaledToFit(SMART_MAX_SIDE)
+                addBack(current, selection).also { selection.recycle() }
             }
         }.onSuccess {
-            ViperLog.i("CUTOUT", "Smart select cut out: ${strokes.size} strokes, refine edges $refine, ${ViperLog.transparency(it)}")
+            ViperLog.i("CUTOUT", "Smart select ${if (restore) "restore" else "cut out"}: ${strokes.size} strokes, ${ViperLog.transparency(it)}")
             component.applySubjectSelection(it)
+            // Stays in Smart select, ready for the next one (it re-prepares on the new cut-out).
             session.resetSmart()
-            session.tool = CutTool.Erase
         }.onFailure {
             ViperLog.error("CUTOUT", "cutOutSmart failed", it)
             Toast.makeText(context, "Cut out failed: ${it.message}", Toast.LENGTH_LONG).show()
         }.isSuccess
         session.busyMessage = null
         return done
+    }
+
+    /** Refine edges: BiRefNet redraws the edge of the cut-out as it is now. Every tap runs it again. */
+    suspend fun refineNow() {
+        if (session.busyMessage != null) return
+        session.busyMessage = "Refining edges… (this can take a minute)"
+        runCatching {
+            withContext(Dispatchers.Default) {
+                val current = (component.getErasedBitmap(false) ?: error("no photo")).scaledToFit(SMART_MAX_SIDE)
+                if (!hasTransparency(current)) return@withContext null
+                val original = (component.internalBitmap ?: error("no original"))
+                    .let { if (it.width == current.width && it.height == current.height) it else Bitmap.createScaledBitmap(it, current.width, current.height, true) }
+                EdgeRefiner.refine(original, current)
+            }
+        }.onSuccess { refined ->
+            if (refined == null) {
+                Toast.makeText(context, "Cut something out first, then refine its edges", Toast.LENGTH_SHORT).show()
+            } else {
+                ViperLog.i("CUTOUT", "Refine edges: ${ViperLog.transparency(refined)}")
+                component.applySubjectSelection(refined)
+                session.resetSmart()
+            }
+        }.onFailure {
+            ViperLog.error("CUTOUT", "Refine edges failed", it)
+            Toast.makeText(context, "Refine edges failed: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+        session.busyMessage = null
     }
     var askRefineDownload by remember { mutableStateOf(false) }
     val settings = LocalSettingsState.current
@@ -280,7 +311,8 @@ private fun CutOutContent(
                                 session.busyMessage = "Downloading Refine edges… ${(it.currentPercent * 100).toInt()}%"
                             }
                         }.onSuccess {
-                            session.refineEdges = true
+                            session.busyMessage = null
+                            refineNow()
                         }.onFailure {
                             ViperLog.error("CUTOUT", "Refine edges download failed", it)
                             Toast.makeText(context, "Couldn't download Refine edges: ${it.message}", Toast.LENGTH_LONG).show()
@@ -302,7 +334,7 @@ private fun CutOutContent(
     }
 
     // Smart select: prepare SAM 2.1 on the current cut-out, then re-segment after every stroke.
-    LaunchedEffect(session.tool, component.bitmap) {
+    LaunchedEffect(session.tool, component.bitmap, session.smartRestore) {
         if (session.tool != CutTool.Smart || component.bitmap == null) return@LaunchedEffect
         if (!Sam2.isDownloaded()) {
             onNeedSamDownload()
@@ -314,7 +346,9 @@ private fun CutOutContent(
                 withContext(Dispatchers.Default) {
                     // Big camera photos are capped at 16 MP so the extra copies Smart select
                     // needs don't run the phone out of memory.
-                    val full = component.getErasedBitmap(false) ?: error("no photo")
+                    // Restore picks from the original photo (what was erased can't be seen in the cut-out).
+                    val full = if (session.smartRestore) component.internalBitmap ?: error("no original")
+                    else component.getErasedBitmap(false) ?: error("no photo")
                     val source = full.scaledToFit(SMART_MAX_SIDE)
                     session.samSource = source
                     session.samPreviewSource = source.scaledToFit(1536)
@@ -394,7 +428,9 @@ private fun CutOutContent(
         Box(
             Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // A zoomed-in photo stays in its own space, behind the top bar and the buttons.
+                .clipToBounds(),
             contentAlignment = Alignment.Center
         ) {
             val bitmap = component.bitmap
@@ -470,7 +506,7 @@ private fun CutOutContent(
                     onAddPath = component::addPath,
                     drawPathMode = session.shape,
                     strokeWidth = session.strokeWidth.pt,
-                    isRecoveryOn = session.tool == CutTool.Restore,
+                    isRecoveryOn = session.manualRestore,
                     modifier = Modifier
                         .padding(16.dp)
                         .aspectRatio(bitmap.width.toFloat() / bitmap.height)
@@ -478,7 +514,7 @@ private fun CutOutContent(
                     panEnabled = session.panEnabled,
                     helperGridParams = component.helperGridParams
                 )
-                if ((session.tool == CutTool.Erase || session.tool == CutTool.Restore) && session.shape.canChangeStrokeWidth) {
+                if (session.tool == CutTool.Erase && session.shape.canChangeStrokeWidth) {
                     SideSlider(
                         value = session.strokeWidth,
                         range = 1f..100f,
@@ -520,29 +556,33 @@ private fun CutOutContent(
             when (session.tool) {
                 CutTool.Smart -> {
                     Text(
-                        "Roughly paint over what to keep — the AI finds its exact edge.",
+                        if (session.smartRestore) "Roughly paint over what to bring back — the AI finds its exact edge."
+                        else "Roughly paint over what to keep — the AI finds its exact edge.",
                         color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Pill("Keep", !session.smartPaint.excludeMode) { session.smartPaint.excludeMode = false }
-                        Pill("Leave out", session.smartPaint.excludeMode) { session.smartPaint.excludeMode = true }
-                        Pill("Clear", false) { session.smartPaint.strokes.clear() }
-                        Pill("Cut out", session.samPreview != null, filled = true) {
-                            scope.launch { cutOutSmart() }
+                        // Buttons that act every time they're tapped (not on/off).
+                        Pill(if (session.smartRestore) "Bring back" else "Cut out", selected = false) {
+                            if (session.busyMessage == null) scope.launch { cutOutSmart() }
                         }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Pill(if (session.refineEdges) "Refine edges ✓" else "Refine edges", session.refineEdges) {
-                        when {
-                            session.refineEdges -> session.refineEdges = false
-                            EdgeRefiner.isDownloaded -> session.refineEdges = true
-                            else -> askRefineDownload = true
+                        Pill("Refine edges", selected = false) {
+                            if (EdgeRefiner.isDownloaded) scope.launch { refineNow() } else askRefineDownload = true
+                        }
+                        // Switching starts the selection over (it then works on a different photo); never
+                        // while Smart select is mid-run (closing it then crashes in native code).
+                        Pill("Restore", session.smartRestore) {
+                            if (session.busyMessage == null) scope.launch {
+                                session.samLock.withLock { session.resetSmart() }
+                                session.smartRestore = !session.smartRestore
+                            }
                         }
                     }
                 }
 
-                CutTool.Erase, CutTool.Restore -> {
+                CutTool.Erase -> {
+                    Pill("Restore", session.manualRestore) { session.manualRestore = !session.manualRestore }
+                    Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(CutShapes) { (label, mode) ->
                             Pill(label, session.shape::class == mode::class) { session.shape = mode }
@@ -587,7 +627,6 @@ private val CutTool.icon: ImageVector
     get() = when (this) {
         CutTool.Smart -> Icons.Rounded.TouchApp
         CutTool.Erase -> Icons.Rounded.Eraser
-        CutTool.Restore -> Icons.Rounded.SettingsBackupRestore
     }
 
 @Composable
@@ -649,6 +688,42 @@ internal fun Checkerboard(modifier: Modifier, imageWidth: Int, imageHeight: Int)
             row++
         }
     }
+}
+
+/** [current] (the cut-out so far) with what [selection] covers brought back, at full opacity. */
+private fun addBack(current: Bitmap, selection: Bitmap): Bitmap {
+    val w = current.width
+    val h = current.height
+    val sel = if (selection.width == w && selection.height == h) selection else Bitmap.createScaledBitmap(selection, w, h, true)
+    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val a = IntArray(w)
+    val b = IntArray(w)
+    for (y in 0 until h) {
+        current.getPixels(a, 0, w, 0, y, w, 1)
+        sel.getPixels(b, 0, w, 0, y, w, 1)
+        for (x in 0 until w) {
+            val ca = a[x] ushr 24
+            val sa = b[x] ushr 24
+            a[x] = if (sa > ca) (sa shl 24) or (b[x] and 0xFFFFFF) else a[x]
+        }
+        result.setPixels(a, 0, w, 0, y, w, 1)
+    }
+    if (sel !== selection) sel.recycle()
+    result.setHasAlpha(true)
+    return result
+}
+
+/** Whether anything in [bitmap] is see-through (sampled, so it's quick). */
+private fun hasTransparency(bitmap: Bitmap): Boolean {
+    if (!bitmap.hasAlpha()) return false
+    val w = bitmap.width
+    val row = IntArray(w)
+    val step = maxOf(1, bitmap.height / 400)
+    for (y in 0 until bitmap.height step step) {
+        bitmap.getPixels(row, 0, w, 0, y, w, 1)
+        if (row.any { (it ushr 24) < 250 }) return true
+    }
+    return false
 }
 
 /** Longest side Smart select works on (about 16 MP). */
