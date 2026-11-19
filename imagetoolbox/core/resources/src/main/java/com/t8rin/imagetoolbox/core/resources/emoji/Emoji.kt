@@ -57,6 +57,11 @@ object Emoji {
             if (!_allIcons.isNullOrEmpty() && !_allIconsCategorized.isNullOrEmpty()) return
 
             val animatedIcons = mutableMapOf<Uri, Uri>()
+            // Viper Vision: emojis added later (listed in vv_added_emoji.txt) are numbered after
+            // the original ones, so an emoji saved by its number (Settings) stays the same one.
+            val added = runCatching {
+                assets.open("vv_added_emoji.txt").bufferedReader().readLines().map(String::trim).filter(String::isNotEmpty).toSet()
+            }.getOrDefault(emptySet())
             val categories = listOf(
                 EmojiCategory(
                     title = R.string.emotions,
@@ -103,9 +108,9 @@ object Emoji {
             }.toPersistentList()
 
             _allIconsCategorized = categories
-            _allIcons = categories
-                .flatMap(EmojiData::emojis)
-                .toPersistentList()
+            fun isAdded(uri: Uri) = uri.pathSegments.takeLast(2).joinToString("/") in added
+            val all = categories.flatMap(EmojiData::emojis)
+            _allIcons = (all.filterNot(::isAdded) + all.filter(::isAdded)).toPersistentList()
             _animatedIcons = animatedIcons
         }
     }
