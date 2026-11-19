@@ -6,6 +6,9 @@
 
 package com.t8rin.imagetoolbox.feature.markup_layers.presentation
 
+import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.activeLayerTouchShield
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import net.engawapg.lib.zoomable.toggleScale
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.ClickableTile
 import com.t8rin.imagetoolbox.core.resources.icons.Close
@@ -131,7 +134,47 @@ fun ViperMarkupCanvas(
     LaunchedEffect(activeLayer) { if (activeLayer == null) uiState.showQuickActions = false }
 
     val zoomState = rememberZoomState(maxScale = 10f)
-    Box(modifier = modifier.fillMaxSize().clipToBounds()) {
+    // Dragging a layer to an edge of the zoomed-in photo scrolls the photo that way, slowly, for
+    // as long as it's held there (the layer stays under the finger).
+    var draggingLayer by remember { mutableStateOf(false) }
+    var finger by remember { mutableStateOf<Offset?>(null) }
+    var viewport by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    val edge = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
+    val maxSpeed = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.toPx() }
+    LaunchedEffect(draggingLayer) {
+        while (draggingLayer) {
+            withFrameNanos { }
+            val layer = component.layers.firstOrNull { it.state.isActive } ?: continue
+            val at = finger ?: continue
+            if (zoomState.scale <= 1.01f || viewport.width == 0) continue
+            fun speed(position: Float, length: Int): Float = when {
+                position < edge -> maxSpeed * (1f - position / edge).coerceIn(0f, 1f)
+                position > length - edge -> -maxSpeed * (1f - (length - position) / edge).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            val want = Offset(speed(at.x, viewport.width), speed(at.y, viewport.height))
+            if (want == Offset.Zero) continue
+            val moved = zoomState.panBy(want)
+            if (moved != Offset.Zero) {
+                component.moveLayerBy(layer = layer, offsetChange = -moved / zoomState.scale, commitToHistory = false)
+            }
+        }
+    }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { viewport = it }
+            .pointerInput(Unit) {
+                // Where the finger is on screen (only watched, never used up).
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        finger = event.changes.firstOrNull { it.pressed }?.position
+                    }
+                }
+            }
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -172,8 +215,10 @@ fun ViperMarkupCanvas(
                         activeLayer = activeLayer,
                         snappingEnabled = uiState.snappingEnabled,
                         canvasScale = zoomState.scale,
-                        onSnap = { snapResult = it }
+                        onSnap = { snapResult = it },
+                        onDragging = { draggingLayer = it }
                     )
+                    .activeLayerTouchShield(activeLayer = activeLayer, canvasScale = zoomState.scale)
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
                 contentAlignment = Alignment.Center
             ) {

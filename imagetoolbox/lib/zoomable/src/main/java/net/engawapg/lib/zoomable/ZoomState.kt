@@ -143,6 +143,18 @@ class ZoomState(
 
     private val velocityTracker = VelocityTracker()
 
+    /**
+     * Viper Vision: moves the zoomed content by [delta] (screen pixels), within its bounds; returns
+     * how far it actually moved.
+     */
+    suspend fun panBy(delta: Offset): Offset {
+        val beforeX = _offsetX.value
+        val beforeY = _offsetY.value
+        _offsetX.snapTo(beforeX + delta.x)
+        _offsetY.snapTo(beforeY + delta.y)
+        return Offset(_offsetX.value - beforeX, _offsetY.value - beforeY)
+    }
+
     internal fun startGesture() {
         velocityTracker.resetTracking()
     }

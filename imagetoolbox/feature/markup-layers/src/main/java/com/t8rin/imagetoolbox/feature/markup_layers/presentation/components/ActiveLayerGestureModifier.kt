@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
@@ -45,7 +46,8 @@ internal fun Modifier.activeLayerGestures(
     activeLayer: UiMarkupLayer?,
     snappingEnabled: Boolean,
     canvasScale: Float,
-    onSnap: (LayerSnapResult?) -> Unit
+    onSnap: (LayerSnapResult?) -> Unit,
+    onDragging: (Boolean) -> Unit = {}
 ): Modifier = pointerInput(activeLayer, snappingEnabled, canvasScale) {
     if (activeLayer == null || activeLayer.isLocked) return@pointerInput
 
@@ -66,12 +68,7 @@ internal fun Modifier.activeLayerGestures(
         )
         // Viper Vision: only touches that start on (or close to) the selected layer move it;
         // anywhere else the gesture is left alone, so pinching there zooms the whole photo.
-        val margin = 36.dp.toPx() / canvasScale
-        val bounds = activeLayer.visualBounds()
-        val local = down.position - Offset(size.width / 2f, size.height / 2f)
-        if (local.x < bounds.left - margin || local.x > bounds.right + margin ||
-            local.y < bounds.top - margin || local.y > bounds.bottom + margin
-        ) return@awaitEachGesture
+        if (!isOnLayer(activeLayer, down.position, canvasScale)) return@awaitEachGesture
         var activePointerId = down.id
 
         try {
@@ -131,6 +128,7 @@ internal fun Modifier.activeLayerGestures(
                 }
 
                 if (pastTouchSlop) {
+                    onDragging(!isMultiTouch)
                     val canvasSize = IntegerSize(size.width, size.height)
                     val offsetChange = if (snappingEnabled && !isMultiTouch) {
                         panChange - snapCorrection
@@ -189,10 +187,40 @@ internal fun Modifier.activeLayerGestures(
                 activePointerId = down.id
             } while (true)
         } finally {
+            onDragging(false)
             onSnap(null)
             if (pastTouchSlop) {
                 component.commitHistoryTransaction()
             }
         }
+    }
+}
+
+/** Viper Vision: whether [position] (in the canvas) is on, or within a finger's width of, [layer]. */
+private fun PointerInputScope.isOnLayer(layer: UiMarkupLayer, position: Offset, canvasScale: Float): Boolean {
+    val margin = 36.dp.toPx() / canvasScale
+    val bounds = layer.visualBounds()
+    val local = position - Offset(size.width / 2f, size.height / 2f)
+    return local.x >= bounds.left - margin && local.x <= bounds.right + margin &&
+            local.y >= bounds.top - margin && local.y <= bounds.bottom + margin
+}
+
+/**
+ * Viper Vision: a touch that starts on the selected layer is the layer's alone. Its movements are
+ * marked used after the layer itself has seen them (so its taps and holds still work), which stops
+ * the photo zoom around it from also panning the photo.
+ */
+internal fun Modifier.activeLayerTouchShield(
+    activeLayer: UiMarkupLayer?,
+    canvasScale: Float
+): Modifier = pointerInput(activeLayer, canvasScale) {
+    if (activeLayer == null || activeLayer.isLocked) return@pointerInput
+    awaitEachGesture {
+        val down = awaitFirstDown(pass = PointerEventPass.Main, requireUnconsumed = false)
+        if (!isOnLayer(activeLayer, down.position, canvasScale)) return@awaitEachGesture
+        do {
+            val event = awaitPointerEvent(pass = PointerEventPass.Main)
+            event.changes.forEach { if (it.positionChanged()) it.consume() }
+        } while (event.changes.any(PointerInputChange::pressed))
     }
 }

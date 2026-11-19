@@ -106,16 +106,6 @@ internal fun MarkupScreen(
                 .fillMaxWidth()
         )
 
-        Text(
-            if (component.layers.any { it.state.isActive }) {
-                "Drag, pinch and twist the selected layer · double-tap it to edit"
-            } else "Add text, pictures, emoji or shapes · tap one to select it",
-            color = Color.Gray,
-            fontSize = 12.sp,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(top = 8.dp)
-        )
         // Snap: a wide, short on/off pill above the bubbles.
         val accent = LocalAccent.current
         Box(
