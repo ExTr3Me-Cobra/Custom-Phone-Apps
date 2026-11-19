@@ -6,6 +6,18 @@
 
 package com.t8rin.imagetoolbox.feature.markup_layers.presentation
 
+import net.engawapg.lib.zoomable.toggleScale
+import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.ClickableTile
+import com.t8rin.imagetoolbox.core.resources.icons.Close
+import com.t8rin.imagetoolbox.core.resources.icons.Delete
+import com.t8rin.imagetoolbox.core.resources.icons.ArrowDropDown
+import com.t8rin.imagetoolbox.core.resources.icons.ArrowDropUp
+import com.t8rin.imagetoolbox.core.resources.icons.ArrowRight
+import com.t8rin.imagetoolbox.core.resources.icons.ArrowLeft
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -69,6 +81,8 @@ class ViperMarkupUiState {
     var showTextDialog by mutableStateOf(false)
     var showEmojiPicker by mutableStateOf(false)
     var showShapePicker by mutableStateOf(false)
+    /** The small see-through bar (delete, nudge) shown after holding a layer. */
+    var showQuickActions by mutableStateOf(false)
     internal var pickImageRequests by mutableIntStateOf(0)
     internal var isContextOptionsVisible by mutableStateOf(false)
     internal var shouldOpenContextOptions by mutableStateOf(false)
@@ -113,14 +127,23 @@ fun ViperMarkupCanvas(
         }
     }
 
+    // Holding a layer shows the quick bar; it goes when nothing is selected.
+    LaunchedEffect(activeLayer) { if (activeLayer == null) uiState.showQuickActions = false }
+
     val zoomState = rememberZoomState(maxScale = 10f)
+    Box(modifier = modifier.fillMaxSize().clipToBounds()) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
-            .clipToBounds()
+            // Pinching anywhere but on the selected layer zooms the whole photo (the layer's own
+            // gestures take touches that start on it). Double-tap zoom only with nothing selected,
+            // since double-tapping a layer edits it.
             .zoomable(
                 zoomState = zoomState,
-                zoomEnabled = !component.layers.fastAny { it.state.isActive }
+                zoomEnabled = true,
+                onDoubleTap = { position ->
+                    if (!component.layers.fastAny { it.state.isActive }) zoomState.toggleScale(5f, position)
+                }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -191,12 +214,53 @@ fun ViperMarkupCanvas(
                         onUpdateLayer = { updatedLayer, commitToHistory ->
                             component.updateLayerAt(index = index, layer = updatedLayer, commitToHistory = commitToHistory)
                         },
-                        onShowContextOptions = { uiState.showLayerOptions() }
+                        onShowContextOptions = { uiState.showQuickActions = true }
                     )
                 }
                 LayerSnapGuides(snapResult)
             }
         }
+    }
+    val quickLayer = activeLayer
+    if (uiState.showQuickActions && quickLayer != null) {
+        ViperQuickLayerActions(
+            onDelete = {
+                uiState.showQuickActions = false
+                component.removeLayer(quickLayer)
+            },
+            onMove = { dx, dy -> component.moveLayerBy(layer = quickLayer, offsetChange = Offset(dx, dy)) },
+            onClose = { uiState.showQuickActions = false },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 8.dp)
+        )
+    }
+    }
+}
+
+/** Holding a layer: a small see-through bar with delete and the nudge arrows (hold to repeat). */
+@Composable
+private fun ViperQuickLayerActions(
+    onDelete: () -> Unit,
+    onMove: (Float, Float) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tile = Color.Black.copy(alpha = 0.28f)
+    val tileModifier = Modifier.size(38.dp)
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        ClickableTile(onClick = onDelete, icon = Icons.Rounded.Delete, text = null, containerColor = tile, modifier = Modifier.size(30.dp))
+        Spacer(Modifier.size(4.dp))
+        ClickableTile(onClick = { onMove(-1f, 0f) }, onHoldStep = { onMove(-1f, 0f) }, icon = Icons.Rounded.ArrowLeft, text = null, containerColor = tile, modifier = tileModifier)
+        ClickableTile(onClick = { onMove(0f, -1f) }, onHoldStep = { onMove(0f, -1f) }, icon = Icons.Rounded.ArrowDropUp, text = null, containerColor = tile, modifier = tileModifier)
+        ClickableTile(onClick = { onMove(0f, 1f) }, onHoldStep = { onMove(0f, 1f) }, icon = Icons.Rounded.ArrowDropDown, text = null, containerColor = tile, modifier = tileModifier)
+        ClickableTile(onClick = { onMove(1f, 0f) }, onHoldStep = { onMove(1f, 0f) }, icon = Icons.Rounded.ArrowRight, text = null, containerColor = tile, modifier = tileModifier)
+        Spacer(Modifier.size(4.dp))
+        ClickableTile(onClick = onClose, icon = Icons.Rounded.Close, text = null, containerColor = tile, modifier = Modifier.size(30.dp))
     }
 }
 

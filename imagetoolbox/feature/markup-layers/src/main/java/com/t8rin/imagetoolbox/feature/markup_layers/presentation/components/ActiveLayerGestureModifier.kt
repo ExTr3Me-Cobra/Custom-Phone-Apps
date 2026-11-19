@@ -35,6 +35,7 @@ import com.t8rin.imagetoolbox.core.domain.model.IntegerSize
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.model.UiMarkupLayer
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.model.applyGroupGlobalChanges
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.model.uiCornerRadiusPercent
+import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.model.visualBounds
 import com.t8rin.imagetoolbox.feature.markup_layers.presentation.screenLogic.MarkupLayersComponent
 import kotlin.math.abs
 import kotlin.math.sign
@@ -63,6 +64,14 @@ internal fun Modifier.activeLayerGestures(
             pass = PointerEventPass.Initial,
             requireUnconsumed = false
         )
+        // Viper Vision: only touches that start on (or close to) the selected layer move it;
+        // anywhere else the gesture is left alone, so pinching there zooms the whole photo.
+        val margin = 36.dp.toPx() / canvasScale
+        val bounds = activeLayer.visualBounds()
+        val local = down.position - Offset(size.width / 2f, size.height / 2f)
+        if (local.x < bounds.left - margin || local.x > bounds.right + margin ||
+            local.y < bounds.top - margin || local.y > bounds.bottom + margin
+        ) return@awaitEachGesture
         var activePointerId = down.id
 
         try {

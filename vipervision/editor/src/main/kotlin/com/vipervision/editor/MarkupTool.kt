@@ -1,5 +1,6 @@
 package com.vipervision.editor
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -115,6 +116,21 @@ internal fun MarkupScreen(
                 .align(Alignment.CenterHorizontally)
                 .padding(top = 8.dp)
         )
+        // Snap: a wide, short on/off pill above the bubbles.
+        val accent = LocalAccent.current
+        Box(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(top = 8.dp)
+                .width(150.dp)
+                .height(30.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(if (ui.snappingEnabled) accent else BubbleGrey)
+                .clickable { ui.snappingEnabled = !ui.snappingEnabled },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Snap", color = if (ui.snappingEnabled) accent.contentOn() else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -134,7 +150,6 @@ internal fun MarkupScreen(
                     if (component.layers.any { it.state.isActive }) ui.showLayerOptions()
                 }
             }
-            item { MarkupBubble("Snap", Icons.Outlined.GridOn, selected = ui.snappingEnabled) { ui.snappingEnabled = !ui.snappingEnabled } }
         }
         Spacer(Modifier.navigationBarsPadding().height(6.dp))
     }
