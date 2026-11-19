@@ -47,7 +47,8 @@ internal fun Modifier.activeLayerGestures(
     snappingEnabled: Boolean,
     canvasScale: Float,
     onSnap: (LayerSnapResult?) -> Unit,
-    onDragging: (Boolean) -> Unit = {}
+    onDragging: (Boolean) -> Unit = {},
+    onLayerTouch: (Boolean) -> Unit = {}
 ): Modifier = pointerInput(activeLayer, snappingEnabled, canvasScale) {
     if (activeLayer == null || activeLayer.isLocked) return@pointerInput
 
@@ -68,7 +69,12 @@ internal fun Modifier.activeLayerGestures(
         )
         // Viper Vision: only touches that start on (or close to) the selected layer move it;
         // anywhere else the gesture is left alone, so pinching there zooms the whole photo.
-        if (!isOnLayer(activeLayer, down.position, canvasScale)) return@awaitEachGesture
+        if (!isOnLayer(activeLayer, down.position, canvasScale)) {
+            onLayerTouch(false)
+            return@awaitEachGesture
+        }
+        // The layer has this touch: the photo zoom around it leaves it alone (no panning).
+        onLayerTouch(true)
         var activePointerId = down.id
 
         try {
@@ -187,6 +193,7 @@ internal fun Modifier.activeLayerGestures(
                 activePointerId = down.id
             } while (true)
         } finally {
+            onLayerTouch(false)
             onDragging(false)
             onSnap(null)
             if (pastTouchSlop) {
@@ -203,24 +210,4 @@ private fun PointerInputScope.isOnLayer(layer: UiMarkupLayer, position: Offset, 
     val local = position - Offset(size.width / 2f, size.height / 2f)
     return local.x >= bounds.left - margin && local.x <= bounds.right + margin &&
             local.y >= bounds.top - margin && local.y <= bounds.bottom + margin
-}
-
-/**
- * Viper Vision: a touch that starts on the selected layer is the layer's alone. Its movements are
- * marked used after the layer itself has seen them (so its taps and holds still work), which stops
- * the photo zoom around it from also panning the photo.
- */
-internal fun Modifier.activeLayerTouchShield(
-    activeLayer: UiMarkupLayer?,
-    canvasScale: Float
-): Modifier = pointerInput(activeLayer, canvasScale) {
-    if (activeLayer == null || activeLayer.isLocked) return@pointerInput
-    awaitEachGesture {
-        val down = awaitFirstDown(pass = PointerEventPass.Main, requireUnconsumed = false)
-        if (!isOnLayer(activeLayer, down.position, canvasScale)) return@awaitEachGesture
-        do {
-            val event = awaitPointerEvent(pass = PointerEventPass.Main)
-            event.changes.forEach { if (it.positionChanged()) it.consume() }
-        } while (event.changes.any(PointerInputChange::pressed))
-    }
 }

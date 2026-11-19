@@ -408,10 +408,10 @@ private class ZoomableNode(
                     zoomState.startGesture()
                 },
                 canConsumeGesture = { pan, zoom ->
-                    zoomEnabled && canConsumeGesture(pan, zoom)
+                    zoomEnabled && !zoomState.gesturesPaused && canConsumeGesture(pan, zoom)
                 },
                 onGesture = { centroid, pan, zoom, timeMillis ->
-                    if (zoomEnabled) {
+                    if (zoomEnabled && !zoomState.gesturesPaused) {
                         coroutineScope.launch {
                             zoomState.applyGesture(
                                 pan = pan,

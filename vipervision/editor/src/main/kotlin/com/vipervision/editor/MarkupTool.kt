@@ -135,11 +135,6 @@ internal fun MarkupScreen(
                     if (component.layers.isNotEmpty()) ui.showLayersMenu = !ui.showLayersMenu
                 }
             }
-            item {
-                MarkupBubble("Edit layer", Icons.Rounded.Tune) {
-                    if (component.layers.any { it.state.isActive }) ui.showLayerOptions()
-                }
-            }
         }
         Spacer(Modifier.navigationBarsPadding().height(6.dp))
     }

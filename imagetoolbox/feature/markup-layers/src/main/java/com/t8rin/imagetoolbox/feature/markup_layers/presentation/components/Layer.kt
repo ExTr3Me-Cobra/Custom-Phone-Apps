@@ -74,8 +74,9 @@ internal fun BoxWithConstraintsScope.Layer(
         blendingMode = layer.blendingMode,
         isInteractive = isInteractive,
         onTap = {
+            // Viper Vision: only text layers open the editor (to change their words).
             if (layer.state.isActive && canEditLayer) {
-                layer.state.isInEditMode = true
+                if (type is LayerType.Text) layer.state.isInEditMode = true
             } else {
                 onActivate?.invoke()
             }
@@ -151,7 +152,8 @@ internal fun BoxWithConstraintsScope.Layer(
     if (canEditLayer) {
         EditLayerSheet(
             component = component,
-            visible = layer.state.isInEditMode && !layer.isLocked,
+            // Viper Vision: the edit screen is only for changing a text layer's words.
+            visible = layer.state.isInEditMode && !layer.isLocked && layer.type is LayerType.Text,
             onDismiss = { layer.state.isInEditMode = it },
             onUpdateLayer = onUpdateLayer,
             layer = layer
@@ -274,7 +276,8 @@ private fun BoxWithConstraintsScope.GroupLayer(
     if (canEditLayer && component != null && onUpdateLayer != null) {
         EditLayerSheet(
             component = component,
-            visible = layer.state.isInEditMode && !layer.isLocked,
+            // Viper Vision: the edit screen is only for changing a text layer's words.
+            visible = layer.state.isInEditMode && !layer.isLocked && layer.type is LayerType.Text,
             onDismiss = { layer.state.isInEditMode = it },
             onUpdateLayer = onUpdateLayer,
             layer = layer

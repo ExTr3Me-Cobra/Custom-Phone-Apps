@@ -6,7 +6,6 @@
 
 package com.t8rin.imagetoolbox.feature.markup_layers.presentation
 
-import com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.activeLayerTouchShield
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import net.engawapg.lib.zoomable.toggleScale
@@ -216,9 +215,9 @@ fun ViperMarkupCanvas(
                         snappingEnabled = uiState.snappingEnabled,
                         canvasScale = zoomState.scale,
                         onSnap = { snapResult = it },
-                        onDragging = { draggingLayer = it }
+                        onDragging = { draggingLayer = it },
+                        onLayerTouch = { zoomState.gesturesPaused = it }
                     )
-                    .activeLayerTouchShield(activeLayer = activeLayer, canvasScale = zoomState.scale)
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
                 contentAlignment = Alignment.Center
             ) {

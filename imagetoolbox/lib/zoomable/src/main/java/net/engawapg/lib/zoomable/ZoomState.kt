@@ -144,6 +144,12 @@ class ZoomState(
     private val velocityTracker = VelocityTracker()
 
     /**
+     * Viper Vision: while true, touches don't zoom or pan (something inside, e.g. a layer being
+     * dragged, has them). Read at every touch, so it takes effect at once.
+     */
+    var gesturesPaused: Boolean = false
+
+    /**
      * Viper Vision: moves the zoomed content by [delta] (screen pixels), within its bounds; returns
      * how far it actually moved.
      */
