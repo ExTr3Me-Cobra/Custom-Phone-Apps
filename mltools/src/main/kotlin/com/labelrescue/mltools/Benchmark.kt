@@ -38,13 +38,15 @@ class SimulatedOcr(
     private val frames: List<GrayImage>,
     private val label: RenderedLabel,
     private val damaged: GrayImage,
-    seed: Int,
+    private val seed: Int,
 ) : TextRecognizer {
-    private val rnd = Random(seed)
     private val damage = label.digitBoxes.map { b -> damageScore(label.image, damaged, b) }
 
     override fun recognize(img: GrayImage): OcrPage {
-        if (frames.none { it === img }) return OcrPage(emptyList())
+        val fi = frames.indexOfFirst { it === img }
+        if (fi < 0) return OcrPage(emptyList())
+        // Same answer every time for the same frame, so runs with and without a model are paired.
+        val rnd = Random(seed * 1000 + fi)
         val confusions = mapOf('0' to "689", '1' to "74", '2' to "73", '3' to "85", '4' to "19", '5' to "63", '6' to "508", '7' to "12", '8' to "3609", '9' to "084")
         val elements = ArrayList<OcrElement>()
         var syms = ArrayList<OcrSymbol>()
@@ -153,8 +155,8 @@ object Bench {
 /**
  * Usage: benchmark <modelsDir> [cases]
  * Runs every case without models, with each model alone, and with all kept models; keeps a model
- * only if it fixes more cases than it breaks (net gain ≥ max(1, 2% of cases)) and doesn't lower
- * top-1. Writes manifest.json (read by the app) and BENCHMARK.md.
+ * only if it fixes clearly more cases than it breaks (net gain ≥ 3% of cases, at least 2) and
+ * lowers neither top-1 nor top-3. Writes manifest.json (read by the app) and BENCHMARK.md.
  */
 fun main(args: Array<String>) {
     val dir = File(args.getOrElse(0) { "models" })
@@ -166,12 +168,12 @@ fun main(args: Array<String>) {
     println("baseline: top1 ${base.top1Count}/$n top3 ${base.top3Count}/$n (${base.millis / 1000}s)")
     val rows = ArrayList<Map<String, Any?>>()
     val kept = LinkedHashMap<String, Boolean>()
-    val minGain = max(1, (n * 0.02).toInt())
+    val minGain = max(2, kotlin.math.ceil(n * 0.03).toInt())
     for ((name, m) in available) {
         val r = Bench.run(cases, m)
         val gains = (0 until n).count { !base.top1[it] && r.top1[it] }
         val losses = (0 until n).count { base.top1[it] && !r.top1[it] }
-        val keep = gains - losses >= minGain && r.top1Count >= base.top1Count
+        val keep = gains - losses >= minGain && r.top1Count >= base.top1Count && r.top3Count >= base.top3Count
         kept[name] = keep
         println("$name: top1 ${r.top1Count}/$n top3 ${r.top3Count}/$n fixed $gains broke $losses -> ${if (keep) "KEEP" else "drop"} (${r.millis / 1000}s)")
         rows += mapOf("model" to name, "top1" to r.top1Count, "top3" to r.top3Count, "fixed" to gains, "broke" to losses, "enabled" to keep, "seconds" to r.millis / 1000)
@@ -185,7 +187,7 @@ fun main(args: Array<String>) {
     println("kept ${all.names}: top1 ${combined.top1Count}/$n top3 ${combined.top3Count}/$n")
     val manifest = mapOf(
         "cases" to n,
-        "rule" to "keep if (cases fixed - cases broken) >= $minGain and top-1 not lower than baseline",
+        "rule" to "keep if (cases fixed - cases broken) >= $minGain (3% of cases, at least 2) and neither top-1 nor top-3 is lower than without it",
         "baseline" to mapOf("top1" to base.top1Count, "top3" to base.top3Count),
         "combined" to mapOf("models" to all.names, "top1" to combined.top1Count, "top3" to combined.top3Count),
         "models" to rows.associate { it["model"] as String to it - "model" },

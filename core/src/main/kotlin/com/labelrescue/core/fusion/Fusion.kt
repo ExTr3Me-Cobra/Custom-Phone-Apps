@@ -114,12 +114,23 @@ object Fusion {
         }
     }
 
-    /** Picks the tracking format the evidence agrees on. */
-    fun chooseFormat(obs: List<Observation>, partial: PartialResult?): TrackingFormat? {
+    /**
+     * Picks the tracking format the evidence agrees on. The barcode's vote is scaled by how sure
+     * it is: a badly damaged barcode can fit the wrong layout with garbage digits, and must not
+     * override clear OCR of the printed number.
+     */
+    fun chooseFormat(obs: List<Observation>, partials: List<PartialResult>): TrackingFormat? {
         val score = HashMap<TrackingFormat, Double>()
-        for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, o.weight, Double::plus)
-        if (partial != null) score.merge(partial.structure.trackingFormat, 5.0, Double::plus)
+        // A printed number that aligned to a format is strong evidence of its length.
+        for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, 3.0 * o.weight, Double::plus)
+        partials.firstOrNull()?.let { score.merge(it.structure.trackingFormat, 4.0 * it.confidence, Double::plus) }
         return score.maxByOrNull { it.value }?.key
+    }
+
+    /** The best barcode reading for [format], unless it is far less likely than the best overall. */
+    fun partialFor(format: TrackingFormat, partials: List<PartialResult>): PartialResult? {
+        val best = partials.firstOrNull() ?: return null
+        return partials.firstOrNull { it.structure.trackingFormat == format }?.takeIf { it.logZ >= best.logZ - 40 }
     }
 
     /** Fuses OCR consensus and partial-barcode digits into one distribution per position. */

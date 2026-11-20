@@ -57,6 +57,9 @@ class PartialResult(
 
     val bestTracking: String get() = trackingDigits.joinToString("") { it.best.toString() }
 
+    /** 0..1: how sure the barcode is about its tracking digits (mean best probability, squared). */
+    val confidence: Double get() = trackingDigits.map { it.bestP }.average().let { it * it }
+
     /**
      * Exact log-likelihood of a whole tracking number under the barcode evidence and the mod-103
      * checksum, summing over the ZIP part. Keeps the pair structure that per-digit
@@ -447,8 +450,11 @@ class Code128Partial(private val maxLines: Int = 32) {
      * Combines evidence (from many frames and image variants) and applies the GS1 layout and
      * checksums. Returns the most likely layout's result, or null if nothing fits.
      */
-    fun decode(evidence: List<SymbolEvidence>): PartialResult? {
-        var best: PartialResult? = null
+    fun decode(evidence: List<SymbolEvidence>): PartialResult? = decodeAll(evidence).firstOrNull()
+
+    /** Results for every layout that fits, best (highest likelihood) first. */
+    fun decodeAll(evidence: List<SymbolEvidence>): List<PartialResult> {
+        val all = ArrayList<PartialResult>()
         for ((n, group0) in evidence.filter { isAnchored(it) }.groupBy { it.symbolCount }) {
             // Measurements that read well dominate; poor ones still add a little.
             val group = group0
@@ -467,11 +473,10 @@ class Code128Partial(private val maxLines: Int = 32) {
             val representative = group.maxBy { it.quality.sum() }
             for (st in Gs1Structure.ALL) {
                 if (st.symbolCount != n) continue
-                val r = solve(st, probs.subList(1, n + 1), representative) ?: continue
-                if (best == null || r.logZ > best.logZ) best = r
+                all += solve(st, probs.subList(1, n + 1), representative) ?: continue
             }
         }
-        return best
+        return all.sortedByDescending { it.logZ }
     }
 
     private fun meanQuality(e: SymbolEvidence): Double {

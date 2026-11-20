@@ -16,5 +16,5 @@ if [ "$EP_SCALE" = "0" ]; then EPOCHS_ARGS=(--epochs 3); fi
 "$PY" training/train_digits.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
 "$PY" training/train_restore.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
 "$PY" training/train_regions.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
-./gradlew --no-daemon :mltools:benchmark -Pcases="${CASES:-48}"
+./gradlew --no-daemon :mltools:benchmark -Pcases="${CASES:-96}"
 cat "$OUT/manifest.json"

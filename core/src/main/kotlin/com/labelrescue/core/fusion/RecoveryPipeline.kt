@@ -137,8 +137,9 @@ class RecoveryPipeline(
             barcodeMeasurements = results.sumOf { it.measurements },
         )
 
-        val partial: PartialResult? = partialDecoder.decode(evidence.map { it.ev })
-        val format = Fusion.chooseFormat(observations, partial)
+        val partials = partialDecoder.decodeAll(evidence.map { it.ev })
+        val format = Fusion.chooseFormat(observations, partials)
+        val partial: PartialResult? = format?.let { Fusion.partialFor(it, partials) }
         stats = stats.copy(ocrObservations = observations.size, millis = System.currentTimeMillis() - t0)
         if (format == null) {
             notes += "No tracking number found. Try cropping to the number, more light, or type the digits."

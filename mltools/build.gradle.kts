@@ -44,7 +44,7 @@ tasks.register<JavaExec>("benchmark") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.labelrescue.mltools.BenchmarkKt")
     jvmArgs("-Xmx3g", "-Djava.awt.headless=true")
-    args(modelsDir.asFile.path, (project.findProperty("cases") as String?) ?: "48")
+    args(modelsDir.asFile.path, (project.findProperty("cases") as String?) ?: "96")
 }
 
 tasks.test {
