@@ -190,7 +190,9 @@ fun EditBox(
         }
     }
 
-    val borderAlpha by animateFloatAsState(if (state.isActive) 1f else 0f)
+    val animatedBorderAlpha by animateFloatAsState(if (state.isActive) 1f else 0f)
+    // Viper Vision: no selection tint or border while the eyedropper takes its picture.
+    val borderAlpha = if (SelectionLook.hidden) 0f else animatedBorderAlpha
     val shape = AutoCornersShape(
         animateIntAsState(cornerRadiusPercent).value
     )
@@ -234,7 +236,7 @@ fun EditBox(
             .clip(shape)
             .drawWithCache {
                 onDrawWithContent {
-                    if (showSelectionBackground && state.isActive && blendingMode == BlendingMode.SrcOver) {
+                    if (showSelectionBackground && state.isActive && !SelectionLook.hidden && blendingMode == BlendingMode.SrcOver) {
                         drawRect(selectionBackgroundColor)
                     }
                     drawContent()
@@ -294,4 +296,9 @@ private fun Modifier.layerBlendingMode(
             drawContext.canvas.restore()
         }
     }
+}
+
+/** Viper Vision: hides every layer's selection tint and border (for the eyedropper's picture). */
+object SelectionLook {
+    var hidden by androidx.compose.runtime.mutableStateOf(false)
 }

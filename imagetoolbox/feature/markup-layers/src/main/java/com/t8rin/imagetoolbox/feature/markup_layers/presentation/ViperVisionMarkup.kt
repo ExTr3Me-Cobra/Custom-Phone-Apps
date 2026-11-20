@@ -6,6 +6,15 @@
 
 package com.t8rin.imagetoolbox.feature.markup_layers.presentation
 
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import com.t8rin.imagetoolbox.core.resources.icons.Eyedropper
 import androidx.compose.material3.Icon
@@ -143,6 +152,28 @@ fun ViperMarkupCanvas(
     LaunchedEffect(activeLayer) { if (activeLayer == null) uiState.showQuickActions = false }
 
     val zoomState = rememberZoomState(maxScale = 10f)
+    // Eyedropper: a picture of the canvas exactly as shown (every layer over the photo), taken
+    // when it's turned on, so the colour comes from whatever is on top where you touch.
+    val canvasLayer = rememberGraphicsLayer()
+    var composite by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var pickPoint by remember { mutableStateOf<Offset?>(null) }
+    var canvasPx by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    LaunchedEffect(uiState.pickingColor) {
+        composite = if (uiState.pickingColor) {
+            // Hide the selection look for a couple of frames while the picture is taken.
+            com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.SelectionLook.hidden = true
+            try {
+                withFrameNanos { }
+                withFrameNanos { }
+                runCatching {
+                    canvasLayer.toImageBitmap().asAndroidBitmap().copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                }.getOrNull()
+            } finally {
+                com.t8rin.imagetoolbox.feature.markup_layers.presentation.components.SelectionLook.hidden = false
+            }
+        } else null
+        if (!uiState.pickingColor) pickPoint = null
+    }
     // Dragging a layer to an edge of the zoomed-in photo scrolls the photo that way, slowly, for
     // as long as it's held there (the layer stays under the finger).
     var draggingLayer by remember { mutableStateOf(false) }
@@ -227,7 +258,11 @@ fun ViperMarkupCanvas(
                         onDragging = { draggingLayer = it },
                         onLayerTouch = { zoomState.gesturesPaused = it }
                     )
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        canvasLayer.record { this@drawWithContent.drawContent() }
+                        drawLayer(canvasLayer)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (colorBackground != null) {
@@ -272,28 +307,75 @@ fun ViperMarkupCanvas(
                 }
                 LayerSnapGuides(snapResult)
                 if (uiState.pickingColor) {
-                    // Eyedropper: a tap picks the photo's colour there for the selected shape.
+                    // Eyedropper: touch and drag over the picture (everything as shown, top layer
+                    // first); the magnifier shows the exact spot, and lifting the finger uses it.
                     Box(
                         Modifier
                             .matchParentSize()
                             .pointerInput(Unit) {
-                                detectTapGestures { p ->
-                                    val photo = component.bitmap
-                                    val picked = photo?.let { bmp ->
-                                        runCatching {
-                                            val readable = if (bmp.config == android.graphics.Bitmap.Config.HARDWARE) bmp.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else bmp
-                                            val x = (p.x / size.width * readable.width).toInt().coerceIn(0, readable.width - 1)
-                                            val y = (p.y / size.height * readable.height).toInt().coerceIn(0, readable.height - 1)
-                                            readable.getPixel(x, y) or (0xFF shl 24)
-                                        }.getOrNull()
-                                    }
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    down.consume()
+                                    pickPoint = down.position
+                                    canvasPx = size
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.first()
+                                        if (change.pressed) pickPoint = change.position
+                                        event.changes.forEach { it.consume() }
+                                    } while (event.changes.any { it.pressed })
+                                    val picked = pickedColor(composite, pickPoint, size)
                                     if (picked != null) setShapeColor(component, picked, commit = true)
+                                    pickPoint = null
                                     uiState.pickingColor = false
                                 }
                             }
                     )
                 }
             }
+        }
+    }
+    // The eyedropper's magnifier, docked in a top corner (the other one if the finger is there).
+    val loupeBitmap = composite
+    val loupePoint = pickPoint
+    if (uiState.pickingColor && loupeBitmap != null && loupePoint != null && canvasPx.width > 0) {
+        val image = remember(loupeBitmap) { loupeBitmap.asImageBitmap() }
+        val picked = pickedColor(loupeBitmap, loupePoint, canvasPx)
+        Canvas(Modifier.matchParentSize()) {
+            val px = (loupePoint.x / canvasPx.width * loupeBitmap.width).toInt().coerceIn(0, loupeBitmap.width - 1)
+            val py = (loupePoint.y / canvasPx.height * loupeBitmap.height).toInt().coerceIn(0, loupeBitmap.height - 1)
+            val r = 64.dp.toPx()
+            val m = 12.dp.toPx()
+            val f = finger
+            val leftSide = f == null || f.x > size.width / 2 || f.y > 2 * r + 2 * m
+            val cx = if (leftSide) m + r else size.width - m - r
+            val cy = m + r
+            val zoomPixels = 15
+            val half = zoomPixels / 2
+            val src = androidx.compose.ui.unit.IntOffset(
+                (px - half).coerceIn(0, maxOf(0, loupeBitmap.width - zoomPixels)),
+                (py - half).coerceIn(0, maxOf(0, loupeBitmap.height - zoomPixels))
+            )
+            val srcSize = androidx.compose.ui.unit.IntSize(minOf(zoomPixels, loupeBitmap.width), minOf(zoomPixels, loupeBitmap.height))
+            val circle = androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(Offset(cx, cy), r)) }
+            clipPath(circle) {
+                drawRect(Color.Black, Offset(cx - r, cy - r), androidx.compose.ui.geometry.Size(2 * r, 2 * r))
+                drawImage(
+                    image, srcOffset = src, srcSize = srcSize,
+                    dstOffset = androidx.compose.ui.unit.IntOffset((cx - r).toInt(), (cy - r).toInt()),
+                    dstSize = androidx.compose.ui.unit.IntSize((2 * r).toInt(), (2 * r).toInt()),
+                    filterQuality = androidx.compose.ui.graphics.FilterQuality.None
+                )
+                val cell = 2 * r / zoomPixels
+                drawRect(
+                    Color.White,
+                    Offset(cx - r + (px - src.x) * cell, cy - r + (py - src.y) * cell),
+                    androidx.compose.ui.geometry.Size(cell, cell),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx())
+                )
+            }
+            drawCircle(picked?.let { Color(it) } ?: Color.White, r, Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx()))
+            drawCircle(Color.White, r + 3.dp.toPx(), Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
         }
     }
     val quickLayer = activeLayer
@@ -535,4 +617,12 @@ fun ViperShapeColorBar(
             )
         }
     }
+}
+
+/** The colour of [picture] (the canvas as shown) at [point] in a canvas of [canvas] pixels. */
+private fun pickedColor(picture: android.graphics.Bitmap?, point: Offset?, canvas: androidx.compose.ui.unit.IntSize): Int? {
+    if (picture == null || point == null || canvas.width <= 0 || canvas.height <= 0) return null
+    val x = (point.x / canvas.width * picture.width).toInt().coerceIn(0, picture.width - 1)
+    val y = (point.y / canvas.height * picture.height).toInt().coerceIn(0, picture.height - 1)
+    return runCatching { picture.getPixel(x, y) or (0xFF shl 24) }.getOrNull()
 }
