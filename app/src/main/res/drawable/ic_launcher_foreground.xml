@@ -1,19 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- A phone with vibration marks on both sides. Drawn in the 108dp adaptive-icon grid. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M45,34h18a4,4 0,0 1,4 4v32a4,4 0,0 1,-4 4h-18a4,4 0,0 1,-4 -4v-32a4,4 0,0 1,4 -4z" />
-    <path
-        android:fillColor="#3D5AFE"
-        android:pathData="M46,39h16v26h-16z" />
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
-        android:strokeLineCap="round"
-        android:pathData="M35,44v20M29,48v12M73,44v20M79,48v12" />
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M30,36h3v30h-3z M35,36h1.5v30h-1.5z M39,36h4v30h-4z M45,36h1.5v30h-1.5z M49,36h3v30h-3z M54,36h1.5v24h-1.5z M58,36h3v20h-3z"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FFC107" android:strokeWidth="5" android:pathData="M68,64m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FFC107" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M76,72L84,80"/>
 </vector>

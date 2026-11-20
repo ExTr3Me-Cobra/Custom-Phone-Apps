@@ -1,0 +1,406 @@
+package com.labelrescue.app.ui
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.labelrescue.app.ResultState
+import com.labelrescue.core.candidates.Candidate
+import com.labelrescue.core.candidates.SlotDist
+import com.labelrescue.core.usps.ImpbParser
+import com.labelrescue.core.usps.TrackingFormat
+import kotlin.math.roundToInt
+
+/** Actions available on a result. */
+class ResultActions(
+    val onPick: (Int, Char) -> Unit,
+    val onUnpick: (Int) -> Unit,
+    val onSelect: (Int) -> Unit,
+    val onConfirm: ((String) -> Unit)?,
+    val onVerify: ((String) -> Unit)?,
+)
+
+/** Certainty of a digit, for coloring. */
+enum class DigitState { CERTAIN, LIKELY, GUESSED, PICKED }
+
+fun digitState(state: ResultState, position: Int, c: Char): DigitState {
+    if (position in state.overrides) return DigitState.PICKED
+    val slot = state.baseSlots[position]
+    if (slot.isCertain) return DigitState.CERTAIN
+    return if (slot.p(c) >= 0.6) DigitState.LIKELY else DigitState.GUESSED
+}
+
+@Composable
+fun digitColor(s: DigitState): Color {
+    val c = LocalDigitColors.current
+    return when (s) {
+        DigitState.CERTAIN -> MaterialTheme.colorScheme.onSurface
+        DigitState.LIKELY -> c.likely
+        DigitState.GUESSED -> c.guessed
+        DigitState.PICKED -> c.picked
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ResultsPanel(
+    state: ResultState,
+    actions: ResultActions,
+    crops: Map<Int, Bitmap> = emptyMap(),
+    verifyStatus: String? = null,
+) {
+    val ctx = LocalContext.current
+    val cand = state.current
+    var picking by remember { mutableStateOf<Int?>(null) }
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (state.ranking) LinearProgressIndicator(Modifier.fillMaxWidth())
+        val ranked = state.ranked
+        if (cand == null) {
+            if (ranked != null && !state.ranking) {
+                Text(
+                    "No number with a valid check digit fits these digits. Check the digits you typed or tapped.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            return@Column
+        }
+        val format = state.format
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+            Column(Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    if (state.selected == 0) "Best guess" else "Candidate ${state.selected + 1}",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                if (format.isRouted) {
+                    Text(
+                        "420 " + cand.number.substring(3, format.routingLength) + "  (routing)",
+                        fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                BigNumber(state, cand) { picking = it }
+                Spacer(Modifier.height(8.dp))
+                val pct = (cand.confidence * 100)
+                Text(
+                    "${formatPct(pct)} likely" + (ranked?.let { r ->
+                        "  ·  " + if (r.totalValid <= 1.0) "only valid number" else "${formatCount(r.totalValid)} valid numbers"
+                    } ?: ""),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                ImpbParser.parse(cand.tracking)?.let { p ->
+                    val parts = listOfNotNull(
+                        p.channel?.let { "Channel $it" },
+                        p.serviceType?.let { "Service $it" },
+                        p.mailerId?.let { "Mailer ID $it" },
+                        p.zip?.let { "ZIP $it" },
+                    )
+                    Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
+                if (cand.guessed.isNotEmpty()) {
+                    Text("Tap a colored digit to check it or pick a different one.", style = MaterialTheme.typography.bodySmall)
+                }
+                Legend()
+            }
+        }
+
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = { copy(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
+                Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Copy")
+            }
+            FilledTonalButton(onClick = { share(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
+                Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
+            }
+            actions.onConfirm?.let { confirm ->
+                Button(onClick = { confirm(cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
+                    Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp)); Text("Mark as confirmed")
+                }
+            }
+            actions.onVerify?.let { verify ->
+                OutlinedButton(onClick = { verify(cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
+                    Icon(Icons.Default.Verified, null); Spacer(Modifier.width(6.dp)); Text("Verify with USPS")
+                }
+            }
+        }
+        verifyStatus?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+
+        // Uncertain digits with zoomed crops.
+        val uncertain = cand.guessed.filter { it >= format.routingLength }.sorted()
+        if (uncertain.isNotEmpty()) {
+            Text("Uncertain digits", style = MaterialTheme.typography.titleMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (pos in uncertain) {
+                    UncertainChip(state, cand, pos, crops[pos - format.routingLength]) { picking = pos }
+                }
+            }
+        }
+
+        ranked?.let { r ->
+            Text(
+                "Top candidates" + if (r.complete) " (all ${r.candidates.size})" else " (${r.candidates.size} of ${formatCount(r.totalValid)})",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            for ((i, c) in r.candidates.take(50).withIndex()) {
+                CandidateRow(state, c, i == state.selected) { actions.onSelect(i) }
+            }
+        }
+    }
+
+    picking?.let { pos ->
+        DigitPicker(
+            state = state, position = pos, crop = crops[pos - state.format.routingLength],
+            onPick = { c -> actions.onPick(pos, c); picking = null },
+            onClear = { actions.onUnpick(pos); picking = null },
+            onDismiss = { picking = null },
+        )
+    }
+}
+
+@Composable
+private fun Legend() {
+    val c = LocalDigitColors.current
+    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LegendItem("sure", MaterialTheme.colorScheme.onSurface)
+        LegendItem("likely", c.likely)
+        LegendItem("guessed", c.guessed)
+        LegendItem("you picked", c.picked)
+    }
+}
+
+@Composable
+private fun LegendItem(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(color))
+        Spacer(Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BigNumber(state: ResultState, cand: Candidate, onTap: (Int) -> Unit) {
+    val format = state.format
+    val t = cand.tracking
+    val groups = TrackingFormat.groups(t.length, format == TrackingFormat.S10)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        var i = 0
+        for (g in groups) {
+            Row {
+                for (k in 0 until g) {
+                    val pos = format.routingLength + i + k
+                    val c = t[i + k]
+                    val st = digitState(state, pos, c)
+                    val color = digitColor(st)
+                    Box(
+                        Modifier
+                            .widthIn(min = 30.dp).height(52.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .then(if (st != DigitState.CERTAIN) Modifier.background(color.copy(alpha = 0.14f)) else Modifier)
+                            .clickable { onTap(pos) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            c.toString(), fontFamily = FontFamily.Monospace, fontSize = 32.sp,
+                            fontWeight = if (st == DigitState.CERTAIN) FontWeight.Normal else FontWeight.Bold,
+                            color = color,
+                        )
+                    }
+                }
+            }
+            i += g
+        }
+    }
+}
+
+@Composable
+private fun UncertainChip(state: ResultState, cand: Candidate, pos: Int, crop: Bitmap?, onTap: () -> Unit) {
+    val c = cand.number[pos]
+    val st = digitState(state, pos, c)
+    Card(
+        modifier = Modifier.clickable(onClick = onTap),
+        border = BorderStroke(2.dp, digitColor(st)),
+    ) {
+        Column(Modifier.padding(8.dp).width(96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (crop != null) CropImage(crop, Modifier.size(80.dp))
+            else Box(Modifier.size(80.dp), contentAlignment = Alignment.Center) { Text("no photo", style = MaterialTheme.typography.labelSmall) }
+            Text("#${pos - state.format.routingLength + 1}: $c", fontFamily = FontFamily.Monospace, fontSize = 20.sp, color = digitColor(st))
+            val alts = state.baseSlots[pos].ranked().take(3).joinToString(" ") { "${it.first}" }
+            Text(alts, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+fun CropImage(bmp: Bitmap, modifier: Modifier) {
+    Image(
+        bitmap = bmp.asImageBitmap(), contentDescription = "Zoomed label crop",
+        modifier = modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp)),
+        contentScale = ContentScale.Fit, filterQuality = FilterQuality.None,
+    )
+}
+
+@Composable
+private fun CandidateRow(state: ResultState, c: Candidate, selected: Boolean, onClick: () -> Unit) {
+    val colors = LocalDigitColors.current
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val text: AnnotatedString = buildAnnotatedString {
+        val groups = TrackingFormat.groups(c.tracking.length, state.format == TrackingFormat.S10)
+        var i = 0
+        for ((gi, g) in groups.withIndex()) {
+            if (gi > 0) append(' ')
+            for (k in 0 until g) {
+                val pos = state.format.routingLength + i + k
+                val ch = c.number[pos]
+                val col = when (digitState(state, pos, ch)) {
+                    DigitState.CERTAIN -> onSurface
+                    DigitState.LIKELY -> colors.likely
+                    DigitState.GUESSED -> colors.guessed
+                    DigitState.PICKED -> colors.picked
+                }
+                withStyle(SpanStyle(color = col, fontWeight = if (col == onSurface) FontWeight.Normal else FontWeight.Bold)) { append(ch) }
+            }
+            i += g
+        }
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text, fontFamily = FontFamily.Monospace, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text(formatPct(c.confidence * 100), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DigitPicker(
+    state: ResultState,
+    position: Int,
+    crop: Bitmap?,
+    onPick: (Char) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val slot = state.baseSlots[position]
+    val probs = slot.ranked().toMap()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Digit ${position - state.format.routingLength + 1}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (crop != null) CropImage(crop, Modifier.fillMaxWidth().height(160.dp))
+                Text("What does the label show here?", style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (c in slot.alphabet) {
+                        val p = probs[c] ?: 0.0
+                        if (slot.alphabet == SlotDist.LETTERS && p <= 0.0) continue
+                        val selected = state.overrides[position] == c
+                        val btnColors = if (selected) androidx.compose.material3.ButtonDefaults.buttonColors()
+                        else androidx.compose.material3.ButtonDefaults.filledTonalButtonColors()
+                        Button(
+                            onClick = { onPick(c) },
+                            colors = btnColors,
+                            modifier = Modifier.size(width = 64.dp, height = 64.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp),
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(c.toString(), fontSize = 24.sp, fontFamily = FontFamily.Monospace)
+                                if (p > 0.0) Text(formatPct(p * 100), fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = if (position in state.overrides) ({ TextButton(onClick = onClear) { Text("Undo my pick") } }) else null,
+    )
+}
+
+fun formatPct(p: Double): String = when {
+    p >= 99.95 -> "100%"
+    p >= 10 -> "${p.roundToInt()}%"
+    p >= 0.1 -> "%.1f%%".format(p)
+    else -> "<0.1%"
+}
+
+fun formatCount(n: Double): String = when {
+    n < 1e6 -> "%,d".format(n.toLong())
+    else -> "%.1e".format(n)
+}
+
+fun copy(ctx: Context, text: String) {
+    val cm = ctx.getSystemService(ClipboardManager::class.java)
+    cm.setPrimaryClip(ClipData.newPlainText("Tracking number", text))
+    Toast.makeText(ctx, "Copied $text", Toast.LENGTH_SHORT).show()
+}
+
+fun share(ctx: Context, text: String) {
+    val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    ctx.startActivity(Intent.createChooser(i, "Share tracking number"))
+}
