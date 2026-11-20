@@ -21,7 +21,15 @@ import com.labelrescue.core.fusion.CancelledException
 import com.labelrescue.core.fusion.Progress
 import com.labelrescue.core.fusion.RecoveryOutput
 import com.labelrescue.core.fusion.RecoveryPipeline
+import com.labelrescue.app.data.ConfirmedNumber
+import com.labelrescue.app.data.HistoryDb
+import com.labelrescue.app.data.HistoryFile
+import com.labelrescue.app.data.Settings
+import com.labelrescue.app.verify.UspsVerifier
+import com.labelrescue.core.usps.TrackingFormat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +39,110 @@ import kotlinx.coroutines.withContext
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
+    // ---- Learned history ----
+    private val db = HistoryDb.get(app)
+    val history: StateFlow<List<ConfirmedNumber>> =
+        db.confirmed().all().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val historyStats = MutableStateFlow(HistoryStats.EMPTY)
+    val learned: StateFlow<HistoryStats> = historyStats
+    private val _message = MutableStateFlow<String?>(null)
+    /** One-off messages (toasts). */
+    val message: StateFlow<String?> = _message
+    fun messageShown() { _message.value = null }
+
+    fun confirm(tracking: String, source: String) {
+        viewModelScope.launch {
+            db.confirmed().insert(ConfirmedNumber(tracking = tracking, confirmedAt = System.currentTimeMillis(), source = source))
+            _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels."
+        }
+    }
+
+    fun deleteConfirmed(id: Long) { viewModelScope.launch { db.confirmed().delete(id) } }
+    fun clearHistory() { viewModelScope.launch { db.confirmed().clear() } }
+
+    fun exportHistory(uri: Uri) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = HistoryFile.encode(db.confirmed().allOnce())
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(text.toByteArray()) }
+                }.isSuccess
+            }
+            _message.value = if (ok) "History exported." else "Couldn't write the file."
+        }
+    }
+
+    fun importHistory(uri: Uri) {
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() }
+                    val items = HistoryFile.decode(text)
+                    db.confirmed().insertAll(items)
+                    items.size
+                }
+            }
+            _message.value = r.fold({ "Imported $it numbers." }, { "Couldn't import: ${it.message}" })
+        }
+    }
+
+    // ---- Settings and optional USPS verification ----
+    private var settingsObj: Settings? = null
+    private suspend fun settings(): Settings = settingsObj ?: withContext(Dispatchers.IO) { Settings(getApplication()) }.also { settingsObj = it }
+
+    data class SettingsUi(val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false, val loaded: Boolean = false)
+    private val _settingsUi = MutableStateFlow(SettingsUi())
+    val settingsUi: StateFlow<SettingsUi> = _settingsUi
+
+    fun loadSettings() {
+        viewModelScope.launch {
+            val st = settings()
+            _settingsUi.value = SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), true)
+        }
+    }
+
+    fun saveSettings(enabled: Boolean, clientId: String, secret: String?) {
+        viewModelScope.launch {
+            val st = settings()
+            withContext(Dispatchers.IO) {
+                st.verifyEnabled = enabled
+                st.clientId = clientId
+                if (secret != null) st.clientSecret = secret
+            }
+            _settingsUi.value = SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), true)
+            _message.value = "Settings saved."
+        }
+    }
+
+    private val _verifyStatus = MutableStateFlow<String?>(null)
+    val verifyStatus: StateFlow<String?> = _verifyStatus
+    private val _canVerify = MutableStateFlow(false)
+    val canVerify: StateFlow<Boolean> = _canVerify
+
+    fun refreshCanVerify() { viewModelScope.launch { _canVerify.value = settings().canVerify } }
+
+    /** Checks the top candidates with USPS (user-enabled only). */
+    fun verify(state: ResultState?) {
+        val cands = state?.ranked?.candidates?.take(5)?.map { it.tracking } ?: return
+        viewModelScope.launch {
+            val st = settings()
+            if (!st.canVerify) { _verifyStatus.value = "Turn on USPS verification and add your credentials in Settings."; return@launch }
+            _verifyStatus.value = "Checking ${cands.size} candidates with USPS…"
+            val v = UspsVerifier(st.clientId, st.clientSecret)
+            val lines = withContext(Dispatchers.IO) {
+                cands.map { n ->
+                    val r = v.check(n)
+                    "${TrackingFormat.grouped(n)}: " + when (r) {
+                        is UspsVerifier.Result.Found -> "✔ ${r.summary}"
+                        UspsVerifier.Result.NotFound -> "✘ not found"
+                        is UspsVerifier.Result.Error -> "? ${r.message}"
+                    }
+                }
+            }
+            _verifyStatus.value = lines.joinToString("\n")
+        }
+    }
+    fun clearVerify() { _verifyStatus.value = null }
 
     private fun prior(structure: StructurePrior = StructurePrior()): RankingPrior =
         CompositePrior(listOf(structure, HistoryPrior(historyStats.value)))
@@ -157,4 +268,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
+
+    // Declared last: uses the result controllers above.
+    init {
+        viewModelScope.launch {
+            history.collect { list ->
+                val stats = HistoryStats.from(list.map { it.tracking })
+                if (stats != historyStats.value) {
+                    historyStats.value = stats
+                    // New learned priors: re-rank what's on screen.
+                    manual.rerank(); photo.rerank()
+                }
+            }
+        }
+    }
+
 }
