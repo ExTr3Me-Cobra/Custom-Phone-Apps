@@ -88,8 +88,8 @@ const val STILLS = 2
 private const val OVERRIDE_AFTER_MS = 8000L
 
 /**
- * Live camera with a guide box. A burst is allowed once the barcode sits inside the box, fills
- * most of its width, is straight, well exposed and in focus. The burst then grabs [BURST_FRAMES]
+ * Live camera with four corner marks for the label's corners. A burst is allowed once the label
+ * fills the marks, a barcode on it is big enough, straight, well exposed and in focus. The burst then grabs [BURST_FRAMES]
  * frames from the stream and [STILLS] full-resolution stills.
  */
 @Composable
@@ -202,7 +202,7 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
         while (status?.issue == CaptureGuide.Issue.BLURRY) {
             val w = previewView.width.toFloat(); val h = previewView.height.toFloat()
             if (w > 0 && h > 0) {
-                val g = guide.guide
+                val g = status?.barcode ?: guide.guide
                 val p = previewView.meteringPointFactory.createPoint(w * (g.left + g.right) / 2, h * (g.top + g.bottom) / 2)
                 camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(p).build())
             }
@@ -249,7 +249,7 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
         Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.5f)).padding(12.dp)) {
             val s = status
             Text(
-                if (burstRunning) "Capturing… hold still" else s?.message ?: "Point at the label: fit the barcode inside the box",
+                if (burstRunning) "Capturing… hold still" else s?.message ?: "Point at the label: line its 4 corners up with the corner marks",
                 color = Color.White, style = MaterialTheme.typography.titleMedium,
             )
             if (!burstRunning && s != null) {
@@ -313,8 +313,8 @@ private fun Indicator(label: String, ok: Boolean) {
 }
 
 /**
- * The guide box over the preview (the frame is 3:4 portrait, shown fit-centered), the area
- * outside it dimmed, its border colored by readiness, and the barcode the check found.
+ * Four corner marks over the preview (the frame is 3:4 portrait, shown fit-centered) for the
+ * label's corners, colored by readiness, plus the label and barcode the check found.
  */
 @Composable
 private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burst: Boolean) {
@@ -328,17 +328,29 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
             val g = guide.guide
             val gl = ox + g.left * fw; val gt = oy + g.top * fh
             val gr = ox + g.right * fw; val gb = oy + g.bottom * fh
-            val hole = Path().apply { addRect(androidx.compose.ui.geometry.Rect(gl, gt, gr, gb)) }
-            clipPath(hole, clipOp = ClipOp.Difference) { drawRect(Color.Black.copy(alpha = 0.45f)) }
             val color = when {
                 burst || status?.ready == true -> Color(0xFF66BB6A)
                 status?.aligned == true -> Color(0xFFFFC107)
                 else -> Color(0xFFEF5350)
             }
-            drawRoundRect(color, Offset(gl, gt), GSize(gr - gl, gb - gt), CornerRadius(16f, 16f), style = Stroke(6f))
-            // Where the printed number should sit: the lower part of the box.
-            val numY = gt + (gb - gt) * 0.78f
-            drawLine(color.copy(alpha = 0.6f), Offset(gl + 24f, numY), Offset(gr - 24f, numY), strokeWidth = 3f)
+            // L-shaped marks, 14% of the label's width long.
+            val len = (gr - gl) * 0.14f
+            val sw = 10f
+            val shadow = Color.Black.copy(alpha = 0.5f)
+            for ((c, w) in listOf(shadow to sw + 6f, color to sw)) {
+                fun corner(x: Float, y: Float, sx: Float, sy: Float) {
+                    drawLine(c, Offset(x, y), Offset(x + sx * len, y), strokeWidth = w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    drawLine(c, Offset(x, y), Offset(x, y + sy * len), strokeWidth = w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                }
+                corner(gl, gt, 1f, 1f); corner(gr, gt, -1f, 1f); corner(gl, gb, 1f, -1f); corner(gr, gb, -1f, -1f)
+            }
+            // What the check sees: the label's paper and the barcode.
+            status?.label?.let { b ->
+                drawRect(
+                    Color.White.copy(alpha = 0.45f), Offset(ox + b.left * fw, oy + b.top * fh),
+                    GSize((b.right - b.left) * fw, (b.bottom - b.top) * fh), style = Stroke(2f),
+                )
+            }
             status?.barcode?.let { b ->
                 drawRect(
                     Color.White.copy(alpha = 0.8f), Offset(ox + b.left * fw, oy + b.top * fh),
