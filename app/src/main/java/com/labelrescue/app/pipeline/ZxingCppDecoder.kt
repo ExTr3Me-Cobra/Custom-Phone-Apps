@@ -13,7 +13,7 @@ import zxingcpp.BarcodeReader
  */
 class ZxingCppDecoder : BarcodeDecoder {
     private val reader = BarcodeReader().apply {
-        options.formats = setOf(BarcodeReader.Format.CODE_128, BarcodeReader.Format.DATA_MATRIX)
+        options.formats = setOf(BarcodeReader.Format.CODE_128, BarcodeReader.Format.DATA_MATRIX, BarcodeReader.Format.MAXI_CODE)
         options.tryHarder = true
         options.tryRotate = true
         options.tryInvert = true

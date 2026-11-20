@@ -13,7 +13,7 @@ import com.labelrescue.core.image.GrayImage
 import com.labelrescue.core.image.IntRect
 
 /** ZXing as the second decoder: Code 128 and DataMatrix, two binarizers, try-harder. */
-class ZxingDecoder(private val formats: List<BarcodeFormat> = listOf(BarcodeFormat.CODE_128, BarcodeFormat.DATA_MATRIX)) : BarcodeDecoder {
+class ZxingDecoder(private val formats: List<BarcodeFormat> = listOf(BarcodeFormat.CODE_128, BarcodeFormat.DATA_MATRIX, BarcodeFormat.MAXICODE)) : BarcodeDecoder {
 
     private class GraySource(private val img: GrayImage) : LuminanceSource(img.width, img.height) {
         override fun getRow(y: Int, row: ByteArray?): ByteArray {

@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Used only for the optional, user-enabled USPS verification. -->
+    <!-- Used only for the optional, user-enabled USPS verification and UPS lookup. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application

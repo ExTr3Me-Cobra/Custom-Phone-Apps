@@ -1,6 +1,7 @@
 package com.labelrescue.core.fusion
 
 import com.labelrescue.core.privacy.Redactor
+import com.labelrescue.core.ups.UpsNumber
 
 import com.labelrescue.core.barcode.BarcodeDecoder
 import com.labelrescue.core.barcode.BarcodeLocator
@@ -63,6 +64,9 @@ class RecoveryPipeline(
         const val STOP_CONFIDENCE = 0.8
     }
 
+    /** UPS 1Z numbers seen in this run (barcodes, MaxiCode, printed text). */
+    private val upsFound = java.util.concurrent.ConcurrentHashMap<String, UpsNumber>()
+
     private class LocatedEvidence(val ev: SymbolEvidence, val frame: Int, val toFrame: Affine)
 
     private class Found(val parsed: ParsedNumber, val by: String)
@@ -97,13 +101,21 @@ class RecoveryPipeline(
         var stats = PipelineStats(frames = frames.size)
         val notes = ArrayList<String>()
         fun check() { if (cancelled()) throw CancelledException() }
+        upsFound.clear()
+        fun withUps(o: RecoveryOutput): RecoveryOutput {
+            val printed = UpsNumber.find(o.labelText, "printed text", allowCorrection = true)
+            for (u in printed) upsFound.putIfAbsent(u.tracking, u)
+            o.ups = upsFound.values.sortedBy { it.corrected }
+            if (o.ups.isNotEmpty()) log?.line("UPS numbers: " + o.ups.joinToString { "${it.tracking} (${it.source}${if (it.corrected) ", corrected" else ""}${if (it.isUspsHandoff) ", SurePost/USPS" else ""})" })
+            return o
+        }
         fun done(f: Found, label: String): RecoveryOutput {
             val p = f.parsed
             val fmt = p.format.trackingFormat
             val slots = p.tracking.mapIndexed { i, c -> SlotDist.known(c, if (fmt.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS) }
             notes += "Full decode by ${f.by}; check digit valid."
             log?.line("FULL DECODE ${p.raw} by ${f.by} (check digit valid) -> tracking ${p.tracking}")
-            return RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log)
+            return withUps(RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log))
         }
         log?.section("Recovery")
         log?.line("frames: " + frames.joinToString { "${it.width}x${it.height}" })
@@ -174,7 +186,11 @@ class RecoveryPipeline(
             barcodeDecodes = stats.barcodeDecodes + results.sumOf { it.barcodeDecodes },
             barcodeMeasurements = results.sumOf { it.measurements },
         )
-        val out = combine(results, work, stats, t0, log, notes)
+        val out = withUps(combine(results, work, stats, t0, log, notes).also { o ->
+            // The number-line reads too: a UPS 1Z line is often read there and not in the page text.
+            val lineText = results.flatMap { it.pages }.joinToString("\n") { it.page.text }
+            for (u in UpsNumber.find(lineText, "printed text", allowCorrection = true)) upsFound.putIfAbsent(u.tracking, u)
+        })
         if (!stoppedEarly && out.format != null) {
             val r = rankQuick(out)
             checkpoints += Checkpoint(results.size, r?.best?.tracking, r?.best?.confidence ?: 0.0)
@@ -426,6 +442,7 @@ class RecoveryPipeline(
             val reads: List<BarcodeRead> = try { d.decode(img) } catch (e: Exception) { emptyList() }
             log?.let { l -> if (reads.isNotEmpty()) l.line("decode $where: " + reads.joinToString { "${it.decoder}/${it.kind}: \"${it.text.replace("\u001D", "<GS>")}\"" }) }
             for (r in reads) {
+                for (u in UpsNumber.find(r.text, "${r.decoder} barcode") + UpsNumber.fromMaxiCode(r.text)) upsFound.putIfAbsent(u.tracking, u)
                 val found = ImpbParser.extractFromPayload(r.text).firstOrNull { it.checkValid }
                 if (found != null) return Found(found, "${r.decoder} ${r.kind.name.lowercase().replace('_', ' ')} ($where)")
             }

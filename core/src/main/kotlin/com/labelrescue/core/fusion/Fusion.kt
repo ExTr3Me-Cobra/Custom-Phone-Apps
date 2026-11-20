@@ -59,6 +59,8 @@ class RecoveryOutput(
 ) {
     /** How many frames were fully processed, whether the rest were skipped, and the answer at each checkpoint. */
     var framesUsed: Int = 0
+    /** UPS 1Z numbers on the label (barcode, MaxiCode or printed), for a UPS → USPS lookup. */
+    var ups: List<com.labelrescue.core.ups.UpsNumber> = emptyList()
     var framesStoppedEarly: Boolean = false
     var checkpoints: List<RecoveryPipeline.Checkpoint> = emptyList()
 

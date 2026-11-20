@@ -64,6 +64,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     val manualV by vm.manualVerify.state.collectAsStateWithLifecycle()
     val reportCount by vm.reportCount.collectAsStateWithLifecycle()
     val reportPhoto by vm.reportPhoto.collectAsStateWithLifecycle()
+    val upsState by vm.ups.state.collectAsStateWithLifecycle()
     val reportPhotos by vm.reportPhotos.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshReportCount() }
     val photoV by vm.photoVerify.state.collectAsStateWithLifecycle()
@@ -132,6 +133,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         { cropExporter.launch("label-rescue-digit-crops.zip") }, vm::clearTrainingCrops,
                         onReviewCrops = { screen = Screen.CROPS },
                         onQuickScan = vm::setQuickScan,
+                        onSaveUps = vm::saveUpsSettings,
                     )
                 }
                 Screen.CROPS -> {
@@ -156,6 +158,9 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         takeReport = vm::takeTrainingReport,
                         reportPhotos = reportPhotos,
                         reportPhoto = reportPhoto,
+                        ups = upsState,
+                        onUseUspsNumber = { vm.confirm(it, "ups") },
+                        onRetryUps = vm.ups::retry,
                     )
                 }
             }

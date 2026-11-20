@@ -81,6 +81,32 @@ class Settings(ctx: Context) {
 
     fun credentials(): Pair<String, String>? = if (hasCredentials) clientId to clientSecret else null
 
+    // ---- UPS → USPS lookup (optional; the user's own developer.ups.com keys) ----
+    var upsEnabled: Boolean
+        get() = prefs.getBoolean("ups_enabled", false)
+        set(v) = prefs.edit().putBoolean("ups_enabled", v).apply()
+
+    var upsClientId: String
+        get() = prefs.getString("ups_client_id", "") ?: ""
+        set(v) { if (v.trim() != upsClientId) upsTokenStore.clear(); prefs.edit().putString("ups_client_id", v.trim()).apply() }
+
+    var upsClientSecret: String
+        get() = prefs.getString("ups_client_secret", "") ?: ""
+        set(v) { upsTokenStore.clear(); prefs.edit().putString("ups_client_secret", v.trim()).apply() }
+
+    val hasUpsCredentials: Boolean get() = upsClientId.isNotBlank() && upsClientSecret.isNotBlank()
+
+    fun upsCredentials(): Pair<String, String>? = if (hasUpsCredentials) upsClientId to upsClientSecret else null
+
+    val upsTokenStore: TokenStore = object : TokenStore {
+        override fun load(): Pair<String, Long>? {
+            val t = prefs.getString("ups_oauth_token", null) ?: return null
+            return t to prefs.getLong("ups_oauth_expires", 0)
+        }
+        override fun save(token: String, expiresAtMs: Long) { prefs.edit().putString("ups_oauth_token", token).putLong("ups_oauth_expires", expiresAtMs).apply() }
+        override fun clear() { prefs.edit().remove("ups_oauth_token").remove("ups_oauth_expires").apply() }
+    }
+
     private companion object {
         const val FILE = "secure_settings"
     }

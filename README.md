@@ -273,11 +273,31 @@ supports it, otherwise the CPU. Settings shows which models are in use.
 `./gradlew :app:connectedDebugAndroidTest` repeats the with/without comparison on a device with
 the real ML Kit OCR. It hasn't been run here, because this environment has no emulator.
 
+## UPS packages delivered by USPS
+
+Some UPS services (SurePost, service code YW in the 1Z number, and Ground Saver) hand the package
+to USPS for the last mile. Their label carries a UPS "1Z" number, and UPS knows the USPS number.
+
+* The app reads 1Z numbers offline from the UPS barcode, the MaxiCode (the round bullseye code)
+  and the printed text, and checks UPS's check digit. One OCR lookalike swap (O/0, I/1, S/5, ...)
+  is corrected only if exactly one swap makes the check digit valid.
+* With your own UPS keys (Settings > **UPS → USPS lookup**: developer.ups.com, an app with the
+  Tracking product), the app asks UPS's official Tracking API about the 1Z number after each scan.
+  Any `alternateTrackingNumber` that is a valid USPS number is taken.
+* That USPS number ranks first when the label's own evidence allows it, and the card says whether
+  it matches the damaged USPS barcode and digits. If USPS verification is set up, it is then
+  checked with USPS too.
+* Not every handoff has a USPS number at UPS yet (often only after USPS scans it); the card says so.
+
 ## Privacy
 
 All processing happens on the phone with bundled models. The app has no analytics and makes no
-network calls, with one exception: the optional USPS verification. It is off until you add your
-own credentials and turn it on, and it only sends candidate tracking numbers to apis.usps.com.
+network calls, with two optional exceptions. Each is off until you add your own credentials and
+turn it on:
+
+* USPS verification sends candidate tracking numbers to apis.usps.com.
+* The UPS lookup sends only the label's 1Z number to onlinetools.ups.com.
+
 History and any saved digit crops stay on the phone unless you export them. Nothing is uploaded
 automatically.
 

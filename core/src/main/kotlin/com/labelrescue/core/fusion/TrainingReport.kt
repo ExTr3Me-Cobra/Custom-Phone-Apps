@@ -27,6 +27,7 @@ object TrainingReport {
         sb.append(header).append('\n')
         val s = out.stats
         sb.append("frames ${s.frames} · variants ${s.variants} · OCR reads ${s.ocrReads} · ${s.millis / 1000.0}s\n")
+        if (out.ups.isNotEmpty()) sb.append("UPS: " + out.ups.take(3).joinToString { "${it.tracking} (${it.source}${if (it.corrected) ", corrected" else ""})" } + "\n")
         if (out.checkpoints.isNotEmpty()) {
             sb.append("frames used ${out.framesUsed} of ${s.frames}" + (if (out.framesStoppedEarly) " (stopped early: answer settled)" else "") + "\n")
             sb.append("answer by frames: " + out.checkpoints.joinToString(" · ") { c ->

@@ -37,7 +37,11 @@ fun SettingsScreen(
     onClearCrops: () -> Unit = {},
     onReviewCrops: () -> Unit = {},
     onQuickScan: (Boolean) -> Unit = {},
+    onSaveUps: (Boolean, String, String?) -> Unit = { _, _, _ -> },
 ) {
+    var upsOn by remember(ui.loaded) { mutableStateOf(ui.upsEnabled) }
+    var upsId by remember(ui.loaded) { mutableStateOf(ui.upsClientId) }
+    var upsSecret by remember(ui.loaded) { mutableStateOf("") }
     var enabled by remember(ui.loaded) { mutableStateOf(ui.verifyEnabled) }
     var clientId by remember(ui.loaded) { mutableStateOf(ui.clientId) }
     var secret by remember(ui.loaded) { mutableStateOf("") }
@@ -47,7 +51,7 @@ fun SettingsScreen(
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Privacy", style = MaterialTheme.typography.titleLarge)
         Text(
-            "All recovery runs on this phone with bundled models. No analytics and no network use, except the optional USPS check below, which only runs when you tap Verify.",
+            "All recovery runs on this phone with bundled models. No analytics and no network use, except the optional USPS check and UPS lookup below, which you turn on with your own keys.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Text("USPS verification (optional)", style = MaterialTheme.typography.titleLarge)
@@ -88,6 +92,29 @@ fun SettingsScreen(
             Text("Clear saved USPS results (${ui.cached})")
         }
         Text("Each number is looked up once and the answer is saved, so it is never queried twice. Clear this to re-check (e.g. a label that wasn't scanned yet).", style = MaterialTheme.typography.bodySmall)
+        Text("UPS → USPS lookup (optional)", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Some UPS packages (SurePost, Ground Saver) are delivered by USPS. When the label's UPS 1Z number is readable, " +
+                "the app asks UPS's official Tracking API which USPS number the package has, and ranks it first if it fits the label. " +
+                "Use your own free keys: developer.ups.com, create an app with the Tracking product, copy its Client ID and Secret. " +
+                "Only the 1Z number is sent, to onlinetools.ups.com. Stored encrypted on this phone.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Look up USPS numbers from UPS", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Switch(upsOn, { upsOn = it })
+        }
+        OutlinedTextField(upsId, { upsId = it }, label = { Text("UPS Client ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            upsSecret, { upsSecret = it },
+            label = { Text(if (ui.upsHasSecret) "UPS Client Secret (saved; type to replace)" else "UPS Client Secret") },
+            singleLine = true, visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = { onSaveUps(upsOn, upsId, upsSecret.takeIf { it.isNotBlank() }); upsSecret = "" }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            Text("Save UPS settings")
+        }
         Text("Scanning", style = MaterialTheme.typography.titleLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Quick scan", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)

@@ -193,6 +193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val autoVerify: Boolean = true, val requestsPerHour: Int = 60, val cached: Int = 0, val loaded: Boolean = false,
         val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
         val quickScan: Boolean = true,
+        val upsEnabled: Boolean = false, val upsClientId: String = "", val upsHasSecret: Boolean = false,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -208,7 +209,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true,
             st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
             st.quickScan,
+            st.upsEnabled, st.upsClientId, st.upsClientSecret.isNotBlank(),
         )
+    }
+
+    fun saveUpsSettings(enabled: Boolean, clientId: String, secret: String?) {
+        viewModelScope.launch {
+            val st = settings()
+            withContext(Dispatchers.IO) {
+                st.upsEnabled = enabled
+                st.upsClientId = clientId
+                if (secret != null) st.upsClientSecret = secret
+            }
+            _settingsUi.value = settingsUiFrom(st)
+            _message.value = "UPS settings saved."
+        }
     }
 
     fun setQuickScan(on: Boolean) {
@@ -244,6 +259,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Online verification (optional) ----
     val manualVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { manual.rerank() }
     val photoVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { photo.rerank(); markCropsTrusted() }
+    /** UPS → USPS lookups for 1Z numbers on the photographed label. */
+    val ups: com.labelrescue.app.verify.UpsController = com.labelrescue.app.verify.UpsController(viewModelScope, ::settings) { photo.rerank() }
 
     private fun verificationPrior(c: VerificationController) = VerificationPrior(c.statuses())
 
@@ -330,7 +347,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     val photo: ResultController = ResultController(
         viewModelScope,
-        prior = { CompositePrior(listOf(photoOutput?.prior(historyStats.value) ?: prior(), verificationPrior(photoVerify))) },
+        prior = {
+            CompositePrior(listOf(
+                photoOutput?.prior(historyStats.value) ?: prior(), verificationPrior(photoVerify),
+                com.labelrescue.core.verify.KnownNumberPrior(ups.linkedUsps()),
+            ))
+        },
         exactEvidence = { photoOutput?.exactEvidence() },
         onRanked = { r ->
             currentLog?.candidates(r)
@@ -352,7 +374,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun startRecovery(onResult: () -> Unit) {
         job?.cancel()
-        photo.clear(); _noResult.value = null
+        photo.clear(); _noResult.value = null; ups.clear()
         val frames = _frames.value
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
@@ -398,6 +420,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _progress.value = null
             }
             if (out == null) return@launch
+            ups.start(out.ups)
             val format = out.format
             if (format == null) {
                 _noResult.value = out
