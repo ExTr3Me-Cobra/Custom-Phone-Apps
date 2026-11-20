@@ -27,7 +27,6 @@ fun ManualScreen(
     error: String?,
     state: ResultState?,
     actions: ResultActions,
-    verifyStatus: String?,
 ) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -52,6 +51,6 @@ fun ManualScreen(
                 Text(error ?: "$count characters · USPS numbers have 20, 22, 26, 30 or 34 digits")
             },
         )
-        state?.let { ResultsPanel(it, actions, verifyStatus = verifyStatus) }
+        state?.let { ResultsPanel(it, actions) }
     }
 }

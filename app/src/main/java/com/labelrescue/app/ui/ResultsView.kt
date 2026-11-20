@@ -64,7 +64,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import com.labelrescue.app.ResultState
+import com.labelrescue.app.verify.VerificationController
+import com.labelrescue.core.verify.LabelContext
+import com.labelrescue.core.verify.VerifiedCandidate
+import com.labelrescue.core.verify.VerifyStatus
 import com.labelrescue.core.candidates.Candidate
 import com.labelrescue.core.candidates.SlotDist
 import com.labelrescue.core.usps.ImpbParser
@@ -77,7 +88,16 @@ class ResultActions(
     val onUnpick: (Int) -> Unit,
     val onSelect: (Int) -> Unit,
     val onConfirm: ((String) -> Unit)?,
-    val onVerify: ((String) -> Unit)?,
+    /** Online verification (null hides it). */
+    val verify: VerifyActions? = null,
+)
+
+class VerifyActions(
+    val state: VerificationController.UiState,
+    val onAskContext: () -> Unit,
+    val onConfirmContext: (LabelContext, List<String>) -> Unit,
+    val onDismissContext: () -> Unit,
+    val onStop: () -> Unit,
 )
 
 /** Certainty of a digit, for coloring. */
@@ -107,8 +127,8 @@ fun ResultsPanel(
     state: ResultState,
     actions: ResultActions,
     crops: Map<Int, Bitmap> = emptyMap(),
-    verifyStatus: String? = null,
 ) {
+    val verification = actions.verify?.state
     val ctx = LocalContext.current
     val cand = state.current
     var picking by remember { mutableStateOf<Int?>(null) }
@@ -177,13 +197,8 @@ fun ResultsPanel(
                     Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp)); Text("Mark as confirmed")
                 }
             }
-            actions.onVerify?.let { verify ->
-                OutlinedButton(onClick = { verify(cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
-                    Icon(Icons.Default.Verified, null); Spacer(Modifier.width(6.dp)); Text("Verify with USPS")
-                }
-            }
         }
-        verifyStatus?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        actions.verify?.let { va -> VerifyPanel(va, ranked?.candidates?.map { it.tracking }.orEmpty()) }
 
         // Uncertain digits with zoomed crops.
         val uncertain = cand.guessed.filter { it >= format.routingLength }.sorted()
@@ -202,7 +217,7 @@ fun ResultsPanel(
                 style = MaterialTheme.typography.titleMedium,
             )
             for ((i, c) in r.candidates.take(50).withIndex()) {
-                CandidateRow(state, c, i == state.selected) { actions.onSelect(i) }
+                CandidateRow(state, c, i == state.selected, verification?.results?.get(c.tracking)) { actions.onSelect(i) }
             }
         }
     }
@@ -301,7 +316,7 @@ fun CropImage(bmp: Bitmap, modifier: Modifier) {
 }
 
 @Composable
-private fun CandidateRow(state: ResultState, c: Candidate, selected: Boolean, onClick: () -> Unit) {
+private fun CandidateRow(state: ResultState, c: Candidate, selected: Boolean, verified: VerifiedCandidate?, onClick: () -> Unit) {
     val colors = LocalDigitColors.current
     val onSurface = MaterialTheme.colorScheme.onSurface
     val text: AnnotatedString = buildAnnotatedString {
@@ -329,9 +344,12 @@ private fun CandidateRow(state: ResultState, c: Candidate, selected: Boolean, on
             containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
         ),
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, fontFamily = FontFamily.Monospace, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            Text(formatPct(c.confidence * 100), style = MaterialTheme.typography.labelLarge)
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text, fontFamily = FontFamily.Monospace, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Text(formatPct(c.confidence * 100), style = MaterialTheme.typography.labelLarge)
+            }
+            verified?.let { VerdictLine(it) }
         }
     }
 }
@@ -403,4 +421,106 @@ fun copy(ctx: Context, text: String) {
 fun share(ctx: Context, text: String) {
     val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     ctx.startActivity(Intent.createChooser(i, "Share tracking number"))
+}
+
+
+@Composable
+fun VerdictLine(v: VerifiedCandidate) {
+    val (icon, color) = when (v.verdict.status) {
+        VerifyStatus.CONFIRMED -> "✔" to Color(0xFF2E7D32)
+        VerifyStatus.EXISTS_MISMATCH -> "✘" to MaterialTheme.colorScheme.error
+        VerifyStatus.NOT_FOUND -> "∅" to MaterialTheme.colorScheme.outline
+        VerifyStatus.UNKNOWN -> "?" to MaterialTheme.colorScheme.outline
+    }
+    Text(
+        "$icon USPS: ${v.verdict.status.label}" + (v.verdict.summary.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "") +
+            if (v.fromCache) " (saved result)" else "",
+        color = color, style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+@Composable
+private fun VerifyPanel(va: VerifyActions, candidates: List<String>) {
+    val ctx = LocalContext.current
+    val s = va.state
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Check online", style = MaterialTheme.typography.titleMedium)
+            if (s.canVerify) {
+                if (s.running) LinearProgressIndicator(Modifier.fillMaxWidth())
+                s.status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                val confirmed = s.results.values.firstOrNull { it.verdict.status == VerifyStatus.CONFIRMED }
+                confirmed?.let { Text("USPS confirms ${TrackingFormat.grouped(it.trackingNumber)}: ${it.verdict.summary}", color = Color(0xFF2E7D32), style = MaterialTheme.typography.bodyMedium) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (s.running) OutlinedButton(onClick = va.onStop, modifier = Modifier.heightIn(min = 52.dp)) { Text("Stop") }
+                    else FilledTonalButton(onClick = va.onAskContext, modifier = Modifier.heightIn(min = 52.dp)) {
+                        Icon(Icons.Default.Verified, null); Spacer(Modifier.width(6.dp))
+                        Text(if (s.contextConfirmed) "Re-check with USPS" else "Verify with USPS")
+                    }
+                }
+            } else {
+                Text(
+                    if (s.hasCredentials) "USPS verification is off in Settings." else "No USPS API credentials set. You can look the top candidates up yourself:",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    val i = Intent(Intent.ACTION_VIEW, Uri.parse(VerificationController.uspsComUrl(candidates.take(10))))
+                    ctx.startActivity(i)
+                },
+                enabled = candidates.isNotEmpty(),
+                modifier = Modifier.heightIn(min = 52.dp),
+            ) { Text("Check top ${minOf(10, candidates.size)} on USPS.com") }
+        }
+    }
+    if (s.askContext) ContextDialog(s.context, onConfirm = { va.onConfirmContext(it, candidates) }, onDismiss = va.onDismissContext)
+}
+
+/** The user confirms or edits what the label says before any lookup: these decide the match. */
+@Composable
+private fun ContextDialog(initial: LabelContext, onConfirm: (LabelContext) -> Unit, onDismiss: () -> Unit) {
+    var dest by remember(initial) { mutableStateOf(initial.destinationZip.orEmpty()) }
+    var destCity by remember(initial) { mutableStateOf(initial.destinationCity.orEmpty()) }
+    var origin by remember(initial) { mutableStateOf(initial.originZip.orEmpty()) }
+    var originCity by remember(initial) { mutableStateOf(initial.originCity.orEmpty()) }
+    var cls by remember(initial) { mutableStateOf(initial.mailClass.orEmpty()) }
+    var date by remember(initial) { mutableStateOf(LabelContext.formatDate(initial.labelDate)) }
+    val dateOk = date.isBlank() || LabelContext.parseDate(date) != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check what the label says") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("These were read from the photo. Fix anything that's wrong; a candidate is only confirmed when USPS's record matches them.", style = MaterialTheme.typography.bodySmall)
+                Field("Destination ZIP", dest, KeyboardType.Number) { dest = it.filter(Char::isDigit).take(9) }
+                Field("Destination city", destCity) { destCity = it }
+                Field("Origin ZIP", origin, KeyboardType.Number) { origin = it.filter(Char::isDigit).take(9) }
+                Field("Origin city", originCity) { originCity = it }
+                Field("Mail class", cls) { cls = it }
+                Field("Label date (MM/DD/YYYY)", date, KeyboardType.Number, isError = !dateOk) { date = it }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = dateOk, onClick = {
+                onConfirm(
+                    LabelContext(
+                        dest.takeIf { it.length >= 5 }?.take(5), destCity.trim().ifBlank { null }?.uppercase(),
+                        origin.takeIf { it.length >= 5 }?.take(5), originCity.trim().ifBlank { null }?.uppercase(),
+                        cls.trim().ifBlank { null }, LabelContext.parseDate(date),
+                    ),
+                )
+            }) { Text("Verify") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+    )
+}
+
+@Composable
+private fun Field(label: String, value: String, type: KeyboardType = KeyboardType.Text, isError: Boolean = false, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value, onChange, label = { Text(label) }, singleLine = true, isError = isError,
+        keyboardOptions = KeyboardOptions(keyboardType = type, capitalization = KeyboardCapitalization.Characters),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

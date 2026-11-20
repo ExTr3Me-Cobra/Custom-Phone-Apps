@@ -25,8 +25,9 @@ import com.labelrescue.app.data.ConfirmedNumber
 import com.labelrescue.app.data.HistoryDb
 import com.labelrescue.app.data.HistoryFile
 import com.labelrescue.app.data.Settings
-import com.labelrescue.app.verify.UspsVerifier
-import com.labelrescue.core.usps.TrackingFormat
+import com.labelrescue.app.verify.VerificationController
+import com.labelrescue.core.verify.LabelContext
+import com.labelrescue.core.verify.VerificationPrior
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -90,59 +91,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var settingsObj: Settings? = null
     private suspend fun settings(): Settings = settingsObj ?: withContext(Dispatchers.IO) { Settings(getApplication()) }.also { settingsObj = it }
 
-    data class SettingsUi(val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false, val loaded: Boolean = false)
+    data class SettingsUi(
+        val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false,
+        val autoVerify: Boolean = true, val requestsPerHour: Int = 60, val cached: Int = 0, val loaded: Boolean = false,
+    )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
 
     fun loadSettings() {
         viewModelScope.launch {
-            val st = settings()
-            _settingsUi.value = SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), true)
+            _settingsUi.value = settingsUiFrom(settings())
         }
     }
 
-    fun saveSettings(enabled: Boolean, clientId: String, secret: String?) {
+    private suspend fun settingsUiFrom(st: Settings) = withContext(Dispatchers.IO) {
+        SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true)
+    }
+
+    fun saveSettings(enabled: Boolean, clientId: String, secret: String?, autoVerify: Boolean, perHour: Int) {
         viewModelScope.launch {
             val st = settings()
             withContext(Dispatchers.IO) {
                 st.verifyEnabled = enabled
                 st.clientId = clientId
                 if (secret != null) st.clientSecret = secret
+                st.autoVerify = autoVerify
+                st.requestsPerHour = perHour
             }
-            _settingsUi.value = SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), true)
+            _settingsUi.value = settingsUiFrom(st)
             _message.value = "Settings saved."
         }
     }
 
-    private val _verifyStatus = MutableStateFlow<String?>(null)
-    val verifyStatus: StateFlow<String?> = _verifyStatus
-    private val _canVerify = MutableStateFlow(false)
-    val canVerify: StateFlow<Boolean> = _canVerify
-
-    fun refreshCanVerify() { viewModelScope.launch { _canVerify.value = settings().canVerify } }
-
-    /** Checks the top candidates with USPS (user-enabled only). */
-    fun verify(state: ResultState?) {
-        val cands = state?.ranked?.candidates?.take(5)?.map { it.tracking } ?: return
+    fun clearVerificationCache() {
         viewModelScope.launch {
-            val st = settings()
-            if (!st.canVerify) { _verifyStatus.value = "Turn on USPS verification and add your credentials in Settings."; return@launch }
-            _verifyStatus.value = "Checking ${cands.size} candidates with USPS…"
-            val v = UspsVerifier(st.clientId, st.clientSecret)
-            val lines = withContext(Dispatchers.IO) {
-                cands.map { n ->
-                    val r = v.check(n)
-                    "${TrackingFormat.grouped(n)}: " + when (r) {
-                        is UspsVerifier.Result.Found -> "✔ ${r.summary}"
-                        UspsVerifier.Result.NotFound -> "✘ not found"
-                        is UspsVerifier.Result.Error -> "? ${r.message}"
-                    }
-                }
-            }
-            _verifyStatus.value = lines.joinToString("\n")
+            val n = withContext(Dispatchers.IO) { db.verification().count().also { db.verification().clear() } }
+            _message.value = "Cleared $n cached USPS results."
         }
     }
-    fun clearVerify() { _verifyStatus.value = null }
+
+    // ---- Online verification (optional) ----
+    val manualVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { manual.rerank() }
+    val photoVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { photo.rerank() }
+
+    private fun verificationPrior(c: VerificationController) = VerificationPrior(c.statuses())
 
     private fun prior(structure: StructurePrior = StructurePrior()): RankingPrior =
         CompositePrior(listOf(structure, HistoryPrior(historyStats.value)))
@@ -152,7 +144,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val manualText: StateFlow<String> = _manualText
     private val _manualError = MutableStateFlow<String?>(null)
     val manualError: StateFlow<String?> = _manualError
-    val manual = ResultController(viewModelScope, { prior() })
+    val manual: ResultController = ResultController(
+        viewModelScope,
+        prior = { CompositePrior(listOf(prior(), verificationPrior(manualVerify))) },
+        onRanked = { r -> manualVerify.onRanked(r.candidates.map { it.tracking }) },
+    )
 
     fun onManualText(t: String) {
         _manualText.value = t
@@ -164,6 +160,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val cur = manual.state.value
                 if (cur != null && cur.format == r.parsed.format && cur.baseSlots.map { it.toString() } == r.parsed.slots.map { it.toString() }) return
                 manual.set(r.parsed.format, r.parsed.slots)
+                manualVerify.reset(LabelContext())
             }
         }
     }
@@ -203,10 +200,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setCrops(barcode: NormRect?, number: NormRect?) { _barcodeCrop.value = barcode; _numberCrop.value = number }
 
     private var photoOutput: RecoveryOutput? = null
-    val photo = ResultController(
+    val photo: ResultController = ResultController(
         viewModelScope,
-        prior = { photoOutput?.prior(historyStats.value) ?: prior() },
+        prior = { CompositePrior(listOf(photoOutput?.prior(historyStats.value) ?: prior(), verificationPrior(photoVerify))) },
         exactEvidence = { photoOutput?.exactEvidence() },
+        onRanked = { r -> photoVerify.onRanked(r.candidates.map { it.tracking }) },
     )
     private val _progress = MutableStateFlow<Progress?>(null)
     val progress: StateFlow<Progress?> = _progress
@@ -262,6 +260,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }.toMap()
             }
             photoOutput = out
+            photoVerify.reset(LabelContext.fromLabelText(out.labelText, out.zip ?: out.fullDecode?.zip))
             photo.set(format, out.slots) { copy(photo = PhotoEvidence(out, crops)) }
             onResult()
         }

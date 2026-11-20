@@ -18,6 +18,8 @@ class ResultController(
     private val prior: () -> RankingPrior,
     /** Exact evidence score for whole numbers (barcode joint likelihood), if any. */
     private val exactEvidence: () -> ((String) -> Double)? = { null },
+    /** Called after each ranking finishes (e.g. to verify new top candidates). */
+    private val onRanked: (com.labelrescue.core.candidates.RankResult) -> Unit = {},
 ) {
     private val engine = CandidateEngine()
     private val _state = MutableStateFlow<ResultState?>(null)
@@ -62,6 +64,7 @@ class ResultController(
             val cur = _state.value
             if (cur != null && cur.overrides == s.overrides && cur.baseSlots === s.baseSlots) {
                 _state.value = cur.copy(ranked = ranked, ranking = false, selected = 0)
+                onRanked(ranked)
             }
         }
     }

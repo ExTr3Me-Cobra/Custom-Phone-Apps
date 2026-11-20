@@ -58,13 +58,11 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     val ctx = LocalContext.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
-    LaunchedEffect(screen) {
-        vm.clearVerify()
-        if (screen == Screen.SETTINGS) vm.loadSettings()
-        if (screen == Screen.RESULTS || screen == Screen.MANUAL) vm.refreshCanVerify()
-    }
-    val canVerify by vm.canVerify.collectAsStateWithLifecycle()
-    val verifyStatus by vm.verifyStatus.collectAsStateWithLifecycle()
+    LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
+    val manualV by vm.manualVerify.state.collectAsStateWithLifecycle()
+    val photoV by vm.photoVerify.state.collectAsStateWithLifecycle()
+    fun verifyActions(c: com.labelrescue.app.verify.VerificationController, s: com.labelrescue.app.verify.VerificationController.UiState) =
+        VerifyActions(s, c::askContext, c::confirmContext, c::dismissContext, c::cancel)
 
     Scaffold(
         topBar = {
@@ -91,9 +89,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.manual::pick, vm.manual::unpick, vm.manual::select,
                             onConfirm = { vm.confirm(it, "manual") },
-                            onVerify = if (canVerify) ({ _ -> vm.verify(st) }) else null,
+                            verify = verifyActions(vm.manualVerify, manualV),
                         ),
-                        verifyStatus = verifyStatus,
                     )
                 }
                 Screen.CAMERA -> CameraScreen(onFrame = vm::addFrame, onBurstDone = { screen = Screen.CROP })
@@ -124,7 +121,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 }
                 Screen.SETTINGS -> {
                     val ui by vm.settingsUi.collectAsStateWithLifecycle()
-                    SettingsScreen(ui, vm::saveSettings)
+                    SettingsScreen(ui, vm::saveSettings, vm::clearVerificationCache)
                 }
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()
@@ -134,9 +131,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.photo::pick, vm.photo::unpick, vm.photo::select,
                             onConfirm = { vm.confirm(it, "photo") },
-                            onVerify = if (canVerify) ({ _ -> vm.verify(st) }) else null,
+                            verify = verifyActions(vm.photoVerify, photoV),
                         ),
-                        verifyStatus = verifyStatus,
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
                     )

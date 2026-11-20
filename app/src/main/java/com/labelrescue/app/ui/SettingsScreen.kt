@@ -28,11 +28,13 @@ import androidx.compose.ui.unit.dp
 import com.labelrescue.app.AppViewModel
 
 @Composable
-fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String?) -> Unit) {
+fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String?, Boolean, Int) -> Unit, onClearCache: () -> Unit) {
     var enabled by remember(ui.loaded) { mutableStateOf(ui.verifyEnabled) }
     var clientId by remember(ui.loaded) { mutableStateOf(ui.clientId) }
     var secret by remember(ui.loaded) { mutableStateOf("") }
-    LaunchedEffect(ui) { if (ui.loaded) { enabled = ui.verifyEnabled; clientId = ui.clientId } }
+    var auto by remember(ui.loaded) { mutableStateOf(ui.autoVerify) }
+    var perHour by remember(ui.loaded) { mutableStateOf(ui.requestsPerHour.toString()) }
+    LaunchedEffect(ui) { if (ui.loaded) { enabled = ui.verifyEnabled; clientId = ui.clientId; auto = ui.autoVerify; perHour = ui.requestsPerHour.toString() } }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Privacy", style = MaterialTheme.typography.titleLarge)
         Text(
@@ -41,7 +43,9 @@ fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String
         )
         Text("USPS verification (optional)", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Use your own free USPS developer credentials (developers.usps.com, Tracking API) to check whether the top candidates exist. Stored encrypted on this phone.",
+            "Use your own free USPS developer credentials (developers.usps.com: add an app with the Tracking API, then copy its Consumer Key and Secret). " +
+                "After ranking, candidates are checked in order and each USPS record is compared with the label (ZIPs, mail class, date). " +
+                "Stored encrypted on this phone. Recovery itself never needs this.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -56,9 +60,25 @@ fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = { onSave(enabled, clientId, secret.takeIf { it.isNotBlank() }); secret = "" }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Verify automatically after ranking", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Switch(auto, { auto = it })
+        }
+        OutlinedTextField(
+            perHour, { perHour = it.filter(Char::isDigit).take(5) }, singleLine = true,
+            label = { Text("Max USPS requests per hour") },
+            supportingText = { Text("USPS doesn't publish its default quota. Keep this at or below your app's quota; 429 responses back off automatically.") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = {
+            onSave(enabled, clientId, secret.takeIf { it.isNotBlank() }, auto, perHour.toIntOrNull()?.coerceAtLeast(1) ?: 60); secret = ""
+        }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Text("Save")
         }
+        androidx.compose.material3.OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Clear saved USPS results (${ui.cached})")
+        }
+        Text("Each number is looked up once and the answer is saved, so it is never queried twice. Clear this to re-check (e.g. a label that wasn't scanned yet).", style = MaterialTheme.typography.bodySmall)
         Text("Theme follows the system dark mode setting.", style = MaterialTheme.typography.bodySmall)
     }
 }

@@ -40,7 +40,6 @@ fun PhotoResultsScreen(
     state: ResultState?,
     noResult: RecoveryOutput?,
     actions: ResultActions,
-    verifyStatus: String?,
     onManual: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -53,7 +52,7 @@ fun PhotoResultsScreen(
             return@Column
         }
         state.photo?.output?.let { EvidenceSummary(it) }
-        ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty(), verifyStatus = verifyStatus)
+        ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
     }
 }
 
