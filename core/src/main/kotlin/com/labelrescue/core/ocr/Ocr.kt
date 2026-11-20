@@ -63,6 +63,8 @@ object DigitConfusion {
     /** Smudge marks OCR emits where a digit is unreadable: kept as unknown positions. */
     const val SMUDGE = "()[]{}'`*\\\""
 
+    private const val STROKE_TRUST = 0.85
+
     /** From a recognizer's own per-character probabilities (lookalike letters map to digits). */
     fun fromAlternatives(alts: Map<Char, Float>): SlotDist? {
         val probs = DoubleArray(10)
@@ -74,6 +76,14 @@ object DigitConfusion {
         if (total < 0.05) return null
         // Keep a little mass on every digit: the recognizer can be confidently wrong on damage.
         for (k in 0..9) probs[k] = probs[k] / total * 0.94 + 0.006
+        // A partly erased digit leaves a vertical stroke, which reads as "1" (or "7"): on real
+        // damaged labels a 6, 8 or 9 came out as "1" at 58-83%. Below 85%, such a read is only
+        // weak evidence, so the barcode and check digit decide.
+        val top = (0..9).maxBy { probs[it] }
+        if ((top == 1 || top == 7) && probs[top] < STROKE_TRUST) {
+            val lambda = 0.45 * (STROKE_TRUST - probs[top]) / STROKE_TRUST + 0.25
+            for (k in 0..9) probs[k] = (1 - lambda) * probs[k] + lambda / 10
+        }
         return SlotDist(SlotDist.DIGITS, probs)
     }
 

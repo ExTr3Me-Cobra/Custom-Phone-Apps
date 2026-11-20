@@ -35,7 +35,7 @@ object BarcodeLocator {
             val n = blurred.data.size
             val mean = sum / n; val std = sqrt(max(0.0, sq / n - mean * mean))
             val t = max(mean + 1.5 * std, 0.35 * mx).coerceAtLeast(8.0)
-            for (c in merge(components(blurred, t), vertical, small.width, small.height)) {
+            for (c in merge(components(blurred, t), vertical, small.width, small.height).map { extend(it, blurred, t * 0.4, vertical) }) {
                 val w = c.width; val h = c.height
                 val along = if (vertical) h else w
                 if (along < small.width * 0.06 && along < small.height * 0.06) continue
@@ -49,6 +49,30 @@ object BarcodeLocator {
             }
         }
         return out.sortedByDescending { it.score }.take(maxRegions)
+    }
+
+    /**
+     * Grows a region along the bar-crossing axis while the bar texture continues at a lower
+     * threshold, across gaps up to 8% of the image: faded ends, glare and bands of missing bars
+     * (dead printhead elements) otherwise cut the located area short of the start or stop pattern.
+     */
+    private fun extend(c: Comp, e: GrayImage, t: Double, vertical: Boolean): Comp {
+        val len = if (vertical) e.height else e.width
+        val maxGap = max(4, len * 8 / 100)
+        fun strength(k: Int): Double {
+            var s = 0.0; var n = 0
+            if (vertical) { for (x in c.left until c.right) { s += e[x, k]; n++ } } else { for (y in c.top until c.bottom) { s += e[k, y]; n++ } }
+            return if (n == 0) 0.0 else s / n
+        }
+        var lo = if (vertical) c.top else c.left
+        var hi = (if (vertical) c.bottom else c.right) - 1
+        var last = lo; var k = lo - 1
+        while (k >= 0 && last - k <= maxGap) { if (strength(k) >= t) last = k; k-- }
+        lo = last
+        last = hi; k = hi + 1
+        while (k < len && k - last <= maxGap) { if (strength(k) >= t) last = k; k++ }
+        hi = last
+        return if (vertical) Comp(c.left, lo, c.right, hi + 1, c.area) else Comp(lo, c.top, hi + 1, c.bottom, c.area)
     }
 
     private class Comp(val left: Int, val top: Int, val right: Int, val bottom: Int, val area: Int) {

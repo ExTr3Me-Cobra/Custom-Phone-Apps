@@ -1,0 +1,4 @@
+# Real damaged labels, cropped to the barcode and printed number (no names or addresses).
+# file | true tracking number (confirmed by the user / a reprint) | number-line box in pixels (l,t,r,b)
+ground-advantage-faded.png | 9234690275976500211709 | 0,540,1320,700
+parcel-select-streaks.png | 9361289684070561859481 | 400,440,1450,540

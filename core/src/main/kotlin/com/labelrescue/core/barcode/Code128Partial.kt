@@ -502,6 +502,13 @@ class Code128Partial(private val maxLines: Int = 32) {
             val ink = center.average()
             if (ink < 0.12 || ink > 0.9) return null
         }
+        // Code 128 never has a space wider than 4 modules. A wider light run is a band of lost
+        // print (dead printhead elements, scuffs): any template "fitting" it is a guess.
+        run {
+            var run = 0; var longest = 0
+            for (v in center) { if (v < 0.3) { run++; if (run > longest) longest = run } else run = 0 }
+            if (longest > 4.6 * samplesPerModule) return null
+        }
 
         val sse = DoubleArray(106) { Double.MAX_VALUE }
         var bestSse = Double.MAX_VALUE

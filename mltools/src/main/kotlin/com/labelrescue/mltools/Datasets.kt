@@ -59,12 +59,22 @@ object Damage {
         return out
     }
 
-    /** Thermal printhead defects: thin vertical lines with no ink, plus uneven fading. */
+    /** Thermal printhead defects: thin vertical lines with no ink, wide dead bands, uneven fading. */
     fun thermal(img: GrayImage, rnd: Random): GrayImage {
         val out = Synth.fade(img, rnd.nextDouble() * 0.5)
         repeat(1 + rnd.nextInt(4)) {
             val x = rnd.nextInt(img.width); val wdt = 1 + rnd.nextInt(2)
             for (xx in x until min(img.width, x + wdt)) for (y in 0 until img.height) out[xx, y] = max(out[xx, y], Synth.PAPER - 8)
+        }
+        // Sometimes a group of dead elements: wide blank bands that delete whole bars and half
+        // digits (seen on a real Parcel Select label), with ragged, slightly gray edges.
+        if (rnd.nextBoolean()) repeat(1 + rnd.nextInt(3)) {
+            val wdt = max(3, (img.width * (0.01 + rnd.nextDouble() * 0.025)).toInt())
+            val x = rnd.nextInt(max(1, img.width - wdt))
+            for (xx in x until min(img.width, x + wdt)) {
+                val edge = xx == x || xx == x + wdt - 1
+                for (y in 0 until img.height) out[xx, y] = if (edge) max(out[xx, y], (out[xx, y] + Synth.PAPER) / 2) else max(out[xx, y], Synth.PAPER - 6)
+            }
         }
         return out
     }
