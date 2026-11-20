@@ -74,10 +74,33 @@ them to the branch so the next app build bundles them. You can start it in two w
 
 ## Real crops from your own labels (optional)
 
-In the app, Settings > **Keep digit crops of confirmed labels** saves each digit's crop when you
-mark a photo result as confirmed. The digit is known once you confirm it. Nothing is uploaded.
-**Export crops** gives a ZIP with `labels.csv` and PNGs. Unzip it and retrain with:
+In the app, turn on Settings > **Keep digit crops of confirmed labels**. Then, when you mark a
+photo result as confirmed, the app saves digit crops with the digits you confirmed. Nothing is
+uploaded. Safeguards:
+
+* **Only located digits:** only positions where OCR found the character on the label.
+* **Agreement check:** a crop is kept only if at least one reader saw the confirmed digit there
+  (ML Kit, PaddleOCR, the barcode or the digit model, as its best guess or with ≥ 30%). If every
+  reader saw something else, the crop is probably of the wrong spot, or the confirmation is
+  wrong, so it's skipped.
+* **Trusted:** crops of a number USPS confirmed (online verification) are marked trusted, also
+  when the confirmation comes after saving.
+* **Review:** Settings > **Review crops** shows every crop with its digit. Tap one that's wrong
+  to delete it. You can also delete all untrusted crops.
+
+**Export crops** gives a ZIP (`labels.csv` with `file,digit,trusted,agreed_by,tracking`, plus
+PNGs). Unzip it and retrain:
 
 ```sh
 python training/train_digits.py --data build/datasets --out models --extra path/to/training_crops
 ```
+
+When retraining:
+
+* Trusted crops count 3×, untrusted ones once, so a wrongly confirmed label can't outweigh the
+  synthetic data.
+* A fifth of your labels is held out as a real-world test, split by whole labels so no label is
+  on both sides.
+* The new model replaces the current one only if it is at least as accurate on those held-out
+  real crops. `--force` overrides this.
+* The model then still has to pass `:mltools:benchmark` to be enabled in the app.

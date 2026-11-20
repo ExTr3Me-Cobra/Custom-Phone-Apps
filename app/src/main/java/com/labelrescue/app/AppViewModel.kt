@@ -60,14 +60,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun confirm(tracking: String, source: String) {
         viewModelScope.launch {
             db.confirmed().insert(ConfirmedNumber(tracking = tracking, confirmedAt = System.currentTimeMillis(), source = source))
-            var saved = 0
+            var res: TrainingCrops.SaveResult? = null
             val out = photoOutput
             if (source == "photo" && out != null && settings().saveTrainingCrops) {
-                saved = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value) }.getOrDefault(0) }
+                val trusted = photoVerify.statuses()[tracking] == com.labelrescue.core.verify.VerifyStatus.CONFIRMED
+                res = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value, trusted) }.getOrNull() }
             }
-            _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." +
-                if (saved > 0) " $saved digit crops kept for retraining." else ""
+            _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." + (res?.let { r ->
+                " ${r.saved} digit crops kept for retraining" +
+                    (if (r.skipped > 0) ", ${r.skipped} skipped (no reader agreed with the digit)" else "") + "."
+            } ?: "")
         }
+    }
+
+    // ---- Training crop review ----
+    private val _cropItems = MutableStateFlow<List<TrainingCrops.Item>>(emptyList())
+    val cropItems: StateFlow<List<TrainingCrops.Item>> = _cropItems
+
+    fun loadCrops() { viewModelScope.launch { _cropItems.value = withContext(Dispatchers.IO) { crops.items() } } }
+
+    fun cropThumbnail(item: TrainingCrops.Item): android.graphics.Bitmap? = crops.thumbnail(item)
+
+    fun deleteCrop(item: TrainingCrops.Item) {
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.delete(item) }; loadCrops() }
+    }
+
+    fun deleteUntrustedCrops() {
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.deleteUntrusted() }; loadCrops(); _message.value = "Untrusted crops deleted." }
+    }
+
+    /** USPS confirmed a number after its crops were saved: mark them trusted. */
+    private fun markCropsTrusted() {
+        val confirmed = photoVerify.statuses().filterValues { it == com.labelrescue.core.verify.VerifyStatus.CONFIRMED }.keys
+        if (confirmed.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) { confirmed.forEach { runCatching { crops.markTrusted(it) } } }
     }
 
     fun exportTrainingCrops(uri: Uri) {
@@ -163,7 +189,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Online verification (optional) ----
     val manualVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { manual.rerank() }
-    val photoVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { photo.rerank() }
+    val photoVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { photo.rerank(); markCropsTrusted() }
 
     private fun verificationPrior(c: VerificationController) = VerificationPrior(c.statuses())
 

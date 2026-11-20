@@ -35,6 +35,7 @@ fun SettingsScreen(
     onSaveCrops: (Boolean) -> Unit = {},
     onExportCrops: () -> Unit = {},
     onClearCrops: () -> Unit = {},
+    onReviewCrops: () -> Unit = {},
 ) {
     var enabled by remember(ui.loaded) { mutableStateOf(ui.verifyEnabled) }
     var clientId by remember(ui.loaded) { mutableStateOf(ui.clientId) }
@@ -92,7 +93,14 @@ fun SettingsScreen(
             Text("Keep digit crops of confirmed labels for retraining", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             Switch(ui.saveCrops, onSaveCrops)
         }
-        Text("Stored only on this phone; nothing is uploaded. Export them to add to the training data (training/README.md).", style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Stored only on this phone; nothing is uploaded. A digit is kept only if at least one reader (OCR, barcode or digit model) also read it that way, " +
+                "so misaligned or wrongly confirmed crops are skipped. Numbers USPS confirmed are marked trusted. Review them before exporting.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        androidx.compose.material3.FilledTonalButton(onClick = onReviewCrops, enabled = ui.cropCount > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Review ${ui.cropCount} crops")
+        }
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
             androidx.compose.material3.OutlinedButton(onClick = onExportCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Export ${ui.cropCount} crops") }
             androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Delete crops") }
