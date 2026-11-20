@@ -143,7 +143,9 @@ class RecoveryPipeline(
 
         val observations = results.flatMap { it.observations }
         val evidence = results.flatMap { it.evidence }
-        val labelText = results.firstOrNull { it.labelText.isNotBlank() }?.labelText.orEmpty()
+        // Label text from every frame (distinct lines): one frame often misses the service banner.
+        val labelText = results.flatMap { it.labelText.lines() }.map { it.trim() }.filter { it.isNotEmpty() }
+            .distinct().joinToString("\n")
         stats = stats.copy(
             variants = results.sumOf { it.variants }, ocrReads = results.sumOf { it.ocrReads },
             barcodeDecodes = stats.barcodeDecodes + results.sumOf { it.barcodeDecodes },
@@ -162,10 +164,9 @@ class RecoveryPipeline(
         }
         var ocrObs = observations.filter { it.source == Source.OCR }
         var ocr2Obs = observations.filter { it.source == Source.OCR2 }
-        val modelObs = observations.filter { it.source == Source.DIGIT_MODEL }
         var ocr = Fusion.consensus(ocrObs, format)
         var ocr2 = if (ocr2Obs.any { it.format == format }) Fusion.consensus(ocr2Obs, format) else emptyList()
-        val digitModel = if (modelObs.any { it.format == format }) Fusion.consensus(modelObs, format) else emptyList()
+        var digitModel: List<SlotDist?> = emptyList()
         var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
         // Re-align every OCR read against the fused evidence (twice): reads that dropped a digit
         // stop shifting the rest, and the consensus sharpens.
@@ -190,6 +191,27 @@ class RecoveryPipeline(
             finalReads = again.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
             log?.line("re-alignment pass $pass: " + finalReads.joinToString(" | "))
         }
+        // Digit classifier (optional), on the re-aligned ML Kit glyph boxes only (first-pass boxes
+        // can be shifted by a dropped digit), and only boxes fully inside the frame: a cut-off
+        // digit at the edge gets classified as something confidently wrong.
+        val digits = models.digits
+        if (digits != null && format != TrackingFormat.S10) {
+            val modelObs = ocrObs.filter { it.format == format }.groupBy { it.frame }.mapNotNull { (fi, os) ->
+                val frame = work.getOrNull(fi) ?: return@mapNotNull null
+                val o = os.maxBy { o -> o.weight * o.boxes.count { it != null } }
+                val m = 2
+                val ds = o.boxes.map { b ->
+                    b?.takeIf { !it.isEmpty && it.left >= m && it.top >= m && it.right <= frame.width - m && it.bottom <= frame.height - m }
+                        ?.let { SlotDist(SlotDist.DIGITS, digits.classify(frame, it)) }
+                }
+                if (ds.count { it != null } >= format.length / 2) Observation(Source.DIGIT_MODEL, format, ds, 0.5, fi, "digit-model", o.boxes, o.boxQuality) else null
+            }
+            if (modelObs.isNotEmpty()) {
+                digitModel = Fusion.consensus(modelObs, format)
+                slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+                log?.line("digit model: " + modelObs.joinToString(" | ") { "f${it.frame}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
+            }
+        }
         val perSource = HashMap<Source, List<SlotDist?>>()
         if (ocrObs.any { it.format == format }) perSource[Source.OCR] = ocr
         if (ocr2.isNotEmpty()) perSource[Source.OCR2] = ocr2
@@ -199,10 +221,11 @@ class RecoveryPipeline(
             notes += "Damaged barcode read as ${partial.structure.name}; ${partial.recovered.size} digits filled in or checked by the barcode checksums."
         }
         val locs = Fusion.locations(format, ocrObs + observations.filter { it.source == Source.OCR }, partial) { p, t -> barcodeLocation(p, t, evidence) }
-        val zip = partial?.zipDigits?.takeIf { z -> z.isNotEmpty() && z.all { it.bestP > 0.9 } }?.joinToString("") { it.best.toString() }
+        val zip = partial?.zipDigits?.takeIf { z -> z.isNotEmpty() && z.all { it.bestP >= 0.5 } }?.joinToString("") { it.best.toString() }
         notes += "${ocrObs.count { it.format == format }} printed-number reads, ${evidence.size} barcode measurements" +
             (if (models.names.isNotEmpty()) "; models: ${models.names.joinToString()}" else "") + "."
-        log?.line("barcode layout used: ${partial?.structure?.name ?: "none"}; zip=$zip")
+        log?.line("barcode layout used: ${partial?.structure?.name ?: "none"}; zip=$zip (zip digits " +
+            partial?.zipDigits.orEmpty().joinToString(" ") { "${it.best}:${(it.bestP * 100).toInt()}" } + ")")
         log?.positions(format, perSource, slots)
         log?.line("label service: ${com.labelrescue.core.usps.ServiceHints.explain(labelText)}; stats: $stats")
         return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads)
@@ -326,20 +349,6 @@ class RecoveryPipeline(
             }
         }
 
-        // Digit classifier (optional): classify every position's crop, including ones OCR missed
-        // (their boxes are estimated from the pitch), using the best OCR read of each format.
-        val digits = models.digits
-        if (digits != null) {
-            // Only ML Kit's glyph boxes: PaddleOCR's positions are CTC time spans, too rough to crop.
-            val best = w.observations.filter { it.source == Source.OCR && it.format != TrackingFormat.S10 }
-                .groupBy { it.format }.mapValues { (_, os) -> os.maxBy { o -> o.weight * o.boxes.count { it != null } } }
-            for ((format, o) in best) {
-                val slots = o.boxes.map { b -> b?.takeIf { !it.isEmpty }?.let { SlotDist(SlotDist.DIGITS, digits.classify(frame, it)) } }
-                if (slots.count { it != null } >= format.length / 2) {
-                    w.observations += Observation(Source.DIGIT_MODEL, format, slots, 0.7, fi, "digit-model", o.boxes, o.boxQuality)
-                }
-            }
-        }
         return w
     }
 

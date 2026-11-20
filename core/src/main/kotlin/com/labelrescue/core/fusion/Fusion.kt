@@ -91,7 +91,7 @@ class RecoveryOutput(
 object Fusion {
     const val EPS_OCR = 0.08
     const val EPS_PARTIAL = 0.03
-    const val EPS_DIGIT_MODEL = 0.12
+    const val EPS_DIGIT_MODEL = 0.25
     const val EPS_OCR2 = 0.08
 
     fun floored(p: Double, eps: Double) = eps / 10 + (1 - eps) * p
@@ -117,9 +117,9 @@ object Fusion {
             if (w <= 0) null else {
                 val pseudo = 0.15
                 val mixed = DoubleArray(acc.size) { (acc[it] + pseudo / acc.size) / (w + pseudo) }
-                // Agreement sharpens only across separate frames: image variants of one frame
-                // share the same smudge, so they aren't independent reads.
-                val gamma = min(2.5, 1 + 0.35 * ln(frames.size.toDouble()))
+                // Agreement sharpens only a little across frames: variants of one frame, and burst
+                // frames of the same smudge, are not independent reads.
+                val gamma = min(1.5, 1 + 0.15 * ln(frames.size.toDouble()))
                 SlotDist(alphabet, DoubleArray(mixed.size) { mixed[it].pow(gamma) })
             }
         }
