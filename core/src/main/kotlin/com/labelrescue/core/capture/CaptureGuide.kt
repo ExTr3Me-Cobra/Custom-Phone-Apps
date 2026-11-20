@@ -39,6 +39,8 @@ class CaptureGuide(
         val barcode: NormRect?,
         /** Where the label's paper was found (fractions of the frame), if it stands out. */
         val label: NormRect? = null,
+        /** Everything that looks like a 1D barcode (fractions of the frame), for the live overlay. */
+        val regions: List<NormRect> = emptyList(),
     )
 
     private val recentSharpness = ArrayDeque<Double>()
@@ -48,6 +50,13 @@ class CaptureGuide(
     @Synchronized
     fun evaluate(frame: GrayImage): Status {
         val small = frame.limited(640)
+        val all = BarcodeLocator.locate(small, 6)
+        val st = evaluate(small, all.filter { !it.vertical })
+        val sx = small.width.toDouble(); val sy = small.height.toDouble()
+        return st.copy(regions = all.map { r -> NormRect((r.rect.left / sx).toFloat(), (r.rect.top / sy).toFloat(), (r.rect.right / sx).toFloat(), (r.rect.bottom / sy).toFloat()) })
+    }
+
+    private fun evaluate(small: GrayImage, regions: List<BarcodeLocator.Region>): Status {
         val sx = small.width.toDouble(); val sy = small.height.toDouble()
         val g = guide.toPixels(small.width, small.height)
         fun norm(r: IntRect) = NormRect((r.left / sx).toFloat(), (r.top / sy).toFloat(), (r.right / sx).toFloat(), (r.bottom / sy).toFloat())
@@ -64,7 +73,6 @@ class CaptureGuide(
                 abs(dx) > 0.12 || abs(dy) > 0.12 -> return notReady(Issue.OFF_CENTER, "Move the label to the middle: its corners should meet the 4 marks", null, paperNorm)
             }
         }
-        val regions = BarcodeLocator.locate(small, 4).filter { !it.vertical }
         val inside = regions.filter { overlap(it.rect, g) >= 0.7 }
         val best = inside.maxByOrNull { it.rect.width }
             ?: return notReady(Issue.NO_BARCODE, "Line the label's 4 corners up with the corner marks", null, paperNorm)

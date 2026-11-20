@@ -79,6 +79,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
+import kotlin.math.abs
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.nativeCanvas
 
 /** Frames to collect in one burst from the analysis stream (plus [STILLS] full-resolution stills). */
 const val BURST_FRAMES = 12
@@ -115,6 +118,11 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
     val stillsLeft = remember { AtomicInteger(0) }
     val frameTick = remember { AtomicInteger(0) }
     val checking = remember { AtomicBoolean(false) }
+    // Live text reading for the overlay, on its own thread so the alignment check stays fast.
+    val textExecutor = remember { Executors.newSingleThreadExecutor() }
+    val textBusy = remember { AtomicBoolean(false) }
+    val liveText = remember { com.labelrescue.app.pipeline.MlKitText() }
+    var textLines by remember { mutableStateOf<List<LiveLine>>(emptyList()) }
     val guide = remember { CaptureGuide() }
     var status by remember { mutableStateOf<CaptureGuide.Status?>(null) }
     var notReadySince by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -167,6 +175,12 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
                         val g = Images.fromYuv(image)
                         val s = guide.evaluate(g)
                         mainExecutor.execute { status = s; checking.set(false) }
+                        if (textBusy.compareAndSet(false, true)) {
+                            textExecutor.execute {
+                                val lines = try { LiveLine.read(liveText, g) } catch (e: Exception) { emptyList() }
+                                mainExecutor.execute { textLines = lines; textBusy.set(false) }
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     checking.set(false)
@@ -185,6 +199,9 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
         onDispose {
             try { future.get().unbindAll() } catch (_: Exception) {}
             executor.shutdown()
+            // Close the reader on its own thread, after any read in progress, then stop the thread.
+            textExecutor.execute { runCatching { liveText.close() } }
+            textExecutor.shutdown()
         }
     }
 
@@ -245,7 +262,7 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
                 true
             }
         }
-        GuideOverlay(guide, status, burstRunning)
+        GuideOverlay(guide, status, burstRunning, if (burstRunning) emptyList() else textLines)
         Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.5f)).padding(12.dp)) {
             val s = status
             Text(
@@ -256,6 +273,9 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Indicator("Lined up", s.aligned)
                     Indicator("In focus", s.focused)
+                    // Informational only: a damaged number may not be readable yet, and that's
+                    // exactly the label this app is for.
+                    Indicator("Number seen", textLines.any { it.kind == LiveLine.Kind.NUMBER })
                 }
             }
         }
@@ -312,12 +332,46 @@ private fun Indicator(label: String, ok: Boolean) {
     }
 }
 
+/** A text line the live reader found, in fractions of the frame, and what it looks like. */
+data class LiveLine(val box: com.labelrescue.core.fusion.NormRect, val kind: Kind, val text: String) {
+    enum class Kind { NUMBER, SERVICE, TEXT }
+
+    companion object {
+        /** Reads text on a downscaled frame (a few times a second) and classifies each line. */
+        fun read(ocr: com.labelrescue.app.pipeline.MlKitText, frame: GrayImage): List<LiveLine> {
+            val small = frame.limited(1280)
+            val w = small.width.toFloat(); val h = small.height.toFloat()
+            return ocr.recognize(small).lines.mapNotNull { l ->
+                val b = l.box ?: return@mapNotNull null
+                val kind = when {
+                    l.text.count { it.isDigit() } >= 12 || com.labelrescue.core.ups.UpsNumber.find(l.text, "live").isNotEmpty() -> Kind.NUMBER
+                    com.labelrescue.core.usps.ServiceHints.serviceHints(l.text).isNotEmpty() -> Kind.SERVICE
+                    else -> Kind.TEXT
+                }
+                LiveLine(com.labelrescue.core.fusion.NormRect(b.left / w, b.top / h, b.right / w, b.bottom / h), kind, l.text)
+            }
+        }
+    }
+}
+
 /**
- * Four corner marks over the preview (the frame is 3:4 portrait, shown fit-centered) for the
- * label's corners, colored by readiness, plus the label and barcode the check found.
+ * Over the preview (the frame is 3:4 portrait, shown fit-centered): four corner marks for the
+ * label's corners, colored by readiness; a scan sweep; every barcode-like area and every text
+ * line the live check sees (the tracking number and the service highlighted).
  */
 @Composable
-private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burst: Boolean) {
+private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burst: Boolean, lines: List<LiveLine>) {
+    val sweep = androidx.compose.animation.core.rememberInfiniteTransition(label = "sweep")
+    val t by sweep.animateFloat(
+        0f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "sweepPos",
+    )
+    val labelPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true; textSize = 30f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val vw = size.width; val vh = size.height
@@ -325,6 +379,14 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
             val scale = min(vw / 3f, vh / 4f)
             val fw = 3f * scale; val fh = 4f * scale
             val ox = (vw - fw) / 2; val oy = (vh - fh) / 2
+            fun rectOf(b: com.labelrescue.core.fusion.NormRect) = androidx.compose.ui.geometry.Rect(ox + b.left * fw, oy + b.top * fh, ox + b.right * fw, oy + b.bottom * fh)
+            fun tag(text: String, x: Float, y: Float, c: Color) {
+                labelPaint.color = android.graphics.Color.argb(230, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+                val bg = android.graphics.Paint().apply { color = android.graphics.Color.argb(150, 0, 0, 0) }
+                val tw = labelPaint.measureText(text)
+                drawContext.canvas.nativeCanvas.drawRect(x - 4, y - 30, x + tw + 6, y + 6, bg)
+                drawContext.canvas.nativeCanvas.drawText(text, x, y, labelPaint)
+            }
             val g = guide.guide
             val gl = ox + g.left * fw; val gt = oy + g.top * fh
             val gr = ox + g.right * fw; val gb = oy + g.bottom * fh
@@ -333,7 +395,51 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
                 status?.aligned == true -> Color(0xFFFFC107)
                 else -> Color(0xFFEF5350)
             }
-            // L-shaped marks, 14% of the label's width long.
+            // Scan sweep across the label area.
+            if (!burst) {
+                val y = gt + (gb - gt) * t
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color(0x5500E5FF)), startY = y - 90f, endY = y),
+                    Offset(gl, y - 90f), GSize(gr - gl, 90f),
+                )
+                drawLine(Color(0xCC00E5FF), Offset(gl, y), Offset(gr, y), strokeWidth = 3f)
+            }
+            // Text lines: faint for ordinary text, highlighted for the tracking number and service.
+            for (l in lines) {
+                val r = rectOf(l.box)
+                val (c, w) = when (l.kind) {
+                    LiveLine.Kind.NUMBER -> Color(0xFFFFD54F) to 5f
+                    LiveLine.Kind.SERVICE -> Color(0xFFB388FF) to 4f
+                    LiveLine.Kind.TEXT -> Color.White.copy(alpha = 0.55f) to 2f
+                }
+                if (l.kind != LiveLine.Kind.TEXT) drawRect(c.copy(alpha = 0.18f), r.topLeft, r.size)
+                drawRoundRect(c, r.topLeft, r.size, CornerRadius(6f, 6f), style = Stroke(w))
+                when (l.kind) {
+                    LiveLine.Kind.NUMBER -> tag("TRACKING #", r.left, r.top - 8f, c)
+                    LiveLine.Kind.SERVICE -> tag("SERVICE", r.left, r.top - 8f, c)
+                    LiveLine.Kind.TEXT -> {}
+                }
+            }
+            // Everything that looks like a barcode; the one the check uses in solid white.
+            val main = status?.barcode
+            for (b in status?.regions.orEmpty()) {
+                val r = rectOf(b)
+                val isMain = main != null && abs(b.left - main.left) < 0.02f && abs(b.top - main.top) < 0.02f
+                val c = if (isMain) Color.White else Color(0xFF00E5FF)
+                val tick = min(r.width, r.height) * 0.3f
+                for ((x, y, sx, sy) in listOf(listOf(r.left, r.top, 1f, 1f), listOf(r.right, r.top, -1f, 1f), listOf(r.left, r.bottom, 1f, -1f), listOf(r.right, r.bottom, -1f, -1f))) {
+                    drawLine(c, Offset(x, y), Offset(x + sx * tick, y), strokeWidth = 5f)
+                    drawLine(c, Offset(x, y), Offset(x, y + sy * tick), strokeWidth = 5f)
+                }
+                drawRect(c.copy(alpha = 0.10f), r.topLeft, r.size)
+                tag(if (isMain) "BARCODE ✓" else "BARCODE?", r.left, r.top - 8f, c)
+            }
+            // The label's paper, as the check sees it.
+            status?.label?.let { b ->
+                val r = rectOf(b)
+                drawRect(Color.White.copy(alpha = 0.35f), r.topLeft, r.size, style = Stroke(2f))
+            }
+            // L-shaped corner marks, 14% of the label's width long.
             val len = (gr - gl) * 0.14f
             val sw = 10f
             val shadow = Color.Black.copy(alpha = 0.5f)
@@ -343,19 +449,6 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
                     drawLine(c, Offset(x, y), Offset(x, y + sy * len), strokeWidth = w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
                 }
                 corner(gl, gt, 1f, 1f); corner(gr, gt, -1f, 1f); corner(gl, gb, 1f, -1f); corner(gr, gb, -1f, -1f)
-            }
-            // What the check sees: the label's paper and the barcode.
-            status?.label?.let { b ->
-                drawRect(
-                    Color.White.copy(alpha = 0.45f), Offset(ox + b.left * fw, oy + b.top * fh),
-                    GSize((b.right - b.left) * fw, (b.bottom - b.top) * fh), style = Stroke(2f),
-                )
-            }
-            status?.barcode?.let { b ->
-                drawRect(
-                    Color.White.copy(alpha = 0.8f), Offset(ox + b.left * fw, oy + b.top * fh),
-                    GSize((b.right - b.left) * fw, (b.bottom - b.top) * fh), style = Stroke(3f),
-                )
             }
         }
     }
