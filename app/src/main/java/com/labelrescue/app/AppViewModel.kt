@@ -12,13 +12,15 @@ import com.labelrescue.core.candidates.HistoryPrior
 import com.labelrescue.core.candidates.HistoryStats
 import com.labelrescue.core.candidates.ManualEntry
 import com.labelrescue.core.candidates.RankingPrior
-import com.labelrescue.core.candidates.SlotDist
 import com.labelrescue.core.candidates.StructurePrior
 import com.labelrescue.core.fusion.NormRect
 import com.labelrescue.core.image.GrayImage
-import com.labelrescue.core.image.Variants
-import com.labelrescue.core.ocr.OcrInterpreter
-import com.labelrescue.core.usps.ServiceHints
+import com.labelrescue.app.pipeline.MlKitBarcode
+import com.labelrescue.core.barcode.ZxingDecoder
+import com.labelrescue.core.fusion.CancelledException
+import com.labelrescue.core.fusion.Progress
+import com.labelrescue.core.fusion.RecoveryOutput
+import com.labelrescue.core.fusion.RecoveryPipeline
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,48 +91,70 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setCrops(barcode: NormRect?, number: NormRect?) { _barcodeCrop.value = barcode; _numberCrop.value = number }
 
-    private var photoPrior = StructurePrior()
-    val photo = ResultController(viewModelScope, { prior(photoPrior) })
+    private var photoOutput: RecoveryOutput? = null
+    val photo = ResultController(
+        viewModelScope,
+        prior = { photoOutput?.prior(historyStats.value) ?: prior() },
+        exactEvidence = { photoOutput?.exactEvidence() },
+    )
+    private val _progress = MutableStateFlow<Progress?>(null)
+    val progress: StateFlow<Progress?> = _progress
+    private val _noResult = MutableStateFlow<RecoveryOutput?>(null)
+    /** Set when the pipeline found no number at all. */
+    val noResult: StateFlow<RecoveryOutput?> = _noResult
     private var job: Job? = null
 
-    /** Stage 2: OCR every frame and variant, vote per position. */
+    /**
+     * Runs the whole pipeline on all frames: full barcode decodes (ML Kit + ZXing on every
+     * variant), the partial Code 128 decoder, DataMatrix retries, OCR, consensus and fusion.
+     */
     fun startRecovery(onResult: () -> Unit) {
         job?.cancel()
-        photo.clear()
+        photo.clear(); _noResult.value = null
+        val frames = _frames.value
+        if (frames.isEmpty()) return
         job = viewModelScope.launch {
-            _status.value = "Reading…"
-            val result = withContext(Dispatchers.Default) {
-                val text = MlKitText()
-                val obs = ArrayList<com.labelrescue.core.fusion.Observation>()
-                val labelText = StringBuilder()
-                text.use {
-                    for ((fi, f) in _frames.value.withIndex()) {
-                        if (!isActive) break
-                        val region = _numberCrop.value?.toPixels(f.width, f.height)
-                        for (v in Variants.make(f, region)) {
-                            val page = it.recognize(v.image)
-                            if (fi == 0) labelText.append(page.text).append('\n')
-                            obs += OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+            _progress.value = Progress("Starting", 0, frames.size)
+            val out = try {
+                withContext(Dispatchers.Default) {
+                    MlKitBarcode().use { mb ->
+                        MlKitText().use { mt ->
+                            RecoveryPipeline(listOf(mb, ZxingDecoder()), mt).run(
+                                frames,
+                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value),
+                                progress = { _progress.value = it },
+                                cancelled = { !isActive },
+                            )
                         }
                     }
                 }
-                val format = obs.groupBy { it.format }.maxByOrNull { e -> e.value.sumOf { it.weight } }?.key
-                format?.let { fmt ->
-                    Triple(fmt, List(fmt.length) { i ->
-                        val acc = DoubleArray(10); var w = 0.0
-                        for (o in obs) if (o.format == fmt) o.slots[i]?.let { s -> for (k in 0..9) acc[k] += o.weight * s.probs[k]; w += o.weight }
-                        if (w > 0) SlotDist(SlotDist.DIGITS, acc) else SlotDist.uniform()
-                    }, labelText.toString())
-                }
+            } catch (e: CancelledException) {
+                null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _status.value = "Something went wrong: ${e.message}"
+                null
+            } finally {
+                _progress.value = null
             }
-            _status.value = null
-            if (result == null) { _status.value = "No tracking number found. Try cropping or typing the digits."; return@launch }
-            val (format, slots, label) = result
-            photoPrior = StructurePrior(ServiceHints.serviceHints(label), ServiceHints.zips(label))
-            photo.set(format, slots)
+            if (out == null) return@launch
+            val format = out.format
+            if (format == null) {
+                _noResult.value = out
+                onResult()
+                return@launch
+            }
+            val crops = withContext(Dispatchers.Default) {
+                out.locations.mapNotNull { (pos, loc) ->
+                    frames.getOrNull(loc.frame)?.let { f -> Images.zoomCrop(f, loc.box)?.let { pos to it } }
+                }.toMap()
+            }
+            photoOutput = out
+            photo.set(format, out.slots) { copy(photo = PhotoEvidence(out, crops)) }
             onResult()
         }
     }
 
-    fun cancelRecovery() { job?.cancel(); _status.value = null }
+    fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
 }

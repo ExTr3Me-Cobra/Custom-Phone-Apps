@@ -4,21 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -97,18 +90,19 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 }
                 Screen.PROCESSING -> {
                     val status by vm.status.collectAsStateWithLifecycle()
-                    Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text(status ?: "Working…", style = MaterialTheme.typography.titleMedium)
-                    }
+                    val progress by vm.progress.collectAsStateWithLifecycle()
+                    ProcessingScreen(progress, status, onCancel = { back() })
                 }
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        st?.let {
-                            ResultsPanel(it, ResultActions(vm.photo::pick, vm.photo::unpick, vm.photo::select, onConfirm = null, onVerify = null))
-                        }
-                    }
+                    val none by vm.noResult.collectAsStateWithLifecycle()
+                    PhotoResultsScreen(
+                        st, none,
+                        ResultActions(vm.photo::pick, vm.photo::unpick, vm.photo::select, onConfirm = null, onVerify = null),
+                        verifyStatus = null,
+                        onManual = { screen = Screen.MANUAL },
+                        onRetry = { screen = Screen.CROP },
+                    )
                 }
             }
         }

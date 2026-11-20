@@ -15,6 +15,8 @@ data class ResultState(
     val ranked: RankResult? = null,
     val selected: Int = 0,
     val ranking: Boolean = false,
+    /** Photo evidence (crops, sources). Null for manual entry. */
+    val photo: PhotoEvidence? = null,
 ) {
     val slots: List<SlotDist>
         get() = baseSlots.mapIndexed { i, s -> overrides[i]?.let { s.fixedTo(it) } ?: s }
