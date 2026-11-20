@@ -62,6 +62,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
     LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
     val manualV by vm.manualVerify.state.collectAsStateWithLifecycle()
+    val reportCount by vm.reportCount.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.refreshReportCount() }
     val photoV by vm.photoVerify.state.collectAsStateWithLifecycle()
     fun verifyActions(c: com.labelrescue.app.verify.VerificationController, s: com.labelrescue.app.verify.VerificationController.UiState) =
         VerifyActions(s, c::askContext, c::confirmContext, c::dismissContext, c::cancel)
@@ -147,6 +149,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
                         diagnosticLog = vm::diagnosticLog,
+                        reportCount = reportCount,
+                        takeReport = vm::takeTrainingReport,
                     )
                 }
             }

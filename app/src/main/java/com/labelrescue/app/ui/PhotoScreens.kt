@@ -45,6 +45,8 @@ fun PhotoResultsScreen(
     onManual: () -> Unit,
     onRetry: () -> Unit,
     diagnosticLog: (Boolean) -> String? = { null },
+    reportCount: Int = 0,
+    takeReport: () -> String? = { null },
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state == null) {
@@ -52,12 +54,45 @@ fun PhotoResultsScreen(
             noResult?.notes?.forEach { Text(it) }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
+            TrainingReportCard(reportCount, takeReport)
             DiagnosticsCard(diagnosticLog)
             return@Column
         }
         state.photo?.output?.let { EvidenceSummary(it) }
         ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
+        TrainingReportCard(reportCount, takeReport)
         DiagnosticsCard(diagnosticLog)
+    }
+}
+
+/**
+ * The training report: a short entry per scan (what the app read, per digit, no names or
+ * addresses) to send along with the label photos. Copying or sharing it clears it.
+ */
+@Composable
+private fun TrainingReportCard(count: Int, take: () -> String?) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Training report · $count scan${if (count == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "One short entry per scan: what the app read and why, digit by digit. No names or addresses. " +
+                    "Send it with the label photos. It clears itself after you copy or share it.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    take()?.let {
+                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Label Rescue training report", it.take(LOG_LIMIT)))
+                        android.widget.Toast.makeText(ctx, "Training report copied and cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }, enabled = count > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Copy & clear") }
+                OutlinedButton(onClick = { take()?.let { share(ctx, it.take(LOG_LIMIT)) } }, enabled = count > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                    Text("Share & clear")
+                }
+            }
+        }
     }
 }
 

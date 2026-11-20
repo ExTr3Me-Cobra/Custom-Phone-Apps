@@ -170,6 +170,8 @@ class RecoveryPipeline(
         // Re-align every OCR read against the fused evidence (twice): reads that dropped a digit
         // stop shifting the rest, and the consensus sharpens.
         val pages = results.flatMap { it.pages }
+        var finalReads: List<String> = (ocrObs + ocr2Obs).filter { it.format == format }
+            .map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
         // The barcode's digits can't be shifted, so when there is a barcode reading it alone is the
         // alignment reference on the first pass (the first fused result already contains the
         // shifted reads and would reinforce them).
@@ -185,7 +187,8 @@ class RecoveryPipeline(
             ocr = Fusion.consensus(ocrObs, format)
             ocr2 = if (ocr2Obs.isNotEmpty()) Fusion.consensus(ocr2Obs, format) else emptyList()
             slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
-            log?.line("re-alignment pass $pass: " + again.joinToString(" | ") { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
+            finalReads = again.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
+            log?.line("re-alignment pass $pass: " + finalReads.joinToString(" | "))
         }
         val perSource = HashMap<Source, List<SlotDist?>>()
         if (ocrObs.any { it.format == format }) perSource[Source.OCR] = ocr
@@ -202,7 +205,7 @@ class RecoveryPipeline(
         log?.line("barcode layout used: ${partial?.structure?.name ?: "none"}; zip=$zip")
         log?.positions(format, perSource, slots)
         log?.line("label service: ${com.labelrescue.core.usps.ServiceHints.explain(labelText)}; stats: $stats")
-        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log)
+        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads)
     }
 
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }

@@ -29,6 +29,7 @@ import com.labelrescue.app.data.HistoryDb
 import com.labelrescue.app.data.HistoryFile
 import com.labelrescue.app.data.Settings
 import com.labelrescue.app.data.TrainingCrops
+import com.labelrescue.app.data.TrainingReportStore
 import com.labelrescue.app.verify.VerificationController
 import com.labelrescue.core.verify.LabelContext
 import com.labelrescue.core.verify.VerificationPrior
@@ -57,6 +58,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val crops by lazy { TrainingCrops(app) }
 
+    // ---- Training report (one compact entry per scan, cleared after export) ----
+    private val report by lazy { TrainingReportStore(app) }
+    private val _reportCount = MutableStateFlow(0)
+    val reportCount: StateFlow<Int> = _reportCount
+    @Volatile private var scanId: String? = null
+    @Volatile private var scanTime: String = ""
+    @Volatile private var scanConfirmed: String? = null
+    @Volatile private var lastRanked: com.labelrescue.core.candidates.RankResult? = null
+
+    private fun writeReport() {
+        val id = scanId ?: return
+        val out = photoOutput ?: return
+        val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
+        val verification = photoVerify.state.value.results.mapValues { (_, v) -> v.verdict.status.label + (v.verdict.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") }
+        val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, verification)
+        viewModelScope.launch(Dispatchers.IO) { report.put(id, entry); _reportCount.value = report.count() }
+    }
+
+    fun refreshReportCount() { viewModelScope.launch(Dispatchers.IO) { _reportCount.value = report.count() } }
+
+    /** The whole report; clears it (call after handing it to the clipboard or share sheet). */
+    fun takeTrainingReport(): String? {
+        val text = report.text().takeIf { it.isNotBlank() } ?: return null
+        report.clear()
+        _reportCount.value = 0
+        return text
+    }
+
     fun confirm(tracking: String, source: String) {
         viewModelScope.launch {
             db.confirmed().insert(ConfirmedNumber(tracking = tracking, confirmedAt = System.currentTimeMillis(), source = source))
@@ -66,6 +95,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val trusted = photoVerify.statuses()[tracking] == com.labelrescue.core.verify.VerifyStatus.CONFIRMED
                 res = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value, trusted) }.getOrNull() }
             }
+            if (source == "photo") { scanConfirmed = tracking; writeReport() }
             _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." + (res?.let { r ->
                 " ${r.saved} digit crops kept for retraining" +
                     (if (r.skipped > 0) ", ${r.skipped} skipped (no reader agreed with the digit)" else "") + "."
@@ -280,6 +310,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         exactEvidence = { photoOutput?.exactEvidence() },
         onRanked = { r ->
             currentLog?.candidates(r)
+            lastRanked = r
+            writeReport()
             photoVerify.onRanked(r.candidates.map { it.tracking })
         },
     )
@@ -301,6 +333,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
         currentLog = log
+        val now = java.util.Date()
+        scanId = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(now)
+        scanTime = java.text.DateFormat.getDateTimeInstance().format(now)
+        scanConfirmed = null
+        lastRanked = null
         job = viewModelScope.launch {
             _progress.value = Progress("Starting", 0, frames.size)
             val out = try {

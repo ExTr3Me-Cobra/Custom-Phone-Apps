@@ -46,6 +46,9 @@ class RealLabelTest {
             val r2 = CandidateEngine().rank(f, out.slots, prior, out.exactEvidence())
             log.section("With label text (Ground Advantage)")
             log.candidates(r2, 200)
+            File("$dir/training_report.txt").writeText(com.labelrescue.core.fusion.TrainingReport.entry(
+                "20261120-144116", "Nov 20, 2026 2:41 PM", "app (desktop test) · models: digits + PaddleOCR",
+                out, r2, null))
         }
         File("$dir/diagnostic.log").writeText(log.text())
         println("REALLOG written")

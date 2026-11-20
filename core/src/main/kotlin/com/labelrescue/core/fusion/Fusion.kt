@@ -50,6 +50,8 @@ class RecoveryOutput(
     val notes: List<String>,
     /** Detailed development log, if one was requested. */
     val log: DiagnosticLog? = null,
+    /** Each OCR read as aligned digits ("OCR/clahe=??34?902…"), for the training report. */
+    val reads: List<String> = emptyList(),
 ) {
     val recovered: List<RecoveredDigit> get() = partial?.recovered.orEmpty()
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)
