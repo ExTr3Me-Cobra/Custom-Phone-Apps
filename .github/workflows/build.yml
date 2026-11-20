@@ -1,0 +1,114 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Android API level the app compiles against (see app/build.gradle.kts).
+  ANDROID_PLATFORM: "platforms;android-37.2"
+  ANDROID_BUILD_TOOLS: "build-tools;37.0.0"
+
+jobs:
+  debug:
+    name: Debug APK + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --stacktrace :core:test :app:testDebugUnitTest
+
+      - name: Build debug APK (and compile the instrumented benchmark)
+        run: |
+          ./gradlew --stacktrace :app:assembleDebug :app:assembleDebugAndroidTest
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/LabelRescue-debug.apk
+
+      - name: Benchmark result
+        if: always()
+        run: |
+          grep -ho 'BENCHMARK[^<]*' core/build/test-results/test/*.xml >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LabelRescue-debug-apk
+          path: out/LabelRescue-debug.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-reports
+          path: |
+            core/build/reports/tests
+            app/build/reports/tests
+
+  release:
+    name: Signed release APK + AAB
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE_BASE64 }}
+      LABELRESCUE_KEYSTORE_PASSWORD: ${{ secrets.LABELRESCUE_KEYSTORE_PASSWORD }}
+      LABELRESCUE_KEY_ALIAS: ${{ secrets.LABELRESCUE_KEY_ALIAS }}
+      LABELRESCUE_KEY_PASSWORD: ${{ secrets.LABELRESCUE_KEY_PASSWORD }}
+    steps:
+      - name: Check signing secrets
+        id: secrets
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && [ -n "$LABELRESCUE_KEY_ALIAS" ] && [ -n "$LABELRESCUE_KEY_PASSWORD" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Release signing skipped::Add LABELRESCUE_KEYSTORE_BASE64, LABELRESCUE_KEYSTORE_PASSWORD, LABELRESCUE_KEY_ALIAS and LABELRESCUE_KEY_PASSWORD as repository secrets to build a signed release (see README)."
+            echo "Release signing secrets are not set, so the signed release was skipped. The debug APK is in the other job." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+
+      - uses: actions/setup-java@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        if: steps.secrets.outputs.ready == 'true'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.secrets.outputs.ready == 'true'
+
+      - name: Build signed APK and AAB
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
+          ./gradlew --stacktrace :app:assembleRelease :app:bundleRelease
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/LabelRescue-release.apk
+          cp app/build/outputs/bundle/release/app-release.aab out/LabelRescue-release.aab
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs out/LabelRescue-release.apk | grep -i "SHA-256" || true
+          rm -f "$LABELRESCUE_KEYSTORE_FILE"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          name: LabelRescue-release
+          path: out/
+          if-no-files-found: error
