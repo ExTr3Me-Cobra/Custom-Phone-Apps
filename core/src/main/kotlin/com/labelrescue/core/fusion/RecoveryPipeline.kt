@@ -53,6 +53,8 @@ class RecoveryPipeline(
         val numberCrop: NormRect? = null,
         /** Process at most this many frames fully (all are tried for a quick full decode). */
         val maxFrames: Int = 16,
+        /** On a full decode, still read and locate the printed digits (training examples). */
+        val learnFromIntact: Boolean = false,
         /** Skip the remaining frames once the ranked answer is settled (see [STOP_CONFIDENCE]). */
         val earlyStop: Boolean = true,
     )
@@ -89,7 +91,7 @@ class RecoveryPipeline(
         var measurements: Int = 0,
     )
 
-    private class FoundException(val found: Found, val labelText: String) : RuntimeException()
+    private class FoundException(val found: Found, val labelText: String, val frame: Int) : RuntimeException()
 
     fun run(
         frames: List<GrayImage>,
@@ -109,12 +111,25 @@ class RecoveryPipeline(
             if (o.ups.isNotEmpty()) log?.line("UPS numbers: " + o.ups.joinToString { "${it.tracking} (${it.source}${if (it.corrected) ", corrected" else ""}${if (it.isUspsHandoff) ", Ground Saver/SurePost → USPS" else ""})" })
             return o
         }
-        fun done(f: Found, label: String): RecoveryOutput {
+        fun done(f: Found, label: String, fi: Int): RecoveryOutput {
             val p = f.parsed
             val fmt = p.format.trackingFormat
             val slots = p.tracking.mapIndexed { i, c -> SlotDist.known(c, if (fmt.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS) }
             notes += "Full decode by ${f.by}; check digit valid."
             log?.line("FULL DECODE ${p.raw} by ${f.by} (check digit valid) -> tracking ${p.tracking}")
+            val frame = frames.getOrNull(fi)
+            if (opt.learnFromIntact && text != null && frame != null && fmt != TrackingFormat.S10) {
+                // Intact label: the barcode proved the number, so the printed digits are labeled
+                // training examples. Read and line them up against the known number.
+                progress(Progress("Reading the printed digits for training", 0, 1))
+                val l = learnIntact(fi, frame, fmt, p.tracking)
+                notes += "Learn mode: ${l.locations.size} of ${fmt.length} printed digits located for training."
+                log?.line("learn from intact label: ${l.locations.size} digits located; reads: " + l.reads.joinToString(" | "))
+                return withUps(RecoveryOutput(
+                    fmt, slots, mapOf(Source.OCR to l.ocr), p, f.by, p.zip, listOf(label, l.labelText).filter { it.isNotBlank() }.joinToString("\n"),
+                    null, l.locations, stats.copy(millis = System.currentTimeMillis() - t0), notes, log, l.reads, l.privacy, fi,
+                ))
+            }
             return withUps(RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log))
         }
         log?.section("Recovery")
@@ -126,7 +141,7 @@ class RecoveryPipeline(
         for ((fi, frame) in frames.withIndex()) {
             check()
             progress(Progress("Quick barcode scan", fi, frames.size))
-            fullDecode(frame.limited(2400), "frame ${fi + 1}")?.let { return done(it, "") }
+            fullDecode(frame.limited(2400), "frame ${fi + 1}")?.let { return done(it, "", fi) }
             stats = stats.copy(barcodeDecodes = stats.barcodeDecodes + decoders.size)
         }
 
@@ -157,7 +172,7 @@ class RecoveryPipeline(
                     results += fu.get()
                 } catch (e: ExecutionException) {
                     when (val c = e.cause) {
-                        is FoundException -> { stop.set(true); return done(c.found, c.labelText) }
+                        is FoundException -> { stop.set(true); return done(c.found, c.labelText, c.frame) }
                         is CancelledException -> { stop.set(true); throw c }
                         else -> throw (c ?: e)
                     }
@@ -200,6 +215,55 @@ class RecoveryPipeline(
         out.checkpoints = checkpoints
         log?.line("checkpoints: " + checkpoints.joinToString { "${it.frames}f=${it.top} ${(it.confidence * 100).toInt()}%" })
         return out
+    }
+
+    private class Learned(
+        val locations: Map<Int, Location>, val ocr: List<SlotDist?>, val reads: List<String>,
+        val labelText: String, val privacy: List<IntRect>?,
+    )
+
+    /**
+     * Reads the printed number of a label whose barcode decoded, aligned to the known number, and
+     * keeps for each position the clearest box where OCR read exactly the known digit.
+     */
+    private fun learnIntact(fi: Int, frame: GrayImage, fmt: TrackingFormat, tracking: String): Learned {
+        val tr = text ?: return Learned(emptyMap(), emptyList(), emptyList(), "", null)
+        val known = tracking.mapIndexed { i, c -> SlotDist.known(c, if (fmt.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS) }
+        val ref = OcrInterpreter.Reference(fmt, known)
+        val obs = ArrayList<Observation>()
+        val privacyLines = ArrayList<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>>()
+        val lineBoxes = ArrayList<IntRect>()
+        var labelText = ""
+        for (v in Variants.make(frame, null, Variants.Options(maxSide = 2000, rotations = emptyList(), includeThreshold = false)).filter { it.name == "gray" }) {
+            val page = tr.recognize(v.image)
+            labelText = page.text
+            for (l in page.lines) privacyLines += l to l.box?.let { v.toFrame.mapRect(it) }
+            obs += OcrInterpreter.interpret(page, v.toFrame, fi, v.name, Source.OCR, ref)
+            for (b in OcrInterpreter.numberLineBoxes(page)) lineBoxes += v.toFrame.mapRect(b)
+        }
+        for (lb in lineBoxes.take(2)) {
+            val r = lb.inflate(lb.width / 12 + 6, lb.height + 4).intersect(IntRect(0, 0, frame.width, frame.height))
+            if (r.isEmpty) continue
+            for (v in Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = emptyList(), includeThreshold = false))
+                .filter { it.name == "gray" || it.name == "clahe" }) {
+                obs += OcrInterpreter.interpret(tr.recognize(v.image), v.toFrame, fi, v.name, Source.OCR, ref)
+            }
+        }
+        val same = obs.filter { it.format == fmt }
+        val locations = HashMap<Int, Location>()
+        for (i in tracking.indices) {
+            var best: Observation? = null; var bestScore = 0.0
+            for (o in same) {
+                val b = o.boxes.getOrNull(i) ?: continue
+                if (b.isEmpty || o.slots[i]?.best != tracking[i]) continue
+                val sc = o.weight * o.boxQuality[i] * (o.slots[i]?.bestP ?: 0.0)
+                if (sc > bestScore) { bestScore = sc; best = o }
+            }
+            if (best != null) locations[i] = Location(fi, best.boxes[i]!!, Source.OCR)
+        }
+        val reads = same.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
+        return Learned(locations, if (same.isNotEmpty()) Fusion.consensus(same, fmt) else emptyList(), reads, labelText,
+            Redactor.blankBoxes(privacyLines, frame.width, frame.height))
     }
 
     /** Ranked answer after the first [frames] processed frames (for early stop and the training report). */
@@ -322,7 +386,7 @@ class RecoveryPipeline(
         fun check() { if (stopped()) throw CancelledException() }
         fun full(img: GrayImage, where: String) {
             w.barcodeDecodes += decoders.size
-            fullDecode(img, where)?.let { throw FoundException(it, w.labelText) }
+            fullDecode(img, where)?.let { throw FoundException(it, w.labelText, fi) }
         }
 
         // OCR: whole frame first, to find the number line and the label text.

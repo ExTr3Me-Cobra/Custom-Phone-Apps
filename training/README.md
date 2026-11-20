@@ -88,6 +88,12 @@ uploaded. Safeguards:
 * **Review:** Settings > **Review crops** shows every crop with its digit. Tap one that's wrong
   to delete it. You can also delete all untrusted crops.
 
+**Learn from intact labels** (Settings) is the fastest way to collect real crops. When a
+label's barcode reads cleanly, the app also reads the printed number, lines it up against the
+decoded number, and saves every digit that OCR read as exactly that digit, marked trusted. There's
+nothing to type or confirm. Labels from many shippers and printers matter more than many of the
+same kind; about 20-50 is plenty.
+
 **Export crops** gives a ZIP (`labels.csv` with `file,digit,trusted,agreed_by,tracking`, plus
 PNGs). Unzip it and retrain:
 

@@ -134,6 +134,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onReviewCrops = { screen = Screen.CROPS },
                         onQuickScan = vm::setQuickScan,
                         onSaveUps = vm::saveUpsSettings,
+                        onLearnFromIntact = vm::setLearnFromIntact,
                     )
                 }
                 Screen.CROPS -> {

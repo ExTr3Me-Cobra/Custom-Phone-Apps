@@ -38,6 +38,7 @@ fun SettingsScreen(
     onReviewCrops: () -> Unit = {},
     onQuickScan: (Boolean) -> Unit = {},
     onSaveUps: (Boolean, String, String?) -> Unit = { _, _, _ -> },
+    onLearnFromIntact: (Boolean) -> Unit = {},
 ) {
     var upsOn by remember(ui.loaded) { mutableStateOf(ui.upsEnabled) }
     var upsId by remember(ui.loaded) { mutableStateOf(ui.upsClientId) }
@@ -123,6 +124,16 @@ fun SettingsScreen(
         Text(
             "Reads the sharpest burst frames first and stops once two checks in a row agree on the same number with at least 80% confidence. " +
                 "Hard labels still use every frame. Turn off to always use every frame.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Learn from intact labels", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Switch(ui.learnFromIntact, onLearnFromIntact)
+        }
+        Text(
+            "When a label's barcode reads cleanly, the app also reads the printed number (a few seconds more) and saves each digit " +
+                "as a trusted training crop, labeled by the barcode. Nothing to type. Scan good labels from many shippers and printers, " +
+                "then export the crops below. Stored only on this phone.",
             style = MaterialTheme.typography.bodySmall,
         )
         Text("On-device models", style = MaterialTheme.typography.titleLarge)

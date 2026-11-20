@@ -62,6 +62,11 @@ class Settings(ctx: Context) {
         get() = prefs.getBoolean("save_training_crops", false)
         set(v) = prefs.edit().putBoolean("save_training_crops", v).apply()
 
+    /** Learn from intact labels: on a clean barcode read, save the printed digits as trusted crops. */
+    var learnFromIntact: Boolean
+        get() = prefs.getBoolean("learn_intact", false)
+        set(v) = prefs.edit().putBoolean("learn_intact", v).apply()
+
     /** Quick scan: stop reading burst frames once the answer is settled (off = always use every frame). */
     var quickScan: Boolean
         get() = prefs.getBoolean("quick_scan", true)

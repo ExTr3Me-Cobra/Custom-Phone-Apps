@@ -194,6 +194,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
         val quickScan: Boolean = true,
         val upsEnabled: Boolean = false, val upsClientId: String = "", val upsHasSecret: Boolean = false,
+        val learnFromIntact: Boolean = false,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -210,6 +211,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
             st.quickScan,
             st.upsEnabled, st.upsClientId, st.upsClientSecret.isNotBlank(),
+            st.learnFromIntact,
         )
     }
 
@@ -224,6 +226,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _settingsUi.value = settingsUiFrom(st)
             _message.value = "UPS settings saved."
         }
+    }
+
+    fun setLearnFromIntact(on: Boolean) {
+        viewModelScope.launch { val st = settings(); withContext(Dispatchers.IO) { st.learnFromIntact = on }; _settingsUi.value = settingsUiFrom(st) }
     }
 
     fun setQuickScan(on: Boolean) {
@@ -394,6 +400,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             val models = OnDeviceModels.load(app)
                             val paddle = OnDeviceModels.paddle(app)
                             val quick = settings().quickScan
+                            val learn = settings().learnFromIntact
                             log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
                             log.line("device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${Runtime.getRuntime().availableProcessors()} cores")
                             log.line("models: ${OnDeviceModels.status}")
@@ -402,7 +409,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 models = models, text2 = paddle, log = log,
                             ).run(
                                 frames,
-                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value, earlyStop = quick),
+                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value, earlyStop = quick, learnFromIntact = learn),
                                 progress = { _progress.value = it },
                                 cancelled = { !isActive },
                             )
@@ -436,6 +443,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             photoVerify.reset(LabelContext.fromLabelText(out.labelText, out.zip ?: out.fullDecode?.zip))
             photo.set(format, out.slots) { copy(photo = PhotoEvidence(out, crops)) }
             onResult()
+            // Learn mode: an intact label's barcode proved the number, so its located printed
+            // digits are saved right away as trusted training crops (no confirmation needed).
+            val fd = out.fullDecode
+            if (fd != null && out.locations.isNotEmpty() && settings().learnFromIntact) {
+                val res = withContext(Dispatchers.IO) { runCatching { this@AppViewModel.crops.save(fd.tracking, out, frames, trusted = true) }.getOrNull() }
+                _message.value = "Learn mode: ${res?.saved ?: 0} digit crops saved from this intact label" +
+                    (res?.skipped?.takeIf { it > 0 }?.let { " ($it skipped)" } ?: "") + "."
+            }
         }
     }
 

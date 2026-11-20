@@ -273,6 +273,17 @@ supports it, otherwise the CPU. Settings shows which models are in use.
 `./gradlew :app:connectedDebugAndroidTest` repeats the with/without comparison on a device with
 the real ML Kit OCR. It hasn't been run here, because this environment has no emulator.
 
+## Camera guide
+
+Four corner marks frame a 4×6 in. label. Line the label's corners up with them. The burst is
+allowed once:
+
+* the label's paper fills the marks (checked when it stands out from the background, such as a
+  brown box; on a white box this check is skipped)
+* a barcode inside the marks is wide enough for the right distance, straight, well lit and sharp
+
+After 8 seconds, **Capture anyway** appears.
+
 ## UPS packages delivered by USPS
 
 Some UPS services (Ground Saver and SurePost, service code YW in the 1Z number) hand the package
