@@ -1,5 +1,7 @@
 package com.labelrescue.core.fusion
 
+import com.labelrescue.core.privacy.Redactor
+
 import com.labelrescue.core.barcode.BarcodeDecoder
 import com.labelrescue.core.barcode.BarcodeLocator
 import com.labelrescue.core.barcode.BarcodeRead
@@ -62,6 +64,8 @@ class RecoveryPipeline(
 
     private class FrameWork(
         val pages: MutableList<PageRec> = ArrayList(),
+        /** Frame-0 full-page OCR lines in frame coordinates, for whiting out names and addresses. */
+        val privacyLines: MutableList<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>> = ArrayList(),
         val observations: MutableList<Observation> = ArrayList(),
         val evidence: MutableList<LocatedEvidence> = ArrayList(),
         var labelText: String = "",
@@ -228,7 +232,9 @@ class RecoveryPipeline(
             partial?.zipDigits.orEmpty().joinToString(" ") { "${it.best}:${(it.bestP * 100).toInt()}" } + ")")
         log?.positions(format, perSource, slots)
         log?.line("label service: ${com.labelrescue.core.usps.ServiceHints.explain(labelText)}; stats: $stats")
-        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads)
+        val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[0].width, work[0].height) }
+        log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame 1" } ?: "no safe photo (no OCR line positions)"))
+        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy)
     }
 
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
@@ -253,6 +259,7 @@ class RecoveryPipeline(
                 val page = text.recognize(v.image)
                 w.ocrReads++; w.variants++
                 if (v.name == "gray") { w.labelText = page.text; log?.line("f$fi label text:\n" + page.text) }
+                if (fi == 0) for (l in page.lines) w.privacyLines += l to l.box?.let { v.toFrame.mapRect(it) }
                 val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
                 w.observations += obs
                 w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
@@ -319,6 +326,7 @@ class RecoveryPipeline(
                 .filter { it.name in setOf("gray", "clahe", "threshold", "upscale2x", "upscale3x") }
             for (v in vs) { w.variants++; full(v.image, "frame ${fi + 1} crop ${v.name}") }
         }
+        log?.line("f$fi 2D codes: full decoders found no valid tracking number in ${tiles(frame).size} crops")
 
         // OCR again, zoomed onto the number line, with every variant (and the second engine).
         if (text != null || text2 != null) {

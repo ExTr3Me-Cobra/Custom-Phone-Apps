@@ -227,6 +227,13 @@ ranking and never removes a candidate.
 
   **Hide names and addresses** (on by default) masks capitalized label words. Nothing is sent
   anywhere unless you share it.
+* **Training report:** one short entry per scan, and one photo per scan with names and addresses
+  whited out. Every OCR'd text line is blanked unless it is only the tracking number or label
+  wording (service, "USPS TRACKING #", "Mailed from", dates, weights). Barcodes and 2D codes stay.
+  If OCR gives no line positions, no photo is kept. OCR can miss a faint line, so the card shows
+  the photo before you send it, and **Include photos** can be turned off. **Share & clear**
+  attaches the photos. **Copy & clear** copies the text and saves the photos to
+  Pictures/Label Rescue (Android 10+). Either one clears the report.
 
 ## On-device models
 

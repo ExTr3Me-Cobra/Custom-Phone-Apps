@@ -52,6 +52,8 @@ class RecoveryOutput(
     val log: DiagnosticLog? = null,
     /** Each OCR read as aligned digits ("OCR/clahe=??34?902…"), for the training report. */
     val reads: List<String> = emptyList(),
+    /** Areas to white out on frame 0 before the photo leaves the app, or null if it can't be made safe. */
+    val privacyBlank: List<IntRect>? = null,
 ) {
     val recovered: List<RecoveredDigit> get() = partial?.recovered.orEmpty()
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)

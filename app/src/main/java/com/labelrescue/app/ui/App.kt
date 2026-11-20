@@ -63,6 +63,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
     val manualV by vm.manualVerify.state.collectAsStateWithLifecycle()
     val reportCount by vm.reportCount.collectAsStateWithLifecycle()
+    val reportPhoto by vm.reportPhoto.collectAsStateWithLifecycle()
+    val reportPhotos by vm.reportPhotos.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshReportCount() }
     val photoV by vm.photoVerify.state.collectAsStateWithLifecycle()
     fun verifyActions(c: com.labelrescue.app.verify.VerificationController, s: com.labelrescue.app.verify.VerificationController.UiState) =
@@ -151,6 +153,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         diagnosticLog = vm::diagnosticLog,
                         reportCount = reportCount,
                         takeReport = vm::takeTrainingReport,
+                        reportPhotos = reportPhotos,
+                        reportPhoto = reportPhoto,
                     )
                 }
             }

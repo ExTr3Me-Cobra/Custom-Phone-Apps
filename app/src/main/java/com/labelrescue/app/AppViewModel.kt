@@ -62,6 +62,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val report by lazy { TrainingReportStore(app) }
     private val _reportCount = MutableStateFlow(0)
     val reportCount: StateFlow<Int> = _reportCount
+    private val _reportPhoto = MutableStateFlow<android.graphics.Bitmap?>(null)
+    /** The latest report photo (names and addresses whited out), shown before export. */
+    val reportPhoto: StateFlow<android.graphics.Bitmap?> = _reportPhoto
+    private val _reportPhotos = MutableStateFlow(0)
+    val reportPhotos: StateFlow<Int> = _reportPhotos
     @Volatile private var scanId: String? = null
     @Volatile private var scanTime: String = ""
     @Volatile private var scanConfirmed: String? = null
@@ -73,17 +78,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
         val verification = photoVerify.state.value.results.mapValues { (_, v) -> v.verdict.status.label + (v.verdict.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") }
         val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, verification)
-        viewModelScope.launch(Dispatchers.IO) { report.put(id, entry); _reportCount.value = report.count() }
+        val frame = _frames.value.firstOrNull()
+        viewModelScope.launch(Dispatchers.IO) {
+            report.put(id, entry)
+            // One photo per scan, with every text line that isn't label boilerplate whited out.
+            val blank = out.privacyBlank
+            if (frame != null && blank != null && !report.hasPhoto(id)) {
+                runCatching {
+                    val bmp = com.labelrescue.app.pipeline.Images.toBitmap(com.labelrescue.core.privacy.Redactor.apply(frame, blank))
+                    val bytes = java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
+                    report.putPhoto(id, bytes)
+                    _reportPhoto.value = android.graphics.Bitmap.createScaledBitmap(bmp, 480, 480 * bmp.height / bmp.width, true)
+                }
+            }
+            _reportCount.value = report.count(); _reportPhotos.value = report.photos().size
+        }
     }
 
-    fun refreshReportCount() { viewModelScope.launch(Dispatchers.IO) { _reportCount.value = report.count() } }
+    fun refreshReportCount() { viewModelScope.launch(Dispatchers.IO) { _reportCount.value = report.count(); _reportPhotos.value = report.photos().size } }
 
     /** The whole report; clears it (call after handing it to the clipboard or share sheet). */
-    fun takeTrainingReport(): String? {
-        val text = report.text().takeIf { it.isNotBlank() } ?: return null
-        report.clear()
-        _reportCount.value = 0
-        return text
+    fun takeTrainingReport(): TrainingReportStore.Export? {
+        val export = report.take() ?: return null
+        _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
+        return export
     }
 
     fun confirm(tracking: String, source: String) {
