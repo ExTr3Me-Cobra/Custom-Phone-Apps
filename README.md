@@ -71,7 +71,56 @@ Results show the best guess in large digits grouped 4-4-4-4-4-2:
   digit.
 * **Copy**, **Share** and **Mark as confirmed** buttons. Confirmed numbers go into the local
   history, and their Mailer IDs and service codes help rank future labels.
-* **Verify with USPS** appears only when it's turned on in Settings (see below).
+* **Check online** (optional, see below): verify candidates with USPS, or open them on USPS.com.
+
+## Online verification (optional)
+
+Recovery never needs the network. If you add your own free USPS developer credentials, the app
+can also check candidates against the official USPS Tracking API (developers.usps.com). It never
+scrapes usps.com.
+
+1. On developers.usps.com, create an app that includes the **Tracking** API. Copy its
+   **Consumer Key** and **Consumer Secret**.
+2. In Label Rescue, open **Settings**, turn on **USPS verification**, paste the key and secret,
+   and Save. They are stored with EncryptedSharedPreferences.
+3. After the next recovery, the app asks you to confirm or fix what it read from the label:
+   * destination ZIP and city
+   * origin ZIP and city
+   * mail class
+   * label date
+
+   These decide the match, so check them.
+4. Candidates are then looked up in rank order, best first. The search stops at the first
+   **confirmed** match.
+
+Each USPS record is compared with the label:
+
+| Result | Meaning | Effect on ranking |
+|---|---|---|
+| **Confirmed** | Tracking history exists and matches the label: the destination ZIP matches, or two of origin, cities, mail class, and the label date (within 4 days of the first scan). Nothing conflicts. | Moves to the top |
+| **Different package** | Real tracking history, but a detail conflicts (another ZIP, mail class, or a date more than 10 days off) | Ranked far down |
+| **Not found** | USPS has no record | Ranked down |
+| **Unknown** | Network error, rate limited, no credentials, the label has no scans yet, or nothing on the label to compare | No change |
+
+The evidence is shown under each candidate, for example "Destination 05641 matches, Origin 08081
+matches".
+
+Details:
+
+* **API version:** Tracking 3.2 (`v3r2`) is the current API. Tracking 3.0 is closed to new users
+  and retires on July 31, 2027. The app tries the 3.2 forms first and remembers the one that
+  works.
+* **Sign-in token:** the OAuth token is cached until it expires.
+* **Caching:** every answer is saved locally (Room), so a number is never looked up twice.
+  Settings has **Clear saved USPS results** to re-check, for example a label that had no scans
+  yet.
+* **Rate limits:** USPS doesn't publish its default quota. The app limits itself to a
+  configurable number of requests per hour (default 60). On 429 or server errors it backs off
+  exponentially and honors `Retry-After`.
+* **Not-found errors:** these follow the USPS Error Inventory. Codes 150002 and similar mean the
+  number was not found. 150001, 150003 and 150009 mean the label exists but has no scans yet.
+* **No credentials?** **Check top 10 on USPS.com** opens the official USPS tracking page in your
+  browser, with the candidates comma-separated in `tLabels`, so you can look them up yourself.
 
 ## How recovery works
 
@@ -124,10 +173,10 @@ ranking and never removes a candidate.
 ## Privacy
 
 All processing happens on the phone with bundled models. The app has no analytics and makes no
-network calls, with one exception: the optional USPS check. That check is off by default, uses
-your own free USPS developer credentials (developers.usps.com, Tracking API), and runs only when
-you tap Verify. The credentials are stored with EncryptedSharedPreferences. History stays on the
-phone unless you export it.
+network calls, with one exception: the optional USPS verification. It is off until you add your
+own credentials and turn it on, and it only sends candidate tracking numbers to apis.usps.com.
+History and any saved digit crops stay on the phone unless you export them. Nothing is uploaded
+automatically.
 
 ## Development
 

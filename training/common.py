@@ -77,25 +77,14 @@ def export_lrw(model, path, residual=False, meta=None):
 
 
 def export_tflite(model, path, input_shape):
-    """Fixed-shape (batch 1) float32 LiteRT model with the weights embedded as constants
-    (works with the GPU delegate and the CPU interpreter). Saved as a SavedModel first so the
-    converter freezes the variables."""
-    import tempfile
+    """Fixed-shape (batch 1) float32 LiteRT model with the weights frozen into constants
+    (works with the GPU delegate and the CPU interpreter)."""
+    from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
-    class Serving(tf.Module):
-        def __init__(self, m):
-            super().__init__()
-            self.m = m
-
-        @tf.function(input_signature=[tf.TensorSpec([1] + list(input_shape), tf.float32)])
-        def serve(self, x):
-            return self.m(x, training=False)
-
-    mod = Serving(model)
-    with tempfile.TemporaryDirectory() as d:
-        tf.saved_model.save(mod, d, signatures={"serving_default": mod.serve})
-        conv = tf.lite.TFLiteConverter.from_saved_model(d)
-        data = conv.convert()
+    fn = tf.function(lambda t: model(t, training=False)).get_concrete_function(
+        tf.TensorSpec([1] + list(input_shape), tf.float32))
+    frozen = convert_variables_to_constants_v2(fn)
+    data = tf.lite.TFLiteConverter.from_concrete_functions([frozen]).convert()
     with open(path, "wb") as f:
         f.write(data)
     # The export must reproduce the Keras model.
@@ -105,6 +94,10 @@ def export_tflite(model, path, input_shape):
     err = float(np.max(np.abs(want - got)))
     assert np.isfinite(err) and err < 1e-3, f"LiteRT export differs from Keras by {err}"
     return len(data)
+
+
+def keras_path(out_dir, name):
+    return os.path.join(os.environ.get("KERAS_DIR", os.path.join(out_dir, "..", "build", "keras")), name + ".keras")
 
 
 def tflite_run(path, x):
@@ -130,9 +123,9 @@ def write_testvec(path, tflite_path, x):
 
 def save_keras(model, out_dir, name):
     """Keeps the trained Keras model (outside the repo) so exports can be redone without retraining."""
-    d = os.environ.get("KERAS_DIR", os.path.join(out_dir, "..", "build", "keras"))
-    os.makedirs(d, exist_ok=True)
-    model.save(os.path.join(d, name + ".keras"))
+    p = keras_path(out_dir, name)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    model.save(p)
 
 
 def save_metrics(out_dir, name, metrics):

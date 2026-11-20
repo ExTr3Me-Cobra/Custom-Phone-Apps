@@ -45,6 +45,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=int, default=20)
+    ap.add_argument("--export-only", action="store_true", help="re-export the saved Keras model without training")
     a = ap.parse_args()
     tf.keras.utils.set_random_seed(3)
     _, xt, yt = common.load_parts(a.data, "regions_train")
@@ -53,12 +54,17 @@ def main():
     yt = yt.astype(np.float32); yv = yv.astype(np.float32)
     m = build()
     m.compile(optimizer=keras.optimizers.Adam(2e-3), loss=weighted_bce)
-    m.fit(xt, yt, validation_data=(xv, yv), epochs=a.epochs, batch_size=32, verbose=2,
-          callbacks=[keras.callbacks.ReduceLROnPlateau(patience=2, factor=0.5), keras.callbacks.EarlyStopping(patience=4, restore_best_weights=True)])
+    if a.export_only:
+        m = keras.models.load_model(common.keras_path(a.out, "region_detector"), compile=False)
+        m.compile(optimizer="adam", loss=weighted_bce)
+    else:
+        m.fit(xt, yt, validation_data=(xv, yv), epochs=a.epochs, batch_size=32, verbose=2,
+              callbacks=[keras.callbacks.ReduceLROnPlateau(patience=2, factor=0.5), keras.callbacks.EarlyStopping(patience=4, restore_best_weights=True)])
     pv = m.predict(xv, verbose=0)
     ious = iou(yv, pv)
     os.makedirs(a.out, exist_ok=True)
-    common.save_keras(m, a.out, "region_detector")
+    if not a.export_only:
+        common.save_keras(m, a.out, "region_detector")
     tfl = os.path.join(a.out, "region_detector.tflite")
     size = common.export_tflite(m, tfl, (256, 256, 1))
     common.export_lrw(m, os.path.join(a.out, "region_detector.lrw"), meta={"kinds": KINDS, "stride": 8})
