@@ -7,6 +7,7 @@ import com.labelrescue.core.ml.Models
 import com.labelrescue.core.ml.NetRunner
 import com.labelrescue.core.ml.RegionModel
 import com.labelrescue.core.ml.RestoreModel
+import com.labelrescue.core.ocr.PaddleLineRecognizer
 import com.labelrescue.core.verify.Json
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
@@ -80,6 +81,34 @@ class LiteRtRunner(ctx: Context, asset: String) : NetRunner, AutoCloseable {
  */
 object OnDeviceModels {
     @Volatile private var cached: Models? = null
+    @Volatile private var paddle: PaddleLineRecognizer? = null
+    @Volatile private var paddleTried = false
+
+    /**
+     * PaddleOCR PP-OCRv5 mobile recognizer (converted to LiteRT) as the second OCR engine, or null if
+     * it isn't bundled or can't load.
+     */
+    fun paddle(ctx: Context): PaddleLineRecognizer? = synchronized(this) {
+        if (!paddleTried) {
+            paddleTried = true
+            paddle = try {
+                val runner = LiteRtRunner(ctx, "models/ppocr/rec.tflite")
+                val dict = ctx.assets.open("models/ppocr/dict.txt").bufferedReader().use { r -> r.readLines() }
+                val classes = dict.size + 2 // CTC blank + characters + space
+                PaddleLineRecognizer(
+                    { input ->
+                        val flat = runner.run(input, PaddleLineRecognizer.HEIGHT, PaddleLineRecognizer.WIDTH)
+                        Array(flat.size / classes) { t -> flat.copyOfRange(t * classes, (t + 1) * classes) }
+                    },
+                    dict,
+                )
+            } catch (e: Throwable) {
+                Log.w("LabelRescueModels", "PaddleOCR unavailable: ${e.message}")
+                null
+            }
+        }
+        paddle
+    }
 
     fun load(ctx: Context): Models = cached ?: synchronized(this) {
         cached ?: build(ctx.applicationContext).also { cached = it }
@@ -114,7 +143,8 @@ object OnDeviceModels {
             restore = runner(Models.RESTORE)?.let { RestoreModel(it) },
             regions = runner(Models.REGIONS)?.let { RegionModel(it) },
         )
-        status = if (parts.isEmpty()) "none (no model passed the accuracy benchmark)" else parts.joinToString()
+        status = (if (parts.isEmpty()) "no LiteRT model passed the benchmark" else parts.joinToString()) +
+            (if (runCatching { ctx.assets.open("models/ppocr/rec.tflite").close() }.isSuccess) "; PaddleOCR (2nd OCR, LiteRT)" else "")
         return models
     }
 }

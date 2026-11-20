@@ -27,6 +27,8 @@ class SymbolEvidence(
     val linesUsed: Int,
     val yTop: Int,
     val yBottom: Int,
+    /** Grid placed from the outermost bars (start/stop patterns unreadable). */
+    val extentAnchored: Boolean = false,
 )
 
 /** A digit of the tracking number that the partial decoder filled in or confirmed. */
@@ -56,6 +58,9 @@ class PartialResult(
     val zipDigits: List<SlotDist> get() = if (structure.routingDigits > 3) dataDigits.subList(3, structure.routingDigits) else emptyList()
 
     val bestTracking: String get() = trackingDigits.joinToString("") { it.best.toString() }
+
+    /** Ranks layouts against each other (see [Code128Partial.decodeAll]). */
+    val selectionScore: Double get() = ln(max(1e-6, confidence)) + structure.prior
 
     /** 0..1: how sure the barcode is about its tracking digits (mean best probability, squared). */
     val confidence: Double get() = trackingDigits.map { it.bestP }.average().let { it * it }
@@ -112,6 +117,11 @@ class PartialResult(
  * checksum states) to fill in damaged symbols.
  */
 class Code128Partial(private val maxLines: Int = 32) {
+    companion object {
+        /** Bar width offsets (modules) tried when matching templates. */
+        val BAR_BIAS = doubleArrayOf(-0.6, -0.3, 0.0, 0.3, 0.6)
+    }
+
 
     private val samplesPerModule = 3
     private val templates: Array<DoubleArray> = Array(107) { v ->
@@ -122,6 +132,27 @@ class Code128Partial(private val maxLines: Int = 32) {
             val a = raw[max(0, i - 1)]; val b = raw[i]; val c = raw[min(raw.size - 1, i + 1)]
             0.25 * a + 0.5 * b + 0.25 * c
         }
+    }
+
+    /**
+     * Templates with bars printed wider or narrower than spec by [BAR_BIAS] modules: thermal
+     * labels commonly lose (or spread) ink, shifting every bar edge.
+     */
+    private val biasTemplates: Array<Array<DoubleArray>> = Array(BAR_BIAS.size) { bi -> Array(107) { v -> template(v, BAR_BIAS[bi]) } }
+
+    private fun template(v: Int, bias: Double): DoubleArray {
+        val p = Code128.PATTERNS[v]
+        val bars = ArrayList<Pair<Double, Double>>()
+        var x = 0.0
+        for ((k, w) in p.withIndex()) { if (k % 2 == 0) bars += (x - bias / 2) to (x + w + bias / 2); x += w }
+        val n = p.sum() * samplesPerModule
+        val raw = DoubleArray(n) { m ->
+            val a = m.toDouble() / samplesPerModule; val b = (m + 1.0) / samplesPerModule
+            var cover = 0.0
+            for ((s0, s1) in bars) cover += (min(b, s1) - max(a, s0)).coerceAtLeast(0.0)
+            (cover * samplesPerModule).coerceIn(0.0, 1.0)
+        }
+        return DoubleArray(n) { i -> 0.25 * raw[max(0, i - 1)] + 0.5 * raw[i] + 0.25 * raw[min(n - 1, i + 1)] }
     }
 
     private class Line(val y: Int, val dark: DoubleArray, val edges: DoubleArray, val edgeDarkAfter: BooleanArray)
@@ -136,9 +167,30 @@ class Code128Partial(private val maxLines: Int = 32) {
      * Measures symbol evidence. Both reading directions are anchored; the one with clearly more
      * start/stop matches is measured (both if it's close, e.g. heavy damage).
      */
-    fun measure(img: GrayImage): List<SymbolEvidence> {
+    fun measure(img: GrayImage): List<SymbolEvidence> =
+        closings(img).flatMap { measure(img, it) }
+
+    /**
+     * Gap-closing sizes to try: none, plus hairline sizes that stay well under half a module
+     * (a closing as wide as a real 1-module space would merge bars). The module is estimated
+     * from the median run width (about 2 modules on Code 128).
+     */
+    fun closings(img: GrayImage): List<Int> {
+        if (img.width < 300) return listOf(0)
+        val runs = ArrayList<Double>()
+        for (ln in scanlines(img, false).let { it.subList(it.size / 3, maxOf(it.size / 3 + 1, 2 * it.size / 3)) }) {
+            for (i in 1 until ln.edges.size) runs += ln.edges[i] - ln.edges[i - 1]
+        }
+        if (runs.size < 20) return listOf(0)
+        val module = runs.sorted()[runs.size / 2] / 1.8
+        val rMax = kotlin.math.floor((0.75 * module - 1) / 2).toInt().coerceIn(0, 3)
+        return (0..rMax).toList()
+    }
+
+    fun measure(img: GrayImage, close: Int): List<SymbolEvidence> {
         val o = listOf(false, true).map { rev ->
-            val lines = scanlines(img, rev)
+            // Gap-closing passes also average a taller band, so dotted (faded) bars read as bars.
+            val lines = scanlines(img, rev, close, band = if (close > 0) 4 else 1)
             val starts = ArrayList<Anchor>(); val stops = ArrayList<Anchor>() // stop x = right end of the stop pattern
             for (ln in lines) { findStart(ln)?.let { starts += it }; findStop(ln)?.let { stops += it } }
             Oriented(rev, lines, starts, stops)
@@ -149,7 +201,27 @@ class Code128Partial(private val maxLines: Int = 32) {
             b.anchors >= 2 * a.anchors + 2 -> listOf(b)
             else -> o
         }
-        return use.mapNotNull { measureOriented(it) }.flatten()
+        val out = use.mapNotNull { measureOriented(it) }.flatten().toMutableList()
+        // Faded end bars can hide the start/stop patterns. The outermost bars usually survive:
+        // anchor the grid on them (the symbol count then sets the module width).
+        if (use.sumOf { it.anchors } < a.lines.size) {
+            for (rev in listOf(false, true)) {
+                val lines = if (rev) b.lines else a.lines
+                val st = ArrayList<Anchor>(); val en = ArrayList<Anchor>()
+                for (ln in lines) extent(ln)?.let { (x0, x1) -> st += Anchor(ln.y, x0, Double.NaN); en += Anchor(ln.y, x1, Double.NaN) }
+                if (st.size >= max(2, lines.size / 4)) measureOriented(Oriented(rev, lines, st, en))?.let { out += it }
+            }
+        }
+        return out
+    }
+
+    /** Diagnostics: best value and quality per slot for symbol count [n], anchored on the outer bars. */
+    fun debugExtentSlots(img: GrayImage, close: Int, n: Int): List<String> {
+        val lines = scanlines(img, false, close, band = if (close > 0) 4 else 1)
+        val st = ArrayList<Anchor>(); val en = ArrayList<Anchor>()
+        for (ln in lines) extent(ln)?.let { (x0, x1) -> st += Anchor(ln.y, x0, Double.NaN); en += Anchor(ln.y, x1, Double.NaN) }
+        val ev = measureWithCount(lines, st, en, n, false) ?: return listOf("no evidence (${st.size} extents of ${lines.size} lines)")
+        return ev.probs.mapIndexed { k, p -> val b = p.indices.maxBy { p[it] }; "$b(${"%.2f".format(p[b])},q${"%.2f".format(ev.quality[k])})" }
     }
 
     private fun measureOriented(o: Oriented): List<SymbolEvidence>? {
@@ -160,7 +232,7 @@ class Code128Partial(private val maxLines: Int = 32) {
         // Symbol counts to try: from lines with both anchors, else every known layout.
         val counts = LinkedHashSet<Int>()
         val both = starts.mapNotNull { s -> stops.firstOrNull { it.y == s.y }?.let { s to it } }
-        val estimates = both.map { (s, e) ->
+        val estimates = both.filter { (s, e) -> s.module.isFinite() && e.module.isFinite() }.map { (s, e) ->
             val x = (s.module + e.module) / 2
             (((e.x - s.x) / x - 24) / 11).roundToInt()
         }.filter { it in 3..40 }
@@ -177,7 +249,12 @@ class Code128Partial(private val maxLines: Int = 32) {
         return out
     }
 
-    private fun scanlines(img: GrayImage, reversed: Boolean): List<Line> {
+    /**
+     * [close] > 0 fills light gaps up to 2·close+1 px inside bars (dilate then erode the
+     * darkness): thermal labels with dead printhead dots have hairline white streaks through
+     * every bar, which would otherwise split each bar in two.
+     */
+    private fun scanlines(img: GrayImage, reversed: Boolean, close: Int = 0, band: Int = 1): List<Line> {
         val h = img.height; val w = img.width
         if (w < 40 || h < 4) return emptyList()
         val count = min(maxLines, max(1, h / 3))
@@ -189,13 +266,14 @@ class Code128Partial(private val maxLines: Int = 32) {
             for (x in 0 until w) {
                 val xx = if (reversed) w - 1 - x else x
                 var s = 0.0; var nn = 0
-                for (yy in max(0, y - 1)..min(h - 1, y + 1)) { s += img[xx, yy]; nn++ }
+                for (yy in max(0, y - band)..min(h - 1, y + band)) { s += img[xx, yy]; nn++ }
                 prof[x] = s / nn
             }
             val sorted = prof.sortedArray()
             val lo = sorted[(w * 0.03).toInt()]; val hi = sorted[min(w - 1, (w * 0.97).toInt())]
             if (hi - lo < 30) continue
-            val dark = DoubleArray(w) { ((hi - prof[it]) / (hi - lo)).coerceIn(0.0, 1.0) }
+            var dark = DoubleArray(w) { ((hi - prof[it]) / (hi - lo)).coerceIn(0.0, 1.0) }
+            if (close > 0) dark = erode(dilate(dark, close), close)
             // Sub-pixel edges where darkness crosses 0.5.
             val edges = ArrayList<Double>(); val after = ArrayList<Boolean>()
             for (x in 1 until w) {
@@ -208,6 +286,40 @@ class Code128Partial(private val maxLines: Int = 32) {
             out += Line(y, dark, edges.toDoubleArray(), after.toBooleanArray())
         }
         return out
+    }
+
+    private fun dilate(a: DoubleArray, r: Int) = DoubleArray(a.size) { i ->
+        var m = 0.0; for (k in max(0, i - r)..min(a.size - 1, i + r)) if (a[k] > m) m = a[k]; m
+    }
+
+    private fun erode(a: DoubleArray, r: Int) = DoubleArray(a.size) { i ->
+        var m = 1.0; for (k in max(0, i - r)..min(a.size - 1, i + r)) if (a[k] < m) m = a[k]; m
+    }
+
+    /**
+     * The barcode's outer edges on a line: the first bar after a wide light run (quiet zone) and
+     * the last bar before one. Null if they can't be told apart from noise.
+     */
+    private fun extent(ln: Line): Pair<Double, Double>? {
+        val e = ln.edges
+        if (e.size < 40) return null
+        val runs = DoubleArray(e.size - 1) { e[it + 1] - e[it] }
+        val med = runs.sortedArray()[runs.size / 2]
+        val quiet = 3.5 * med
+        var first = -1
+        for (i in e.indices) {
+            if (!ln.edgeDarkAfter[i]) continue
+            val before = if (i == 0) e[0] else e[i] - e[i - 1]
+            if (before >= quiet || (i == 0 && before >= 1.5 * med)) { first = i; break }
+        }
+        var last = -1
+        for (i in e.indices.reversed()) {
+            if (ln.edgeDarkAfter[i]) continue
+            val after = if (i == e.size - 1) ln.dark.size - e[i] else e[i + 1] - e[i]
+            if (after >= quiet || (i == e.size - 1 && after >= 1.5 * med)) { last = i; break }
+        }
+        if (first < 0 || last <= first || last - first < 30) return null
+        return e[first] to e[last]
     }
 
     /** Runs: widths between consecutive edges, starting at edge index [i]. */
@@ -276,15 +388,16 @@ class Code128Partial(private val maxLines: Int = 32) {
         val totalModules = 11 * (n + 1) + 13
         val startX = fit(starts) { it.x }
         val stopX = fit(stops) { it.x }
-        val modFromAnchors = (starts.map { it.module } + stops.map { it.module }).sorted()
-        val moduleMedian = modFromAnchors[modFromAnchors.size / 2]
+        val modFromAnchors = (starts.map { it.module } + stops.map { it.module }).filter { it.isFinite() }.sorted()
+        val moduleMedian = modFromAnchors.getOrNull(modFromAnchors.size / 2) ?: Double.NaN
         val module: Double = if (starts.isNotEmpty() && stops.isNotEmpty()) {
             val ys = lines.map { it.y }
             val m = ys.map { (stopX(it) - startX(it)) / totalModules }.sorted()[ys.size / 2]
             // If the anchors disagree badly with this symbol count, it's the wrong count.
-            if (abs(m - moduleMedian) / moduleMedian > 0.12) return null
+            if (moduleMedian.isFinite() && abs(m - moduleMedian) / moduleMedian > 0.12) return null
             m
         } else moduleMedian
+        if (!module.isFinite()) return null
         if (module < 0.8) return null
 
         val slots = n + 2
@@ -335,7 +448,8 @@ class Code128Partial(private val maxLines: Int = 32) {
         }
         val w = lines.first().dark.size
         val realX = if (reversed) DoubleArray(slots) { k -> w - (slotX[k] + (if (k == slots - 1) 13 else 11) * module) } else slotX
-        return SymbolEvidence(n, probs, quality, realX, module, reversed, used, lines.first().y, lines.last().y)
+        return SymbolEvidence(n, probs, quality, realX, module, reversed, used, lines.first().y, lines.last().y,
+            extentAnchored = starts.all { it.module.isNaN() } && stops.all { it.module.isNaN() })
     }
 
     private fun nearestRisingEdge(ln: Line, x: Double, tol: Double): Double? {
@@ -382,6 +496,12 @@ class Code128Partial(private val maxLines: Int = 32) {
         val center = samples[1]
         val range = center.max() - center.min()
         if (range < 0.45) return null
+        // Every symbol's bars cover 4-8 of its 11 modules: a slot that is nearly blank (lost
+        // print) or nearly solid (smear) is unreadable, whatever template happens to fit.
+        if (!isStop) {
+            val ink = center.average()
+            if (ink < 0.12 || ink > 0.9) return null
+        }
 
         val sse = DoubleArray(106) { Double.MAX_VALUE }
         var bestSse = Double.MAX_VALUE
@@ -409,6 +529,22 @@ class Code128Partial(private val maxLines: Int = 32) {
             score(seed)
         }
         for (v in values) score(v)
+        // Refine the best few with bar-width bias (ink loss or spread), only when the plain
+        // template fits poorly: clean prints keep sharp, unbiased probabilities.
+        if (!isStop && bestSse / ns > 0.05) {
+            val top = values.filter { it < 106 }.sortedBy { sse[it] }.take(12)
+            for (v in top) for (bi in BAR_BIAS.indices) {
+                if (BAR_BIAS[bi] == 0.0) continue
+                val t = biasTemplates[bi][v]
+                for (smp in samples) {
+                    var e = 0.0; var m = 0
+                    val limit = sse[v]
+                    while (m < ns) { val d = smp[m] - t[m]; e += d * d; if (e > limit) break; m++ }
+                    if (e < sse[v]) sse[v] = e
+                }
+                if (sse[v] < bestSse) bestSse = sse[v]
+            }
+        }
         val perSample = bestSse / ns
         val q = ((0.16 - perSample) / 0.11).coerceIn(0.0, 1.0)
         if (isStop) return DoubleArray(106) { 1.0 / 106 } to q
@@ -418,12 +554,17 @@ class Code128Partial(private val maxLines: Int = 32) {
         val edgeLl = DoubleArray(106)
         val w = edgeWidths(ln, xs, module, modules)
         if (w != null) {
+            // Edge-to-similar-edge distances (bar+space pairs) don't change when every bar is
+            // printed wider or thinner: the classic ink-spread-tolerant Code 128 measure.
             val total = w.sum()
             for (v in values) {
                 val p = Code128.PATTERNS[v]
                 var e = 0.0
-                for (i in 0 until 6) { val d = w[i] * 11 / total - p[i]; e += d * d }
-                edgeLl[v] = -e / (2 * 0.12)
+                for (i in 0 until 4) { val d = (w[i] + w[i + 1]) * 11 / total - (p[i] + p[i + 1]); e += d * d }
+                // Plain widths too (sharper on clean prints), at lower weight.
+                var e2 = 0.0
+                for (i in 0 until 6) { val d = w[i] * 11 / total - p[i]; e2 += d * d }
+                edgeLl[v] = -e / (2 * 0.15) - 0.5 * e2 / (2 * 0.12)
             }
         }
         val twoSigma2 = 2 * 0.3
@@ -462,21 +603,26 @@ class Code128Partial(private val maxLines: Int = 32) {
             // Quality-weighted average of each slot over all measurements.
             val probs = List(slots) { k ->
                 val acc = DoubleArray(106); var wsum = 0.0
+                // Grids placed from the outer bars are a fallback: when a start/stop-anchored grid
+                // exists for this layout, they count for much less.
+                val hasPattern = group.any { !it.extentAnchored }
                 for (e in group) {
-                    val q = (e.quality[k] + 1e-3) * meanQuality(e).let { it * it }
+                    val q = (e.quality[k] + 1e-3) * meanQuality(e).let { it * it } * (if (e.extentAnchored && hasPattern) 0.15 else 1.0)
                     wsum += q; for (v in 0 until 106) acc[v] += q * e.probs[k][v]
                 }
                 DoubleArray(106) { acc[it] / wsum }
             }
-            val startP = probs[0][Code128.START_C]
-            if (startP < 0.05 && group.all { it.quality[0] > 0.3 }) continue // clearly not a code set C barcode
+            // The start symbol is often the damaged part (faded first bars); its probability only
+            // weighs in through logZ, it doesn't veto the reading.
             val representative = group.maxBy { it.quality.sum() }
             for (st in Gs1Structure.ALL) {
                 if (st.symbolCount != n) continue
                 all += solve(st, probs.subList(1, n + 1), representative) ?: continue
             }
         }
-        return all.sortedByDescending { it.logZ }
+        // Layouts with fewer symbols always have a higher likelihood, so they are compared by how
+        // cleanly their digits read, plus how common the layout is on real labels.
+        return all.sortedByDescending { it.selectionScore }
     }
 
     private fun meanQuality(e: SymbolEvidence): Double {
@@ -492,6 +638,8 @@ class Code128Partial(private val maxLines: Int = 32) {
     private fun isAnchored(e: SymbolEvidence): Boolean {
         val start = e.quality[0] >= 0.3 && e.probs[0][Code128.START_C] >= 0.5
         val stop = e.quality[e.symbolCount + 1] >= 0.3
+        // Placed from the outer bars: trust it only if the slots read cleanly.
+        if (e.extentAnchored) return meanQuality(e) >= 0.5
         return (start || stop) && meanQuality(e) >= 0.3
     }
 
@@ -581,7 +729,7 @@ class Code128Partial(private val maxLines: Int = 32) {
             }
         }
         val dataLogZ = logScale[nData] + ln(z)
-        val logZ = dataLogZ + ln(max(1e-12, ev.probs[0][Code128.START_C]))
+        val logZ = dataLogZ + ln(max(1e-3, ev.probs[0][Code128.START_C]))
         return PartialResult(st, digitDists.map { it ?: SlotDist.uniform() }, recovered, logZ, dataLogZ, symbolProbs, ev)
     }
 }

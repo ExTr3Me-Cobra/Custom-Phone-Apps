@@ -48,6 +48,8 @@ class RecoveryOutput(
     val locations: Map<Int, Location>,
     val stats: PipelineStats,
     val notes: List<String>,
+    /** Detailed development log, if one was requested. */
+    val log: DiagnosticLog? = null,
 ) {
     val recovered: List<RecoveredDigit> get() = partial?.recovered.orEmpty()
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)
@@ -71,13 +73,15 @@ class RecoveryOutput(
             val exact = p.logLikelihood(t) - logZ
             var approx = 0.0
             for (i in t.indices) approx += ln(Fusion.floored(marg[i].p(t[i]), Fusion.EPS_PARTIAL))
-            if (exact.isFinite()) (exact - approx).coerceIn(-25.0, 25.0) else -25.0
+            // A tie-breaker, not an override: a smeared symbol can make the barcode's joint
+            // likelihood confidently wrong, so the correction is damped and capped.
+            if (exact.isFinite()) (0.5 * (exact - approx)).coerceIn(-4.0, 4.0) else -4.0
         }
     }
 
     companion object {
-        fun empty(labelText: String, stats: PipelineStats, notes: List<String>) =
-            RecoveryOutput(null, emptyList(), emptyMap(), null, null, null, labelText, null, emptyMap(), stats, notes)
+        fun empty(labelText: String, stats: PipelineStats, notes: List<String>, log: DiagnosticLog? = null) =
+            RecoveryOutput(null, emptyList(), emptyMap(), null, null, null, labelText, null, emptyMap(), stats, notes, log)
     }
 }
 
@@ -86,6 +90,7 @@ object Fusion {
     const val EPS_OCR = 0.08
     const val EPS_PARTIAL = 0.03
     const val EPS_DIGIT_MODEL = 0.12
+    const val EPS_OCR2 = 0.08
 
     fun floored(p: Double, eps: Double) = eps / 10 + (1 - eps) * p
 
@@ -99,16 +104,20 @@ object Fusion {
             val alphabet = if (format.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS
             val acc = DoubleArray(alphabet.length)
             var w = 0.0
+            val frames = HashSet<Int>()
             for (o in same) {
                 val s = o.slots[i] ?: continue
                 if (s.alphabet != alphabet) continue
                 for (k in acc.indices) acc[k] += o.weight * s.probs[k]
                 w += o.weight
+                frames += o.frame
             }
             if (w <= 0) null else {
                 val pseudo = 0.15
                 val mixed = DoubleArray(acc.size) { (acc[it] + pseudo / acc.size) / (w + pseudo) }
-                val gamma = min(2.5, 1 + 0.35 * ln(1 + w))
+                // Agreement sharpens only across separate frames: image variants of one frame
+                // share the same smudge, so they aren't independent reads.
+                val gamma = min(2.5, 1 + 0.35 * ln(frames.size.toDouble()))
                 SlotDist(alphabet, DoubleArray(mixed.size) { mixed[it].pow(gamma) })
             }
         }
@@ -119,28 +128,38 @@ object Fusion {
      * it is: a badly damaged barcode can fit the wrong layout with garbage digits, and must not
      * override clear OCR of the printed number.
      */
-    fun chooseFormat(obs: List<Observation>, partials: List<PartialResult>): TrackingFormat? {
+    fun chooseFormat(obs: List<Observation>, partials: List<PartialResult>): TrackingFormat? =
+        formatScores(obs, partials).maxByOrNull { it.value }?.key
+
+    fun formatScores(obs: List<Observation>, partials: List<PartialResult>): Map<TrackingFormat, Double> {
         val score = HashMap<TrackingFormat, Double>()
         // A printed number that aligned to a format is strong evidence of its length.
         for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, 3.0 * o.weight, Double::plus)
         partials.firstOrNull()?.let { score.merge(it.structure.trackingFormat, 4.0 * it.confidence, Double::plus) }
-        return score.maxByOrNull { it.value }?.key
+        return score
     }
 
     /** The best barcode reading for [format], unless it is far less likely than the best overall. */
     fun partialFor(format: TrackingFormat, partials: List<PartialResult>): PartialResult? {
         val best = partials.firstOrNull() ?: return null
-        return partials.firstOrNull { it.structure.trackingFormat == format }?.takeIf { it.logZ >= best.logZ - 40 }
+        return partials.firstOrNull { it.structure.trackingFormat == format }?.takeIf { it.selectionScore >= best.selectionScore - 4 }
     }
 
     /** Fuses OCR consensus and partial-barcode digits into one distribution per position. */
-    fun fuse(format: TrackingFormat, ocr: List<SlotDist?>, partial: PartialResult?, digitModel: List<SlotDist?> = emptyList()): List<SlotDist> {
+    fun fuse(
+        format: TrackingFormat,
+        ocr: List<SlotDist?>,
+        partial: PartialResult?,
+        digitModel: List<SlotDist?> = emptyList(),
+        ocr2: List<SlotDist?> = emptyList(),
+    ): List<SlotDist> {
         val bar = partial?.takeIf { it.structure.trackingFormat == format }?.trackingDigits
         return List(format.length) { i ->
             val alphabet = if (format.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS
             val p = DoubleArray(alphabet.length) { 1.0 }
             ocr.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR) }
             digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_DIGIT_MODEL) }
+            ocr2.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR2) }
             bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_PARTIAL) }
             SlotDist(alphabet, p)
         }

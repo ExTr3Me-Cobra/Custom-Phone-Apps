@@ -18,6 +18,7 @@ kotlin {
 dependencies {
     implementation(project(":core"))
     implementation(libs.zxing.core)
+    implementation(libs.onnxruntime.jvm)
     testImplementation(libs.junit)
 }
 

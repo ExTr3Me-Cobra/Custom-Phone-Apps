@@ -9,6 +9,8 @@ enum class Source(val label: String) {
     BARCODE_PARTIAL("Damaged barcode"),
     DATAMATRIX("2D code"),
     OCR("Printed digits"),
+    /** Second OCR engine (PaddleOCR) with per-character probabilities. */
+    OCR2("Printed digits (2nd OCR)"),
     /** The on-device damaged-digit classifier, run on each digit's crop. */
     DIGIT_MODEL("Digit model"),
 }

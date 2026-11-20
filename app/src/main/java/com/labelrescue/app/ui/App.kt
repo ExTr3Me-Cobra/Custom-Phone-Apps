@@ -136,6 +136,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ),
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
+                        diagnosticLog = vm::diagnosticLog,
                     )
                 }
             }

@@ -79,7 +79,7 @@ val copyModels = tasks.register<Sync>("copyModelAssets") {
         val m = groovy.json.JsonSlurper().parse(manifest) as Map<String, Any?>
         ((m["models"] as? Map<String, Any?>) ?: emptyMap()).filter { (it.value as? Map<*, *>)?.get("enabled") == true }.keys.toList()
     } else emptyList()
-    from(modelsDir) { include(enabled.map { "$it.tflite" } + "manifest.json") }
+    from(modelsDir) { include(enabled.map { "$it.tflite" } + "manifest.json" + "ppocr/rec.tflite" + "ppocr/dict.txt") }
     into(layout.buildDirectory.dir("generated/modelAssets/models"))
 }
 tasks.named("preBuild") { dependsOn(copyModels) }
@@ -116,6 +116,7 @@ dependencies {
     implementation(libs.litert)
     implementation(libs.litert.gpu)
     implementation(libs.litert.gpu.api)
+    implementation(libs.zxing.cpp.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)

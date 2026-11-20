@@ -47,7 +47,7 @@ class StructurePrior(
             val stc = t.substring(2, 5)
             if (hints.isNotEmpty()) {
                 when {
-                    hints.any { stc in it.serviceTypeCodes } -> lp += ln(4.0)
+                    hints.any { stc in it.serviceTypeCodes } -> lp += ln(8.0)
                     hints.any { h -> h.stcPrefixes.any { stc.startsWith(it) } } -> lp += ln(2.0)
                 }
             }

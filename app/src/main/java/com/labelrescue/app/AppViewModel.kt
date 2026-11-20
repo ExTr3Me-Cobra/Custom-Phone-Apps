@@ -19,6 +19,8 @@ import com.labelrescue.app.pipeline.MlKitBarcode
 import com.labelrescue.app.pipeline.OnDeviceModels
 import com.labelrescue.core.barcode.ZxingDecoder
 import com.labelrescue.core.fusion.CancelledException
+import com.labelrescue.core.fusion.DiagnosticLog
+import com.labelrescue.app.pipeline.ZxingCppDecoder
 import com.labelrescue.core.fusion.Progress
 import com.labelrescue.core.fusion.RecoveryOutput
 import com.labelrescue.core.fusion.RecoveryPipeline
@@ -229,11 +231,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setCrops(barcode: NormRect?, number: NormRect?) { _barcodeCrop.value = barcode; _numberCrop.value = number }
 
     private var photoOutput: RecoveryOutput? = null
+
+    /** Detailed log of the last photo recovery (for development; copy/share from the results). */
+    @Volatile private var currentLog: DiagnosticLog? = null
+
+    /** The last recovery's diagnostic log, plus verification results; [redact] hides names and addresses. */
+    fun diagnosticLog(redact: Boolean): String? {
+        val log = currentLog ?: return null
+        val v = photoVerify.state.value
+        val extra = StringBuilder()
+        if (v.results.isNotEmpty() || v.status != null) {
+            extra.append("\n===== Online verification =====\n")
+            extra.append("context: ${v.context}\nstatus: ${v.status}\n")
+            for ((n, r) in v.results) extra.append("$n: ${r.verdict.status} ${r.verdict.summary}${if (r.fromCache) " (cached)" else ""}\n")
+        }
+        val text = log.text(redact) + extra
+        return if (redact) text.lines().joinToString("\n") { DiagnosticLog.redactLine(it) } else text
+    }
     val photo: ResultController = ResultController(
         viewModelScope,
         prior = { CompositePrior(listOf(photoOutput?.prior(historyStats.value) ?: prior(), verificationPrior(photoVerify))) },
         exactEvidence = { photoOutput?.exactEvidence() },
-        onRanked = { r -> photoVerify.onRanked(r.candidates.map { it.tracking }) },
+        onRanked = { r ->
+            currentLog?.candidates(r)
+            photoVerify.onRanked(r.candidates.map { it.tracking })
+        },
     )
     private val _progress = MutableStateFlow<Progress?>(null)
     val progress: StateFlow<Progress?> = _progress
@@ -251,13 +273,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         photo.clear(); _noResult.value = null
         val frames = _frames.value
         if (frames.isEmpty()) return
+        val log = DiagnosticLog()
+        currentLog = log
         job = viewModelScope.launch {
             _progress.value = Progress("Starting", 0, frames.size)
             val out = try {
                 withContext(Dispatchers.Default) {
                     MlKitBarcode().use { mb ->
                         MlKitText().use { mt ->
-                            RecoveryPipeline(listOf(mb, ZxingDecoder()), mt, models = OnDeviceModels.load(getApplication())).run(
+                            val app = getApplication<Application>()
+                            val models = OnDeviceModels.load(app)
+                            val paddle = OnDeviceModels.paddle(app)
+                            log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
+                            log.line("device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${Runtime.getRuntime().availableProcessors()} cores")
+                            log.line("models: ${OnDeviceModels.status}")
+                            RecoveryPipeline(
+                                listOf(mb, ZxingCppDecoder(), ZxingDecoder()), mt,
+                                models = models, text2 = paddle, log = log,
+                            ).run(
                                 frames,
                                 RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value),
                                 progress = { _progress.value = it },

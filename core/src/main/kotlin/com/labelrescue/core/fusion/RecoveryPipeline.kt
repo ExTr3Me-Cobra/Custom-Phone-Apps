@@ -40,6 +40,10 @@ class RecoveryPipeline(
     private val partialDecoder: Code128Partial = Code128Partial(),
     /** Optional on-device models (digit classifier, restoration, region detector). */
     private val models: Models = Models.NONE,
+    /** Optional second OCR engine for the number line (PaddleOCR); fused as its own source. */
+    private val text2: TextRecognizer? = null,
+    /** Optional detailed log for development. */
+    private val log: DiagnosticLog? = null,
 ) {
     data class Options(
         val barcodeCrop: NormRect? = null,
@@ -53,7 +57,11 @@ class RecoveryPipeline(
     private class Found(val parsed: ParsedNumber, val by: String)
 
     /** What one frame contributed. */
+    /** An OCR page kept for the re-alignment pass. */
+    private class PageRec(val page: OcrPage, val toFrame: Affine, val frame: Int, val variant: String, val source: Source)
+
     private class FrameWork(
+        val pages: MutableList<PageRec> = ArrayList(),
         val observations: MutableList<Observation> = ArrayList(),
         val evidence: MutableList<LocatedEvidence> = ArrayList(),
         var labelText: String = "",
@@ -80,8 +88,13 @@ class RecoveryPipeline(
             val fmt = p.format.trackingFormat
             val slots = p.tracking.mapIndexed { i, c -> SlotDist.known(c, if (fmt.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS) }
             notes += "Full decode by ${f.by}; check digit valid."
-            return RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes)
+            log?.line("FULL DECODE ${p.raw} by ${f.by} (check digit valid) -> tracking ${p.tracking}")
+            return RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log)
         }
+        log?.section("Recovery")
+        log?.line("frames: " + frames.joinToString { "${it.width}x${it.height}" })
+        log?.line("options: barcodeCrop=${opt.barcodeCrop} numberCrop=${opt.numberCrop} maxFrames=${opt.maxFrames}")
+        log?.line("decoders: ${decoders.size}, OCR: ${text != null}, 2nd OCR: ${text2 != null}, models: ${models.names}")
 
         // Phase 1: quick full decode on every frame as-is.
         for ((fi, frame) in frames.withIndex()) {
@@ -138,30 +151,58 @@ class RecoveryPipeline(
         )
 
         val partials = partialDecoder.decodeAll(evidence.map { it.ev })
+        log?.partials(partials)
         val format = Fusion.chooseFormat(observations, partials)
+        log?.formatVote(Fusion.formatScores(observations, partials), format)
         val partial: PartialResult? = format?.let { Fusion.partialFor(it, partials) }
         stats = stats.copy(ocrObservations = observations.size, millis = System.currentTimeMillis() - t0)
         if (format == null) {
             notes += "No tracking number found. Try cropping to the number, more light, or type the digits."
-            return RecoveryOutput.empty(labelText, stats, notes)
+            return RecoveryOutput.empty(labelText, stats, notes, log)
         }
-        val ocrObs = observations.filter { it.source == Source.OCR }
+        var ocrObs = observations.filter { it.source == Source.OCR }
+        var ocr2Obs = observations.filter { it.source == Source.OCR2 }
         val modelObs = observations.filter { it.source == Source.DIGIT_MODEL }
-        val ocr = Fusion.consensus(ocrObs, format)
+        var ocr = Fusion.consensus(ocrObs, format)
+        var ocr2 = if (ocr2Obs.any { it.format == format }) Fusion.consensus(ocr2Obs, format) else emptyList()
         val digitModel = if (modelObs.any { it.format == format }) Fusion.consensus(modelObs, format) else emptyList()
-        val slots = Fusion.fuse(format, ocr, partial, digitModel)
+        var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+        // Re-align every OCR read against the fused evidence (twice): reads that dropped a digit
+        // stop shifting the rest, and the consensus sharpens.
+        val pages = results.flatMap { it.pages }
+        // The barcode's digits can't be shifted, so when there is a barcode reading it alone is the
+        // alignment reference on the first pass (the first fused result already contains the
+        // shifted reads and would reinforce them).
+        val barcodeRef = partial?.takeIf { it.structure.trackingFormat == format }?.trackingDigits
+        if (pages.isNotEmpty()) for (pass in 1..2) {
+            val refSlots = if (pass == 1 && barcodeRef != null) barcodeRef else slots
+            val again = pages.flatMap { pr ->
+                val ref = OcrInterpreter.Reference(format, refSlots, xWeight = if (pr.source == Source.OCR2) 0.35 else 1.0)
+                OcrInterpreter.interpret(pr.page, pr.toFrame, pr.frame, pr.variant, pr.source, ref)
+            }
+            ocrObs = again.filter { it.source == Source.OCR }
+            ocr2Obs = again.filter { it.source == Source.OCR2 }
+            ocr = Fusion.consensus(ocrObs, format)
+            ocr2 = if (ocr2Obs.isNotEmpty()) Fusion.consensus(ocr2Obs, format) else emptyList()
+            slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+            log?.line("re-alignment pass $pass: " + again.joinToString(" | ") { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
+        }
         val perSource = HashMap<Source, List<SlotDist?>>()
         if (ocrObs.any { it.format == format }) perSource[Source.OCR] = ocr
+        if (ocr2.isNotEmpty()) perSource[Source.OCR2] = ocr2
         if (digitModel.isNotEmpty()) perSource[Source.DIGIT_MODEL] = digitModel
         if (partial != null && partial.structure.trackingFormat == format) {
             perSource[Source.BARCODE_PARTIAL] = partial.trackingDigits
             notes += "Damaged barcode read as ${partial.structure.name}; ${partial.recovered.size} digits filled in or checked by the barcode checksums."
         }
-        val locs = Fusion.locations(format, observations, partial) { p, t -> barcodeLocation(p, t, evidence) }
+        val locs = Fusion.locations(format, ocrObs + observations.filter { it.source == Source.OCR }, partial) { p, t -> barcodeLocation(p, t, evidence) }
         val zip = partial?.zipDigits?.takeIf { z -> z.isNotEmpty() && z.all { it.bestP > 0.9 } }?.joinToString("") { it.best.toString() }
         notes += "${ocrObs.count { it.format == format }} printed-number reads, ${evidence.size} barcode measurements" +
             (if (models.names.isNotEmpty()) "; models: ${models.names.joinToString()}" else "") + "."
-        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes)
+        log?.line("barcode layout used: ${partial?.structure?.name ?: "none"}; zip=$zip")
+        log?.positions(format, perSource, slots)
+        log?.line("label service: ${com.labelrescue.core.usps.ServiceHints.explain(labelText)}; stats: $stats")
+        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log)
     }
 
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
@@ -185,8 +226,11 @@ class RecoveryPipeline(
                 check()
                 val page = text.recognize(v.image)
                 w.ocrReads++; w.variants++
-                if (v.name == "gray") w.labelText = page.text
-                w.observations += OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                if (v.name == "gray") { w.labelText = page.text; log?.line("f$fi label text:\n" + page.text) }
+                val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                w.observations += obs
+                w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
+                log?.ocr(fi, "ML Kit full ${v.name}", page, obs)
                 for (b in OcrInterpreter.numberLineBoxes(page)) lineBoxes += v.toFrame.mapRect(b)
             }
         }
@@ -222,7 +266,10 @@ class RecoveryPipeline(
             }
         }
         regions += IntRect(0, 0, frame.width, frame.height) to false
-        for ((rect, vertical) in dedupe(regions, frame)) {
+        val chosenRegions = dedupe(regions, frame)
+        log?.line("f$fi barcode regions: " + chosenRegions.joinToString { "${it.first}${if (it.second) " vertical" else ""}" } +
+            (if (detected.isNotEmpty()) "; detector: " + detected.joinToString { "${it.kind}@${it.box}" } else ""))
+        for ((rect, vertical) in chosenRegions) {
             check()
             val (img, outer) = regionImage(frame, rect, vertical)
             val whole = rect.width == frame.width && rect.height == frame.height
@@ -232,7 +279,9 @@ class RecoveryPipeline(
                 check()
                 w.variants++
                 full(v.image, "frame ${fi + 1} ${v.name}")
-                for (ev in partialDecoder.measure(v.image)) w.evidence += LocatedEvidence(ev, fi, v.toFrame.then(outer))
+                val ms = partialDecoder.measure(v.image)
+                log?.measurements(fi, "$rect ${v.name}", ms)
+                for (ev in ms) w.evidence += LocatedEvidence(ev, fi, v.toFrame.then(outer))
                 w.measurements++
             }
         }
@@ -245,17 +294,31 @@ class RecoveryPipeline(
             for (v in vs) { w.variants++; full(v.image, "frame ${fi + 1} crop ${v.name}") }
         }
 
-        // OCR again, zoomed onto the number line, with every variant.
-        if (text != null) {
+        // OCR again, zoomed onto the number line, with every variant (and the second engine).
+        if (text != null || text2 != null) {
             val lines = (lineBoxes.map { it.inflate(it.width / 12 + 6, it.height + 4) } + listOfNotNull(numberRegion)).take(2)
             for (lr in lines) {
                 val r = lr.intersect(IntRect(0, 0, frame.width, frame.height))
                 if (r.isEmpty) continue
                 for (v in Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = listOf(-2.0, 2.0), restore = restorer))) {
                     check()
-                    val page = text.recognize(v.image)
-                    w.ocrReads++; w.variants++
-                    w.observations += OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                    w.variants++
+                    if (text != null) {
+                        val page = text.recognize(v.image)
+                        w.ocrReads++
+                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                        w.observations += obs
+                        w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
+                        log?.ocr(fi, "ML Kit line ${v.name}", page, obs)
+                    }
+                    if (text2 != null) {
+                        val page = text2.recognize(v.image)
+                        w.ocrReads++
+                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
+                        w.observations += obs
+                        w.pages += PageRec(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
+                        log?.ocr(fi, "PaddleOCR line ${v.name}", page, obs)
+                    }
                 }
             }
         }
@@ -264,6 +327,7 @@ class RecoveryPipeline(
         // (their boxes are estimated from the pitch), using the best OCR read of each format.
         val digits = models.digits
         if (digits != null) {
+            // Only ML Kit's glyph boxes: PaddleOCR's positions are CTC time spans, too rough to crop.
             val best = w.observations.filter { it.source == Source.OCR && it.format != TrackingFormat.S10 }
                 .groupBy { it.format }.mapValues { (_, os) -> os.maxBy { o -> o.weight * o.boxes.count { it != null } } }
             for ((format, o) in best) {
@@ -279,6 +343,7 @@ class RecoveryPipeline(
     private fun fullDecode(img: GrayImage, where: String): Found? {
         for (d in decoders) {
             val reads: List<BarcodeRead> = try { d.decode(img) } catch (e: Exception) { emptyList() }
+            log?.let { l -> if (reads.isNotEmpty()) l.line("decode $where: " + reads.joinToString { "${it.decoder}/${it.kind}: \"${it.text.replace("\u001D", "<GS>")}\"" }) }
             for (r in reads) {
                 val found = ImpbParser.extractFromPayload(r.text).firstOrNull { it.checkValid }
                 if (found != null) return Found(found, "${r.decoder} ${r.kind.name.lowercase().replace('_', ' ')} ($where)")

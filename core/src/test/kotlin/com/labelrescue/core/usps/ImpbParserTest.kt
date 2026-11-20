@@ -88,3 +88,12 @@ class ImpbParserTest {
         assertEquals(listOf(4, 4, 4, 4, 4, 4, 2), TrackingFormat.groups(26))
     }
 }
+
+class ServiceHintsFuzzyTest {
+    @org.junit.Test fun damagedServiceNames() {
+        org.junit.Assert.assertEquals("Ground Advantage", ServiceHints.serviceHints("SP' GROUN) ADVANTAGE").single().service)
+        org.junit.Assert.assertEquals("Ground Advantage", ServiceHints.serviceHints("UNITED STATES\nG\nMailed from 08081").single().service)
+        org.junit.Assert.assertEquals("Priority Mail Express", ServiceHints.serviceHints("PRIORITY MAIL EXPRES5").single().service)
+        org.junit.Assert.assertTrue(ServiceHints.serviceHints("SHIP TO JANE").isEmpty())
+    }
+}

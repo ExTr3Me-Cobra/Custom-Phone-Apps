@@ -119,7 +119,7 @@ class VerificationController(
 
     companion object {
         /** At most this many numbers per run (each uncached one is one API call). */
-        const val MAX_LOOKUPS = 10
+        const val MAX_LOOKUPS = 20
 
         // One throttle per process so separate runs share the hourly budget.
         private var throttle: Throttle? = null

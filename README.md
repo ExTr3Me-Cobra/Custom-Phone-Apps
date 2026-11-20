@@ -57,9 +57,21 @@ Never commit the keystore. `*.keystore` and `*.jks` are in `.gitignore`.
 
 ## Using it
 
-* **Scan label (burst):** fill the frame with the barcode and the number under it, tap to focus,
-  then tap **Burst capture**. The app grabs 12 frames from the camera stream plus 2
-  full-resolution stills. Turn on the torch for dim light.
+* **Scan label (burst):** line the barcode and the number under it up in the on-screen box.
+  The box turns green, and **Burst capture** unlocks, once the label is lined up and in focus:
+  * the barcode is inside the box
+  * it fills most of the box's width
+  * it is straight
+  * the light is OK
+  * the image is sharp
+
+  Hints at the top tell you what to fix, for example "Move closer", "Center the barcode",
+  "Straighten the phone", "Hold steady, focusing…", or "More light needed". Blurry frames trigger
+  autofocus on the box. If a label's barcode is missing or destroyed, **Capture anyway** appears
+  after 8 seconds.
+
+  The burst grabs 12 frames from the camera stream plus 2 full-resolution stills. Turn on the
+  torch for dim light.
 * **Import photos:** pick one or more photos of the same label.
 * **Crop (optional):** drag a box around the barcode and/or around the printed number. The boxes
   apply to every frame. Skip this step to use the whole photo; the barcode is found
@@ -175,6 +187,46 @@ Supported formats:
 
 The service-name → service-code table in `ServiceHints.kt` is a soft hint: it only nudges the
 ranking and never removes a candidate.
+
+## OCR, decoders and label context
+
+* **Two OCR engines:**
+  * ML Kit Text Recognition v2.
+  * PaddleOCR PP-OCRv5 mobile (Apache-2.0), converted to LiteRT and bundled (16 MB). It runs on
+    every crop of the number line.
+
+  PaddleOCR gives a probability for every character, so a smudged 0 that it reads as 1 still
+  carries "0: 20%". Both engines are separate evidence sources in the per-digit fusion.
+
+  To regenerate the model: `python training/convert_ppocr.py` downloads the official ONNX model
+  and converts and checks it.
+* **Three barcode decoders:** ML Kit, ZXing, and zxing-cpp (Apache-2.0, the maintained C++
+  ZXing), plus the partial Code 128 decoder.
+* **Thermal-label damage:**
+  * Dead printhead dots leave white hairlines through every bar. The partial decoder closes gaps
+    narrower than a module.
+  * Bars often print thinner or wider than spec. It uses edge-to-edge (bar+space) distances and
+    tries thinner and wider bar templates.
+  * Faded end bars can hide the start and stop patterns. It can then anchor the symbol grid on
+    the outermost bars.
+* **Number length:** prefers the common 22-digit IMpb over the legacy 20-digit form. It expects
+  the channel digits 92–95 at the start, and allows for a line cut off at the edge.
+* **Re-alignment:** each OCR read is re-aligned against the barcode's reading, so a dropped digit
+  becomes an unknown instead of shifting the rest.
+* **Service detection:** reads the mail class from the label with tolerance for damaged text
+  ("SP' GROUN) ADVANTAGE"), or from the large service letter (G = Ground Advantage,
+  P = Priority Mail, E = Priority Mail Express, F = First-Class). It boosts candidates with a
+  matching service code.
+* **Diagnostic log:** the results screen has **Copy log** and **Share log**. The log is a
+  detailed, text-only record of the recovery for troubleshooting:
+  * every OCR read, with per-character confidence, alternatives and positions
+  * how each read aligned to digit positions
+  * every barcode decode and partial-decoder measurement, and the layout candidates
+  * the format vote and each source's probabilities per digit
+  * the ranked candidates and any online verification
+
+  **Hide names and addresses** (on by default) masks capitalized label words. Nothing is sent
+  anywhere unless you share it.
 
 ## On-device models
 

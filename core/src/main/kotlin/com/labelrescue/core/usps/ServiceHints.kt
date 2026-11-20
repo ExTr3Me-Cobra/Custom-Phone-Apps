@@ -27,11 +27,61 @@ object ServiceHints {
         Regex("LIBRARY\\s*MAIL") to Hint("Library Mail", setOf("752", "765")),
     )
 
+    /** Phrases matched loosely (OCR drops and confuses letters on damaged labels). */
+    private val FUZZY = listOf(
+        "PRIORITYMAILEXPRESS" to "Priority Mail Express",
+        "GROUNDADVANTAGE" to "Ground Advantage",
+        "PRIORITYMAIL" to "Priority Mail",
+        "FIRSTCLASS" to "First-Class",
+        "PARCELSELECT" to "Parcel Select",
+        "MEDIAMAIL" to "Media Mail",
+        "CERTIFIEDMAIL" to "Certified Mail",
+        "LIBRARYMAIL" to "Library Mail",
+    )
+
+    /** The big service letter in the corner box of USPS labels. */
+    private val LETTERS = mapOf("G" to "Ground Advantage", "P" to "Priority Mail", "E" to "Priority Mail Express", "F" to "First-Class")
+
+    private fun byName(name: String) = TABLE.first { it.second.service == name }.second
+
+    /**
+     * The mail class the label shows: exact phrases, phrases with a few OCR errors
+     * ("SPS GROUN) ADVANTAGE"), and the large service letter (G, P, E, F) on its own line.
+     */
     fun serviceHints(labelText: String): List<Hint> {
         val t = labelText.uppercase()
-        val found = TABLE.filter { it.first.containsMatchIn(t) }.map { it.second }
+        val found = LinkedHashSet<Hint>()
+        TABLE.filter { it.first.containsMatchIn(t) }.forEach { found += it.second }
+        val squeezed = t.filter { it in 'A'..'Z' }
+        for ((phrase, name) in FUZZY) {
+            if (found.any { it.service == name }) continue
+            if (approxContains(squeezed, phrase, maxOf(1, phrase.length / 6))) found += byName(name)
+        }
+        if (found.isEmpty()) {
+            for (line in t.lines()) LETTERS[line.trim()]?.let { found += byName(it) }
+        }
+        val list = found.toList()
         // "Priority Mail Express" also matches "Priority Mail"; keep only the most specific.
-        return if (found.any { it.service == "Priority Mail Express" }) found.filter { it.service != "Priority Mail" } else found
+        return if (list.any { it.service == "Priority Mail Express" }) list.filter { it.service != "Priority Mail" } else list
+    }
+
+    /** How the service was recognized, for diagnostics. */
+    fun explain(labelText: String): String = serviceHints(labelText).joinToString { it.service }.ifEmpty { "none found" }
+
+    /** True if [p] occurs in [s] with at most [k] edits (approximate substring match). */
+    fun approxContains(s: String, p: String, k: Int): Boolean {
+        if (p.isEmpty()) return true
+        var prev = IntArray(p.length + 1) { it }
+        for (c in s) {
+            val cur = IntArray(p.length + 1)
+            cur[0] = 0
+            for (j in 1..p.length) {
+                cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (p[j - 1] == c) 0 else 1)
+            }
+            if (cur[p.length] <= k) return true
+            prev = cur
+        }
+        return prev[p.length] <= k
     }
 
     /** ZIP codes printed on the label (5 digits, optional +4). The last one is usually the destination. */

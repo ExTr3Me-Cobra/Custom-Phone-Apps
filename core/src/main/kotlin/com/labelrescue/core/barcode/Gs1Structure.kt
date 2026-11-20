@@ -54,6 +54,19 @@ class Gs1Structure(
         is Slot.Pair -> sl.allows(v)
     }
 
+    /**
+     * Log prior: how common this layout is on current labels. 420+ZIP routing with a 22-digit
+     * IMpb is the norm; 26-digit and bare forms are less common; legacy 20-digit barcodes are rare.
+     */
+    val prior: Double = kotlin.math.ln(
+        when {
+            trackingDigits == 22 && routingDigits > 0 -> 1.0
+            trackingDigits == 22 -> 0.5
+            trackingDigits == 26 -> 0.25
+            else -> 0.05
+        },
+    )
+
     /** Mod-10 weight for a data digit (check digit has weight 1), or 0 if not part of the tracking number. */
     fun mod10Weight(dataIndex: Int): Int {
         val t = dataIndex - routingDigits

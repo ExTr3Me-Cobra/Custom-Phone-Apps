@@ -5,7 +5,11 @@ import com.labelrescue.core.image.GrayImage
 import com.labelrescue.core.image.IntRect
 
 /** OCR output in a recognizer-neutral form (ML Kit maps into this). Confidence is NaN if unknown. */
-data class OcrSymbol(val text: String, val confidence: Float, val box: IntRect?)
+/**
+ * One recognized character. [alternatives] (if the recognizer provides them, e.g. PaddleOCR's
+ * per-character softmax) are probabilities for other characters at this spot.
+ */
+data class OcrSymbol(val text: String, val confidence: Float, val box: IntRect?, val alternatives: Map<Char, Float>? = null)
 data class OcrElement(val text: String, val confidence: Float, val box: IntRect?, val symbols: List<OcrSymbol>)
 data class OcrLine(val text: String, val confidence: Float, val box: IntRect?, val angle: Float, val elements: List<OcrElement>)
 data class OcrPage(val lines: List<OcrLine>) {
@@ -56,6 +60,23 @@ object DigitConfusion {
      * Distribution over 0..9 for an OCR'd character with OCR confidence [confidence] (0..1, NaN
      * if unknown). The read digit gets most of the mass; the rest goes to its usual confusions.
      */
+    /** Smudge marks OCR emits where a digit is unreadable: kept as unknown positions. */
+    const val SMUDGE = "()[]{}'`*\\\""
+
+    /** From a recognizer's own per-character probabilities (lookalike letters map to digits). */
+    fun fromAlternatives(alts: Map<Char, Float>): SlotDist? {
+        val probs = DoubleArray(10)
+        var total = 0.0
+        for ((ch, p) in alts) {
+            val (d, rel) = digitFor(ch) ?: continue
+            probs[d] += p * rel; total += p * rel
+        }
+        if (total < 0.05) return null
+        // Keep a little mass on every digit: the recognizer can be confidently wrong on damage.
+        for (k in 0..9) probs[k] = probs[k] / total * 0.94 + 0.006
+        return SlotDist(SlotDist.DIGITS, probs)
+    }
+
     fun distribution(c: Char, confidence: Float): SlotDist? {
         val (d, reliability) = digitFor(c) ?: return null
         val conf = if (confidence.isNaN() || confidence <= 0f) 0.75 else confidence.toDouble().coerceIn(0.0, 1.0)
