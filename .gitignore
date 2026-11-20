@@ -7,3 +7,5 @@ signing/
 *.keystore
 *.jks
 .kotlin/
+__pycache__/
+*.pyc
