@@ -52,7 +52,16 @@ class RecoveryPipeline(
         val numberCrop: NormRect? = null,
         /** Process at most this many frames fully (all are tried for a quick full decode). */
         val maxFrames: Int = 16,
+        /** Skip the remaining frames once the ranked answer is settled (see [STOP_CONFIDENCE]). */
+        val earlyStop: Boolean = true,
     )
+
+    companion object {
+        /** Frames processed before the first checkpoint. */
+        const val MIN_FRAMES = 4
+        /** Stop when two checkpoints in a row agree on the top answer and it has at least this confidence. */
+        const val STOP_CONFIDENCE = 0.8
+    }
 
     private class LocatedEvidence(val ev: SymbolEvidence, val frame: Int, val toFrame: Affine)
 
@@ -63,6 +72,7 @@ class RecoveryPipeline(
     private class PageRec(val page: OcrPage, val toFrame: Affine, val frame: Int, val variant: String, val source: Source)
 
     private class FrameWork(
+        val frame: Int,
         val pages: MutableList<PageRec> = ArrayList(),
         /** Frame-0 full-page OCR lines in frame coordinates, for whiting out names and addresses. */
         val privacyLines: MutableList<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>> = ArrayList(),
@@ -108,27 +118,31 @@ class RecoveryPipeline(
             stats = stats.copy(barcodeDecodes = stats.barcodeDecodes + decoders.size)
         }
 
-        // Phase 2: every layer on every frame, frames in parallel.
+        // Phase 2: every layer on every frame, sharpest first, in parallel. Checkpoints after every
+        // couple of frames rank the evidence so far; once the answer is settled the rest are skipped.
         val work = frames.take(opt.maxFrames)
         val total = work.size
+        val order = work.indices.sortedByDescending { com.labelrescue.core.image.Filters.sharpness(work[it]) }
+        log?.line("processing order (sharpest first): " + order.joinToString { "f$it" })
         val finished = AtomicInteger(0)
         val stop = AtomicBoolean(false)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
         val pool = Executors.newFixedThreadPool(threads)
-        val results: List<FrameWork>
+        val results = ArrayList<FrameWork>()
+        val checkpoints = ArrayList<Checkpoint>()
+        var stoppedEarly = false
         try {
-            val futures = work.mapIndexed { fi, frame ->
+            val futures = order.map { fi ->
                 pool.submit<FrameWork> {
-                    val r = processFrame(fi, frame, opt) { stop.get() || cancelled() }
+                    val r = processFrame(fi, work[fi], opt, collectPrivacy = fi == order[0]) { stop.get() || cancelled() }
                     progress(Progress("Read ${finished.incrementAndGet()} of $total frames", finished.get(), total))
                     r
                 }
             }
             progress(Progress("Reading $total frames", 0, total))
-            val out = ArrayList<FrameWork>()
             for (fu in futures) {
                 try {
-                    out += fu.get()
+                    results += fu.get()
                 } catch (e: ExecutionException) {
                     when (val c = e.cause) {
                         is FoundException -> { stop.set(true); return done(c.found, c.labelText) }
@@ -136,25 +150,71 @@ class RecoveryPipeline(
                         else -> throw (c ?: e)
                     }
                 }
+                val n = results.size
+                if (n < total && n >= MIN_FRAMES && n % 2 == 0) {
+                    val cp = checkpoint(n, results, work)
+                    checkpoints += cp
+                    val prev = checkpoints.getOrNull(checkpoints.size - 2)
+                    if (opt.earlyStop && prev != null && cp.top != null && cp.top == prev.top && cp.confidence >= STOP_CONFIDENCE) {
+                        stoppedEarly = true
+                        stop.set(true)
+                        log?.line("early stop after $n of $total frames: ${cp.top} ${(cp.confidence * 100).toInt()}% (same at ${prev.frames} frames)")
+                        break
+                    }
+                }
             }
-            results = out
         } finally {
             stop.set(true)
             pool.shutdownNow()
         }
         check()
         progress(Progress("Combining evidence", total, total))
-
-        val observations = results.flatMap { it.observations }
-        val evidence = results.flatMap { it.evidence }
-        // Label text from every frame (distinct lines): one frame often misses the service banner.
-        val labelText = results.flatMap { it.labelText.lines() }.map { it.trim() }.filter { it.isNotEmpty() }
-            .distinct().joinToString("\n")
         stats = stats.copy(
             variants = results.sumOf { it.variants }, ocrReads = results.sumOf { it.ocrReads },
             barcodeDecodes = stats.barcodeDecodes + results.sumOf { it.barcodeDecodes },
             barcodeMeasurements = results.sumOf { it.measurements },
         )
+        val out = combine(results, work, stats, t0, log, notes)
+        if (!stoppedEarly && out.format != null) {
+            val r = rankQuick(out)
+            checkpoints += Checkpoint(results.size, r?.best?.tracking, r?.best?.confidence ?: 0.0)
+        }
+        out.framesUsed = results.size
+        out.framesStoppedEarly = stoppedEarly
+        out.checkpoints = checkpoints
+        log?.line("checkpoints: " + checkpoints.joinToString { "${it.frames}f=${it.top} ${(it.confidence * 100).toInt()}%" })
+        return out
+    }
+
+    /** Ranked answer after the first [frames] processed frames (for early stop and the training report). */
+    class Checkpoint(val frames: Int, val top: String?, val confidence: Double)
+
+    private fun checkpoint(n: Int, results: List<FrameWork>, work: List<GrayImage>): Checkpoint {
+        val out = combine(results.toList(), work, PipelineStats(), System.currentTimeMillis(), null, ArrayList())
+        val r = if (out.format != null) rankQuick(out) else null
+        return Checkpoint(n, r?.best?.tracking, r?.best?.confidence ?: 0.0)
+    }
+
+    /** The app's ranking without the learned history prior (which the core doesn't have). */
+    private fun rankQuick(out: RecoveryOutput) = runCatching {
+        com.labelrescue.core.candidates.CandidateEngine(beam = 400, maxResults = 20).rank(
+            out.format!!, out.slots,
+            com.labelrescue.core.candidates.StructurePrior(out.serviceHints, listOfNotNull(out.zip) + com.labelrescue.core.usps.ServiceHints.zips(out.labelText)),
+            out.exactEvidence(),
+        )
+    }.getOrNull()
+
+    /** Combines the evidence of [results] into one output. [log] null for a quiet checkpoint. */
+    private fun combine(
+        results: List<FrameWork>, work: List<GrayImage>, stats0: PipelineStats, t0: Long,
+        log: DiagnosticLog?, notes: MutableList<String>,
+    ): RecoveryOutput {
+        var stats = stats0
+        val observations = results.flatMap { it.observations }
+        val evidence = results.flatMap { it.evidence }
+        // Label text from every frame (distinct lines): one frame often misses the service banner.
+        val labelText = results.flatMap { it.labelText.lines() }.map { it.trim() }.filter { it.isNotEmpty() }
+            .distinct().joinToString("\n")
 
         val partials = partialDecoder.decodeAll(evidence.map { it.ev })
         log?.partials(partials)
@@ -232,16 +292,17 @@ class RecoveryPipeline(
             partial?.zipDigits.orEmpty().joinToString(" ") { "${it.best}:${(it.bestP * 100).toInt()}" } + ")")
         log?.positions(format, perSource, slots)
         log?.line("label service: ${com.labelrescue.core.usps.ServiceHints.explain(labelText)}; stats: $stats")
-        val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[0].width, work[0].height) }
-        log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame 1" } ?: "no safe photo (no OCR line positions)"))
-        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy)
+        val pf = results.firstOrNull()?.frame ?: 0
+        val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[pf].width, work[pf].height) }
+        log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame ${pf + 1}" } ?: "no safe photo (no OCR line positions)"))
+        return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy, pf)
     }
 
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
 
     /** All layers on one frame. Throws [FoundException] on a verified full decode. */
-    private fun processFrame(fi: Int, frame: GrayImage, opt: Options, stopped: () -> Boolean): FrameWork {
-        val w = FrameWork()
+    private fun processFrame(fi: Int, frame: GrayImage, opt: Options, collectPrivacy: Boolean, stopped: () -> Boolean): FrameWork {
+        val w = FrameWork(fi)
         fun check() { if (stopped()) throw CancelledException() }
         fun full(img: GrayImage, where: String) {
             w.barcodeDecodes += decoders.size
@@ -259,7 +320,7 @@ class RecoveryPipeline(
                 val page = text.recognize(v.image)
                 w.ocrReads++; w.variants++
                 if (v.name == "gray") { w.labelText = page.text; log?.line("f$fi label text:\n" + page.text) }
-                if (fi == 0) for (l in page.lines) w.privacyLines += l to l.box?.let { v.toFrame.mapRect(it) }
+                if (collectPrivacy) for (l in page.lines) w.privacyLines += l to l.box?.let { v.toFrame.mapRect(it) }
                 val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
                 w.observations += obs
                 w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)

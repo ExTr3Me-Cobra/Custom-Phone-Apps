@@ -78,7 +78,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
         val verification = photoVerify.state.value.results.mapValues { (_, v) -> v.verdict.status.label + (v.verdict.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") }
         val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, verification)
-        val frame = _frames.value.firstOrNull()
+        val frame = _frames.value.getOrNull(out.privacyFrame)
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
             // One photo per scan, with every text line that isn't label boilerplate whited out.
@@ -192,6 +192,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false,
         val autoVerify: Boolean = true, val requestsPerHour: Int = 60, val cached: Int = 0, val loaded: Boolean = false,
         val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
+        val quickScan: Boolean = true,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -206,7 +207,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         SettingsUi(
             st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true,
             st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
+            st.quickScan,
         )
+    }
+
+    fun setQuickScan(on: Boolean) {
+        viewModelScope.launch { val st = settings(); withContext(Dispatchers.IO) { st.quickScan = on }; _settingsUi.value = settingsUiFrom(st) }
     }
 
     fun setSaveCrops(on: Boolean) {
@@ -365,6 +371,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             val app = getApplication<Application>()
                             val models = OnDeviceModels.load(app)
                             val paddle = OnDeviceModels.paddle(app)
+                            val quick = settings().quickScan
                             log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
                             log.line("device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${Runtime.getRuntime().availableProcessors()} cores")
                             log.line("models: ${OnDeviceModels.status}")
@@ -373,7 +380,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 models = models, text2 = paddle, log = log,
                             ).run(
                                 frames,
-                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value),
+                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value, earlyStop = quick),
                                 progress = { _progress.value = it },
                                 cancelled = { !isActive },
                             )

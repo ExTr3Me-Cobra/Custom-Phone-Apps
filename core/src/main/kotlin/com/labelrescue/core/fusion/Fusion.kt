@@ -54,7 +54,14 @@ class RecoveryOutput(
     val reads: List<String> = emptyList(),
     /** Areas to white out on frame 0 before the photo leaves the app, or null if it can't be made safe. */
     val privacyBlank: List<IntRect>? = null,
+    /** The frame [privacyBlank] applies to (the sharpest one, processed first). */
+    val privacyFrame: Int = 0,
 ) {
+    /** How many frames were fully processed, whether the rest were skipped, and the answer at each checkpoint. */
+    var framesUsed: Int = 0
+    var framesStoppedEarly: Boolean = false
+    var checkpoints: List<RecoveryPipeline.Checkpoint> = emptyList()
+
     val recovered: List<RecoveredDigit> get() = partial?.recovered.orEmpty()
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)
 

@@ -27,6 +27,12 @@ object TrainingReport {
         sb.append(header).append('\n')
         val s = out.stats
         sb.append("frames ${s.frames} · variants ${s.variants} · OCR reads ${s.ocrReads} · ${s.millis / 1000.0}s\n")
+        if (out.checkpoints.isNotEmpty()) {
+            sb.append("frames used ${out.framesUsed} of ${s.frames}" + (if (out.framesStoppedEarly) " (stopped early: answer settled)" else "") + "\n")
+            sb.append("answer by frames: " + out.checkpoints.joinToString(" · ") { c ->
+                "${c.frames}: " + (c.top?.let { TrackingFormat.grouped(it) } ?: "none") + " ${(c.confidence * 100).toInt()}%"
+            } + "\n")
+        }
         val ctx = LabelContext.fromLabelText(out.labelText, out.zip ?: out.fullDecode?.zip)
         sb.append("label: service=${ServiceHints.explain(out.labelText)}; dest ZIP=${ctx.destinationZip ?: "?"}${if (out.zip != null) " (barcode)" else ""}; ")
             .append("origin ZIP=${ctx.originZip ?: "?"}; date=${LabelContext.formatDate(ctx.labelDate).ifEmpty { "?" }}\n")

@@ -62,6 +62,11 @@ class Settings(ctx: Context) {
         get() = prefs.getBoolean("save_training_crops", false)
         set(v) = prefs.edit().putBoolean("save_training_crops", v).apply()
 
+    /** Quick scan: stop reading burst frames once the answer is settled (off = always use every frame). */
+    var quickScan: Boolean
+        get() = prefs.getBoolean("quick_scan", true)
+        set(v) = prefs.edit().putBoolean("quick_scan", v).apply()
+
     /** The OAuth token is cached (encrypted) until it expires, plus which tracking endpoint works. */
     val tokenStore: TokenStore = object : TokenStore {
         override fun load(): Pair<String, Long>? {

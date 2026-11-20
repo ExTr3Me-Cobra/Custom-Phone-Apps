@@ -36,6 +36,7 @@ fun SettingsScreen(
     onExportCrops: () -> Unit = {},
     onClearCrops: () -> Unit = {},
     onReviewCrops: () -> Unit = {},
+    onQuickScan: (Boolean) -> Unit = {},
 ) {
     var enabled by remember(ui.loaded) { mutableStateOf(ui.verifyEnabled) }
     var clientId by remember(ui.loaded) { mutableStateOf(ui.clientId) }
@@ -87,6 +88,16 @@ fun SettingsScreen(
             Text("Clear saved USPS results (${ui.cached})")
         }
         Text("Each number is looked up once and the answer is saved, so it is never queried twice. Clear this to re-check (e.g. a label that wasn't scanned yet).", style = MaterialTheme.typography.bodySmall)
+        Text("Scanning", style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Quick scan", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Switch(ui.quickScan, onQuickScan)
+        }
+        Text(
+            "Reads the sharpest burst frames first and stops once two checks in a row agree on the same number with at least 80% confidence. " +
+                "Hard labels still use every frame. Turn off to always use every frame.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         Text("On-device models", style = MaterialTheme.typography.titleLarge)
         Text("Bundled, offline. Only models that improved the accuracy benchmark are used. In use: ${ui.models}", style = MaterialTheme.typography.bodyMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {

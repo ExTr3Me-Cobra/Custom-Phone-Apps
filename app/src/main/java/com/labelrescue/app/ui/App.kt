@@ -131,6 +131,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ui, vm::saveSettings, vm::clearVerificationCache, vm::setSaveCrops,
                         { cropExporter.launch("label-rescue-digit-crops.zip") }, vm::clearTrainingCrops,
                         onReviewCrops = { screen = Screen.CROPS },
+                        onQuickScan = vm::setQuickScan,
                     )
                 }
                 Screen.CROPS -> {
