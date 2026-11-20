@@ -81,6 +81,17 @@ class TrainingCrops(ctx: Context) {
 
     fun count(): Int = items().size
 
+    /**
+     * How many different labels from the same shipper (Mailer ID) are already saved. Same shipper
+     * means the same printer, font and layout, so a few labels of it are enough.
+     */
+    fun labelsFromSameShipper(tracking: String): Int {
+        val mid = shipperKey(tracking) ?: return 0
+        return readRows().mapNotNull { it.getOrNull(4) }.distinct().count { it != tracking && shipperKey(it) == mid }
+    }
+
+    private fun shipperKey(t: String): String? = com.labelrescue.core.usps.ImpbParser.parse(t)?.mailerId
+
     fun exportZip(ctx: Context, uri: Uri) {
         ctx.contentResolver.openOutputStream(uri, "wt")!!.use { os ->
             ZipOutputStream(os).use { zip ->

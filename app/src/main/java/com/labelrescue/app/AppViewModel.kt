@@ -447,14 +447,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // digits are saved right away as trusted training crops (no confirmation needed).
             val fd = out.fullDecode
             if (fd != null && out.locations.isNotEmpty() && settings().learnFromIntact) {
-                val res = withContext(Dispatchers.IO) { runCatching { this@AppViewModel.crops.save(fd.tracking, out, frames, trusted = true) }.getOrNull() }
-                _message.value = "Learn mode: ${res?.saved ?: 0} digit crops saved from this intact label" +
-                    (res?.skipped?.takeIf { it > 0 }?.let { " ($it skipped)" } ?: "") + "."
+                val same = withContext(Dispatchers.IO) { this@AppViewModel.crops.labelsFromSameShipper(fd.tracking) }
+                if (same >= LEARN_LABELS_PER_SHIPPER) {
+                    // Enough of this shipper's printer and font: more would only crowd out other fonts.
+                    _message.value = "Learn mode: already have $same labels from this shipper, so this one isn't saved. Labels from other shippers help more."
+                } else {
+                    val res = withContext(Dispatchers.IO) { runCatching { this@AppViewModel.crops.save(fd.tracking, out, frames, trusted = true) }.getOrNull() }
+                    _message.value = "Learn mode: ${res?.saved ?: 0} digit crops saved from this intact label" +
+                        (res?.skipped?.takeIf { it > 0 }?.let { " ($it skipped)" } ?: "") + " (${same + 1} of $LEARN_LABELS_PER_SHIPPER from this shipper)."
+                }
             }
         }
     }
 
     fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
+
+    private companion object {
+        /** Learn mode keeps at most this many intact labels per shipper (Mailer ID). */
+        const val LEARN_LABELS_PER_SHIPPER = 5
+    }
 
     // Declared last: uses the result controllers above.
     init {

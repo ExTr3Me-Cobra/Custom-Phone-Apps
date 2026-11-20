@@ -92,7 +92,13 @@ uploaded. Safeguards:
 label's barcode reads cleanly, the app also reads the printed number, lines it up against the
 decoded number, and saves every digit that OCR read as exactly that digit, marked trusted. There's
 nothing to type or confirm. Labels from many shippers and printers matter more than many of the
-same kind; about 20-50 is plenty.
+same kind; about 20-50 is plenty. You don't need to keep track of what you've scanned:
+
+* **In the app:** learn mode keeps at most 5 intact labels per shipper. The shipper is the Mailer
+  ID inside the USPS number; the same shipper means the same printer, font and layout. Damaged
+  labels you confirm are never capped.
+* **In training:** each shipper's crops together count like at most 5 labels, also for crops
+  exported before the cap. The held-out accuracy check weighs shippers equally too.
 
 **Export crops** gives a ZIP (`labels.csv` with `file,digit,trusted,agreed_by,tracking`, plus
 PNGs). Unzip it and retrain:

@@ -47,17 +47,42 @@ def load_extra(folder):
     return np.stack(xs), np.array(ys, np.int32), np.array(trusted), labels
 
 
+def shipper(tracking):
+    """The shipper behind a USPS number: its Mailer ID (IMpb: channel 2 + service 3, then 9 digits
+    if they start with 9, else 6). Same shipper means the same printer, font and layout."""
+    t = "".join(c for c in tracking if c.isdigit())
+    if len(t) >= 20 and t[:2] in ("92", "93", "94", "95"):
+        return t[5:14] if t[5] == "9" else t[5:11]
+    return t[:11]
+
+
+# A shipper's crops together count like at most this many labels, so one shipper scanned over and
+# over can't dominate the real data (its extra labels still help, at a lower weight each).
+LABELS_PER_SHIPPER = 5
+
+
+def shipper_weights(labels):
+    """Per crop: min(1, LABELS_PER_SHIPPER / labels from the same shipper)."""
+    from collections import defaultdict
+    per = defaultdict(set)
+    for l in labels:
+        per[shipper(l)].add(l)
+    return np.array([min(1.0, LABELS_PER_SHIPPER / len(per[shipper(l)])) for l in labels], np.float32)
+
+
 def split_by_label(labels, fraction=0.2):
     """Hold out whole labels (never crops of one label on both sides), deterministically."""
     import zlib
     return np.array([zlib.crc32(l.encode()) % 100 < fraction * 100 for l in labels])
 
 
-def tflite_accuracy(path, x, y):
+def tflite_accuracy(path, x, y, w=None):
+    """Accuracy, weighted by [w] if given (each shipper counts about equally)."""
     if not os.path.exists(path) or len(y) == 0:
         return None
     p = common.tflite_run(path, x)
-    return float((p.argmax(1) == y).mean())
+    ok = (p.argmax(1) == y).astype(np.float32)
+    return float(ok.mean() if w is None else (ok * w).sum() / w.sum())
 
 
 def main():
@@ -75,24 +100,28 @@ def main():
     xt = xt.astype(np.float32) / 255; xv = xv.astype(np.float32) / 255
     yt = yt[:, 0].astype(np.int32); yv = yv[:, 0].astype(np.int32)
     real_test = None
+    weights = None
     if a.extra:
         xe, ye, te, le = load_extra(a.extra)
         hold = split_by_label(le)
-        real_test = (xe[hold], ye[hold])
+        sw = shipper_weights(le)
+        real_test = (xe[hold], ye[hold], sw[hold])
         tr = ~hold
-        # Trusted (USPS-confirmed) crops count 3x, the rest once: a wrongly confirmed label
-        # can't outweigh the synthetic data.
-        xs = [xt, xe[tr]] + [xe[tr & te]] * 2
-        ys_ = [yt, ye[tr]] + [ye[tr & te]] * 2
-        xt = np.concatenate(xs); yt = np.concatenate(ys_)
-        print(f"real crops: {len(ye)} ({int(te.sum())} trusted), {int(tr.sum())} for training, {int(hold.sum())} held out (whole labels)")
+        # Trusted crops (USPS-confirmed, or labeled by an intact barcode) count 3x, the rest once,
+        # so a wrongly confirmed label can't outweigh the synthetic data; and each shipper's
+        # crops together count like at most LABELS_PER_SHIPPER labels.
+        w_real = sw[tr] * np.where(te[tr], 3.0, 1.0)
+        xt = np.concatenate([xt, xe[tr]]); yt = np.concatenate([yt, ye[tr]])
+        weights = np.concatenate([np.ones(len(yt) - int(tr.sum()), np.float32), w_real])
+        print(f"real crops: {len(ye)} ({int(te.sum())} trusted) from {len({shipper(l) for l in le})} shippers, "
+              f"{int(tr.sum())} for training, {int(hold.sum())} held out (whole labels)")
     m = build()
     m.compile(optimizer=keras.optimizers.Adam(2e-3), loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     if a.export_only:
         m = keras.models.load_model(common.keras_path(a.out, "digit_classifier"), compile=False)
         m.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     else:
-        m.fit(xt, yt, validation_data=(xv, yv), epochs=a.epochs, batch_size=128, verbose=2,
+        m.fit(xt, yt, sample_weight=weights, validation_data=(xv, yv), epochs=a.epochs, batch_size=128, verbose=2,
               callbacks=[keras.callbacks.ReduceLROnPlateau(patience=2, factor=0.5), keras.callbacks.EarlyStopping(patience=4, restore_best_weights=True)])
     loss, acc = m.evaluate(xv, yv, verbose=0)
     # Calibration: mean probability assigned to the true digit.
