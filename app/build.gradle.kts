@@ -33,6 +33,12 @@ android {
     }
 
     buildTypes {
+        // With the signing secrets set, the downloadable debug APK is signed with the same key every
+        // build, so a new build installs over the old one (keeping history and settings). Without
+        // them it uses the runner's throwaway debug key, which changes every build.
+        debug {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

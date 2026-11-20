@@ -33,11 +33,27 @@ jobs:
       - name: Unit tests
         run: ./gradlew --stacktrace :core:test :app:testDebugUnitTest
 
+      # Sign with the app's own key when the LABELRESCUE_* secrets are set (pushes only; pull
+      # requests from forks don't get secrets), so each build updates the installed app.
       - name: Build debug APK (and compile the instrumented benchmark)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE_BASE64 }}
+          LABELRESCUE_KEYSTORE_PASSWORD: ${{ secrets.LABELRESCUE_KEYSTORE_PASSWORD }}
+          LABELRESCUE_KEY_ALIAS: ${{ secrets.LABELRESCUE_KEY_ALIAS }}
+          LABELRESCUE_KEY_PASSWORD: ${{ secrets.LABELRESCUE_KEY_PASSWORD }}
         run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && [ -n "$LABELRESCUE_KEY_ALIAS" ] && [ -n "$LABELRESCUE_KEY_PASSWORD" ]; then
+            export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/app.keystore"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
+            echo "Signed with the app's own key: installs as an update." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice title=Debug key::Signing secrets not set: this APK uses a throwaway key, so installing it needs an uninstall first."
+          fi
           ./gradlew --stacktrace :app:assembleDebug :app:assembleDebugAndroidTest
+          rm -f "$RUNNER_TEMP/app.keystore"
           mkdir -p out
           cp app/build/outputs/apk/debug/app-debug.apk out/LabelRescue-debug.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs out/LabelRescue-debug.apk | grep -i "SHA-256" >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Benchmark result
         if: always()

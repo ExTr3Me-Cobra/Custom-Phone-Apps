@@ -25,10 +25,12 @@ it to install.
    phones, if **Auto Blocker** stops the install, turn it off in Settings > Security and privacy >
    Auto Blocker, install, then turn it back on.
 
-A debug build is signed with the build machine's temporary debug key. A newer debug build from a
-different run may not install over an older one ("App not installed"). If that happens, uninstall
-the old one first. Export your history first (History > Export) if you want to keep it. Signed
-release builds (below) don't have this problem.
+**Updating instead of reinstalling:** once the four `LABELRESCUE_*` signing secrets (below) are
+set, every build's APK is signed with the app's own key, so a new build installs over the old one
+and keeps your history, settings and crops. Without the secrets, each build uses the build
+machine's throwaway debug key, and a newer build won't install over an older one ("App not
+installed") until you uninstall it. Switching to the app's own key needs that uninstall once.
+Export your history (History > Export) and training crops first if you want to keep them.
 
 GitHub keeps artifacts for 90 days by default.
 
