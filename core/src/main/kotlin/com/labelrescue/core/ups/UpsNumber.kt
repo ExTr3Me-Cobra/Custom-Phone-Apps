@@ -14,7 +14,7 @@ data class UpsNumber(val tracking: String, val source: String, val corrected: Bo
     val grouped: String get() = with(tracking) { "${substring(0, 2)} ${substring(2, 5)} ${substring(5, 8)} ${substring(8, 10)} ${substring(10, 14)} ${substring(14, 17)} ${substring(17)}" }
 
     companion object {
-        /** YW = UPS SurePost, delivered by USPS. Other handoff services still get looked up. */
+        /** YW = UPS Ground Saver / SurePost, delivered by USPS (seen on a real Ground Saver label). Other services still get looked up. */
         val USPS_HANDOFF_SERVICES = setOf("YW")
 
         private val PATTERN = Regex("1\\s*Z(?:\\s*[A-Z0-9]){16}")

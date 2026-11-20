@@ -179,7 +179,7 @@ private fun UpsCard(ups: UpsController.UiState, state: ResultState?, onUse: (Str
             for (item in shown.take(4)) {
                 val u = item.ups
                 Text(
-                    u.grouped + "  ·  " + u.source + (if (u.corrected) " (corrected)" else "") + (if (u.isUspsHandoff) " · SurePost, delivered by USPS" else ""),
+                    u.grouped + "  ·  " + u.source + (if (u.corrected) " (corrected)" else "") + (if (u.isUspsHandoff) " · Ground Saver / SurePost, delivered by USPS" else ""),
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium,
                 )
                 when (val s = item.status) {

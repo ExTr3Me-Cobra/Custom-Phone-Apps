@@ -106,7 +106,7 @@ class RecoveryPipeline(
             val printed = UpsNumber.find(o.labelText, "printed text", allowCorrection = true)
             for (u in printed) upsFound.putIfAbsent(u.tracking, u)
             o.ups = upsFound.values.sortedBy { it.corrected }
-            if (o.ups.isNotEmpty()) log?.line("UPS numbers: " + o.ups.joinToString { "${it.tracking} (${it.source}${if (it.corrected) ", corrected" else ""}${if (it.isUspsHandoff) ", SurePost/USPS" else ""})" })
+            if (o.ups.isNotEmpty()) log?.line("UPS numbers: " + o.ups.joinToString { "${it.tracking} (${it.source}${if (it.corrected) ", corrected" else ""}${if (it.isUspsHandoff) ", Ground Saver/SurePost → USPS" else ""})" })
             return o
         }
         fun done(f: Found, label: String): RecoveryOutput {

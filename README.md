@@ -275,7 +275,7 @@ the real ML Kit OCR. It hasn't been run here, because this environment has no em
 
 ## UPS packages delivered by USPS
 
-Some UPS services (SurePost, service code YW in the 1Z number, and Ground Saver) hand the package
+Some UPS services (Ground Saver and SurePost, service code YW in the 1Z number) hand the package
 to USPS for the last mile. Their label carries a UPS "1Z" number, and UPS knows the USPS number.
 
 * The app reads 1Z numbers offline from the UPS barcode, the MaxiCode (the round bullseye code)

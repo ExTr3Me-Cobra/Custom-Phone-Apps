@@ -39,6 +39,13 @@ class RealCasesTest {
             val log = DiagnosticLog()
             val out = RecoveryPipeline(listOf(ZxingDecoder()), null, models = Models(digits = digits), text2 = paddle, log = log)
                 .run(listOf(img), RecoveryPipeline.Options(numberCrop = NormRect(l / img.width, t / img.height, r / img.width, b / img.height), maxFrames = 1))
+            if (truth.startsWith("1Z")) {
+                val found = out.ups.map { it.tracking }
+                report.append("$file: UPS ${if (truth in found) "found" else "MISSED"}: $found\n")
+                File("build/real-$file.log").writeText(log.text())
+                if (truth !in found) failures++
+                continue
+            }
             val f = out.format
             val ranked = if (f != null) CandidateEngine().rank(f, out.slots, out.prior(HistoryStats.EMPTY), out.exactEvidence()) else null
             val rank = ranked?.candidates?.indexOfFirst { it.tracking == truth }?.takeIf { it >= 0 }?.plus(1)
