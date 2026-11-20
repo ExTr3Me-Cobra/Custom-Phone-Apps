@@ -106,7 +106,8 @@ object Images {
 
     /** Zoomed crop around [box] for showing a digit, scaled to about [targetHeight] px tall. */
     fun zoomCrop(img: GrayImage, box: IntRect, targetHeight: Int = 180): Bitmap? {
-        val pad = max(box.width, box.height) / 3 + 4
+        // Boxes are tight around the character: show some context around it.
+        val pad = (max(box.width, box.height) * 0.7).toInt() + 4
         val r = box.inflate(pad, pad).intersect(IntRect(0, 0, img.width, img.height))
         if (r.isEmpty) return null
         val crop = img.crop(r)

@@ -112,15 +112,16 @@ object OcrInterpreter {
                 val d = DigitConfusion.distribution(ch.c, ch.conf)
                 slots += d
                 confSum += d?.bestP ?: 0.0
-                boxes += ch.box?.let { toFrame.mapRect(it.inflate((it.width * 0.6).toInt(), (it.height * 0.35).toInt())) }
+                // Tight character box (the digit model is trained on these; UI crops add padding).
+                boxes += ch.box?.let { toFrame.mapRect(it) }
                 quality += if (ch.box != null) 1.0 else 0.0
             } else {
                 slots += null
                 // Where the missing character should be: estimated from the fitted pitch.
                 val u = al.u0 + al.pitch * i + al.gap * groupIndex(f, i)
                 val cx = u * ca - meanV * sa; val cy = u * sa + meanV * ca
-                val half = al.pitch * 0.8
-                val r = IntRect((cx - half).roundToInt(), (cy - charH * 0.85).roundToInt(), (cx + half).roundToInt(), (cy + charH * 0.85).roundToInt())
+                val half = cs.map { it.w }.sorted()[cs.size / 2] / 2
+                val r = IntRect((cx - half).roundToInt(), (cy - charH / 2).roundToInt(), (cx + half).roundToInt(), (cy + charH / 2).roundToInt())
                 boxes += toFrame.mapRect(r)
                 quality += 0.5
             }
