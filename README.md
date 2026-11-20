@@ -4,9 +4,15 @@ An Android app that recovers full USPS tracking numbers from damaged, smudged, t
 printed shipping labels. It works 100% offline, with no AI services or API keys. Accuracy comes
 first, then speed.
 
-## Install the APK from GitHub Actions
+## Install the APK
 
-Every push builds a debug APK.
+Every push builds a debug APK. It is published two ways.
+
+**Releases (simplest on a phone).** Open this repository's **Releases** page and pick the newest
+**Label Rescue (build N)** pre-release. Tap **LabelRescue-debug.apk** to download it, then open
+it to install.
+
+**Actions artifact.**
 
 1. On GitHub, open this repository and tap the **Actions** tab.
 2. Open the newest **Build** run with a green check mark (on the branch you want).
@@ -170,6 +176,44 @@ Supported formats:
 The service-name → service-code table in `ServiceHints.kt` is a soft hint: it only nudges the
 ranking and never removes a candidate.
 
+## On-device models
+
+Three small models were trained from synthetic damaged labels, offline with no API keys. See
+`training/README.md` for how. A benchmark then measured recovery with and without each one
+(`models/BENCHMARK.md`):
+
+* 96 rendered labels, physically damaged and photographed twice
+* full pipeline: ZXing, the partial Code 128 decoder, and a simulated OCR that fails where the
+  ink is damaged
+
+A model is kept only if it fixes clearly more cases than it breaks.
+
+| Model | Top-1 (96 labels) | Fixed | Broke | Shipped |
+|---|---|---|---|---|
+| none | 60 | | | |
+| Damaged-digit classifier (CNN, 659 KiB) | **76** | 16 | 0 | **yes** |
+| Restoration (denoise/deblur, 22 KiB) | 61 | 2 | 1 | no |
+| Region detector (368 KiB) | 59 | 1 | 2 | no |
+
+The digit classifier reads a 32×32 crop of each printed digit and gives probabilities for 0–9.
+It also reads digits OCR missed, at their pitch-estimated position. Its probabilities join the
+per-position fusion next to OCR and barcode evidence.
+
+The restoration model and the region detector train fine:
+
+* restoration: pixel error 0.098 → 0.036
+* detector IoU: barcode 0.93, number 0.85
+
+But neither measurably improved recovery: the existing preprocessing variants and the barcode
+locator already cover those cases. So they are not bundled. They stay in `models/`, and the app
+loads any model that a future benchmark run enables in `models/manifest.json`.
+
+On the phone, models run with the LiteRT interpreter. The GPU delegate is used when the device
+supports it, otherwise the CPU. Settings shows which models are in use.
+
+`./gradlew :app:connectedDebugAndroidTest` repeats the with/without comparison on a device with
+the real ML Kit OCR. It hasn't been run here, because this environment has no emulator.
+
 ## Privacy
 
 All processing happens on the phone with bundled models. The app has no analytics and makes no
@@ -182,8 +226,12 @@ automatically.
 
 * `core/`: pure Kotlin/JVM library with all the digit logic, image processing, decoders, fusion
   and a synthetic damage generator. It is unit-tested on the JVM.
-* `app/`: Android app (Kotlin, Jetpack Compose, CameraX, ML Kit bundled models, ZXing, Room).
-  Min SDK 26, target SDK 37.
+* `app/`: Android app (Kotlin, Jetpack Compose, CameraX, ML Kit bundled models, ZXing, Room,
+  LiteRT). Min SDK 26, target SDK 37.
+* `mltools/`: JVM-only tools. It renders synthetic labels for the training data and runs the
+  with/without-model benchmark.
+* `training/`: TensorFlow (CPU) training scripts and LiteRT export. `models/` holds the trained
+  models and the benchmark results.
 * Gradle with a version catalog (`gradle/libs.versions.toml`). It builds from a clean clone with
   JDK 17+ and the Android SDK (platform 37.2).
 

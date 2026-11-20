@@ -68,9 +68,18 @@ android {
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/modelAssets").get().asFile)
 }
 
-// The trained models (models/*.tflite + manifest.json from the benchmark) are packaged as assets.
+// The trained models are packaged as assets: only those the accuracy benchmark kept
+// (models/manifest.json, "enabled": true), plus the manifest itself.
+val modelsDir = rootProject.layout.projectDirectory.dir("models")
 val copyModels = tasks.register<Sync>("copyModelAssets") {
-    from(rootProject.layout.projectDirectory.dir("models")) { include("*.tflite", "manifest.json") }
+    val manifest = modelsDir.file("manifest.json").asFile
+    inputs.file(manifest).optional()
+    val enabled: List<String> = if (manifest.exists()) {
+        @Suppress("UNCHECKED_CAST")
+        val m = groovy.json.JsonSlurper().parse(manifest) as Map<String, Any?>
+        ((m["models"] as? Map<String, Any?>) ?: emptyMap()).filter { (it.value as? Map<*, *>)?.get("enabled") == true }.keys.toList()
+    } else emptyList()
+    from(modelsDir) { include(enabled.map { "$it.tflite" } + "manifest.json") }
     into(layout.buildDirectory.dir("generated/modelAssets/models"))
 }
 tasks.named("preBuild") { dependsOn(copyModels) }

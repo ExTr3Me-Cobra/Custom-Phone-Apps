@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   # Android API level the app compiles against (see app/build.gradle.kts).
@@ -49,6 +49,21 @@ jobs:
           name: LabelRescue-debug-apk
           path: out/LabelRescue-debug.apk
           if-no-files-found: error
+
+      # A direct download link (Releases page), like the repo's other apps. Not for pull requests.
+      - name: Publish the APK as a pre-release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: label-rescue-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Label Rescue (build ${{ github.run_number }})
+          prerelease: true
+          make_latest: false
+          body: |
+            Debug build of `${{ github.ref_name }}` at ${{ github.sha }}. On your phone, tap
+            **LabelRescue-debug.apk** below to download it, then open it to install.
+          files: out/LabelRescue-debug.apk
 
       - uses: actions/upload-artifact@v4
         if: failure()
