@@ -21,9 +21,11 @@ on:
 permissions:
   contents: write
 
+# Ordinary pushes (no "[train models]") land in a separate group, so they never cancel a
+# training run that is in progress; a newer training run waits for the current one.
 concurrency:
-  group: train-models-${{ github.ref }}
-  cancel-in-progress: true
+  group: train-models-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[train models]') }}
+  cancel-in-progress: false
 
 env:
   ANDROID_PLATFORM: "platforms;android-37.2"
