@@ -55,6 +55,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     fun pickPhotos() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let(vm::exportHistory) }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importHistory) }
+    val cropExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let(vm::exportTrainingCrops) }
     val ctx = LocalContext.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
@@ -121,7 +122,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 }
                 Screen.SETTINGS -> {
                     val ui by vm.settingsUi.collectAsStateWithLifecycle()
-                    SettingsScreen(ui, vm::saveSettings, vm::clearVerificationCache)
+                    SettingsScreen(ui, vm::saveSettings, vm::clearVerificationCache, vm::setSaveCrops, { cropExporter.launch("label-rescue-digit-crops.zip") }, vm::clearTrainingCrops)
                 }
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()

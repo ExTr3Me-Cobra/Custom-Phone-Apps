@@ -12,6 +12,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.labelrescue.app.pipeline.Images
 import com.labelrescue.app.pipeline.MlKitBarcode
 import com.labelrescue.app.pipeline.MlKitText
+import com.labelrescue.app.pipeline.OnDeviceModels
+import com.labelrescue.core.ml.Models
 import com.labelrescue.core.barcode.Code128
 import com.labelrescue.core.barcode.ZxingDecoder
 import com.labelrescue.core.candidates.CandidateEngine
@@ -89,16 +91,16 @@ class LabelBenchmarkTest {
         return Synth.rotate(img, rnd.nextDouble() * 6 - 3)
     }
 
-    @Test
-    fun recoveryRate() {
+    private data class Score(val full: Int, val top1: Int, val top5: Int)
+
+    private fun score(models: Models, cases: Int): Score {
         val rnd = Random(77)
         val engine = CandidateEngine()
         val services = listOf("GROUND ADVANTAGE", "PRIORITY MAIL", "PRIORITY MAIL EXPRESS")
-        val cases = 15
         var full = 0; var top1 = 0; var top5 = 0
         MlKitBarcode().use { mb ->
             MlKitText().use { mt ->
-                val pipeline = RecoveryPipeline(listOf(mb, ZxingDecoder()), mt)
+                val pipeline = RecoveryPipeline(listOf(mb, ZxingDecoder()), mt, models = models)
                 for (n in 0 until cases) {
                     val truth = randomTracking(rnd)
                     val (label, barcode) = renderLabel(truth, "%05d".format(rnd.nextInt(100000)), services[n % services.size])
@@ -112,15 +114,32 @@ class LabelBenchmarkTest {
                     }
                     if (nums.firstOrNull() == truth) top1++
                     if (truth in nums.take(5)) top5++
-                    Log.i(TAG, "case $n level $level truth=$truth best=${nums.firstOrNull()} full=${out.fullDecode != null} ${out.stats.millis}ms")
+                    Log.i(TAG, "${models.names} case $n level $level truth=$truth best=${nums.firstOrNull()} full=${out.fullDecode != null} ${out.stats.millis}ms")
                 }
             }
         }
-        val summary = "cases=$cases fullDecode=$full top1=$top1 (${100 * top1 / cases}%) top5=$top5 (${100 * top5 / cases}%)"
+        return Score(full, top1, top5)
+    }
+
+    /** Recovery rate without models, then with each bundled model on its own (same cases). */
+    @Test
+    fun recoveryRate() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val cases = 15
+        val lines = ArrayList<String>()
+        val base = score(Models.NONE, cases)
+        lines += "no models: full=${base.full} top1=${base.top1}/$cases top5=${base.top5}/$cases"
+        for (name in listOf(Models.DIGITS, Models.RESTORE, Models.REGIONS)) {
+            val m = OnDeviceModels.loadExactly(ctx, setOf(name))
+            if (m.names.isEmpty()) { lines += "$name: not bundled"; continue }
+            val s = score(m, cases)
+            lines += "$name: full=${s.full} top1=${s.top1}/$cases top5=${s.top5}/$cases (${OnDeviceModels.status})"
+        }
+        val summary = lines.joinToString("; ")
         Log.i(TAG, "RESULT $summary")
         InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply { putString("stream", "LabelBenchmark $summary\n") })
         // A floor that catches regressions; the printed rates are the real report.
-        assertTrue(summary, top5 >= cases / 2)
+        assertTrue(summary, base.top5 >= cases / 2)
     }
 
     private companion object { const val TAG = "LabelBenchmark" }

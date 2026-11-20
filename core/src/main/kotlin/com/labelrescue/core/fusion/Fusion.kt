@@ -85,6 +85,7 @@ class RecoveryOutput(
 object Fusion {
     const val EPS_OCR = 0.08
     const val EPS_PARTIAL = 0.03
+    const val EPS_DIGIT_MODEL = 0.12
 
     fun floored(p: Double, eps: Double) = eps / 10 + (1 - eps) * p
 
@@ -116,18 +117,19 @@ object Fusion {
     /** Picks the tracking format the evidence agrees on. */
     fun chooseFormat(obs: List<Observation>, partial: PartialResult?): TrackingFormat? {
         val score = HashMap<TrackingFormat, Double>()
-        for (o in obs) score.merge(o.format, o.weight, Double::plus)
+        for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, o.weight, Double::plus)
         if (partial != null) score.merge(partial.structure.trackingFormat, 5.0, Double::plus)
         return score.maxByOrNull { it.value }?.key
     }
 
     /** Fuses OCR consensus and partial-barcode digits into one distribution per position. */
-    fun fuse(format: TrackingFormat, ocr: List<SlotDist?>, partial: PartialResult?): List<SlotDist> {
+    fun fuse(format: TrackingFormat, ocr: List<SlotDist?>, partial: PartialResult?, digitModel: List<SlotDist?> = emptyList()): List<SlotDist> {
         val bar = partial?.takeIf { it.structure.trackingFormat == format }?.trackingDigits
         return List(format.length) { i ->
             val alphabet = if (format.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS
             val p = DoubleArray(alphabet.length) { 1.0 }
             ocr.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR) }
+            digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_DIGIT_MODEL) }
             bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_PARTIAL) }
             SlotDist(alphabet, p)
         }
@@ -144,7 +146,7 @@ object Fusion {
         for (i in 0 until format.length) {
             var best: Observation? = null; var bestScore = 0.0
             for (o in obs) {
-                if (o.format != format) continue
+                if (o.format != format || o.source != Source.OCR) continue
                 val b = o.boxes[i] ?: continue
                 if (b.isEmpty) continue
                 val sc = o.weight * o.boxQuality[i] * max(0.2, o.slots[i]?.bestP ?: 0.3)

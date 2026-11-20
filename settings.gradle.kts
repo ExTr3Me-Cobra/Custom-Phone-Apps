@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "LabelRescue"
-include(":core", ":app")
+include(":core", ":app", ":mltools")

@@ -57,6 +57,11 @@ class Settings(ctx: Context) {
         get() = prefs.getInt("requests_per_hour", 60)
         set(v) = prefs.edit().putInt("requests_per_hour", v.coerceIn(1, 10000)).apply()
 
+    /** Save digit crops of confirmed photo labels for retraining (local only, off by default). */
+    var saveTrainingCrops: Boolean
+        get() = prefs.getBoolean("save_training_crops", false)
+        set(v) = prefs.edit().putBoolean("save_training_crops", v).apply()
+
     /** The OAuth token is cached (encrypted) until it expires, plus which tracking endpoint works. */
     val tokenStore: TokenStore = object : TokenStore {
         override fun load(): Pair<String, Long>? {

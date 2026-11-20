@@ -59,7 +59,21 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    androidResources {
+        // Memory-map the models straight from the APK.
+        noCompress += "tflite"
+    }
+
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/modelAssets").get().asFile)
 }
+
+// The trained models (models/*.tflite + manifest.json from the benchmark) are packaged as assets.
+val copyModels = tasks.register<Sync>("copyModelAssets") {
+    from(rootProject.layout.projectDirectory.dir("models")) { include("*.tflite", "manifest.json") }
+    into(layout.buildDirectory.dir("generated/modelAssets/models"))
+}
+tasks.named("preBuild") { dependsOn(copyModels) }
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
@@ -90,6 +104,9 @@ dependencies {
     implementation(libs.security.crypto)
     implementation(libs.exifinterface)
     implementation(libs.coroutines.android)
+    implementation(libs.litert)
+    implementation(libs.litert.gpu)
+    implementation(libs.litert.gpu.api)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)

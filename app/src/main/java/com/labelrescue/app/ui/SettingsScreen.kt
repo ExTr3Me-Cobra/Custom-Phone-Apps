@@ -28,7 +28,14 @@ import androidx.compose.ui.unit.dp
 import com.labelrescue.app.AppViewModel
 
 @Composable
-fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String?, Boolean, Int) -> Unit, onClearCache: () -> Unit) {
+fun SettingsScreen(
+    ui: AppViewModel.SettingsUi,
+    onSave: (Boolean, String, String?, Boolean, Int) -> Unit,
+    onClearCache: () -> Unit,
+    onSaveCrops: (Boolean) -> Unit = {},
+    onExportCrops: () -> Unit = {},
+    onClearCrops: () -> Unit = {},
+) {
     var enabled by remember(ui.loaded) { mutableStateOf(ui.verifyEnabled) }
     var clientId by remember(ui.loaded) { mutableStateOf(ui.clientId) }
     var secret by remember(ui.loaded) { mutableStateOf("") }
@@ -79,6 +86,17 @@ fun SettingsScreen(ui: AppViewModel.SettingsUi, onSave: (Boolean, String, String
             Text("Clear saved USPS results (${ui.cached})")
         }
         Text("Each number is looked up once and the answer is saved, so it is never queried twice. Clear this to re-check (e.g. a label that wasn't scanned yet).", style = MaterialTheme.typography.bodySmall)
+        Text("On-device models", style = MaterialTheme.typography.titleLarge)
+        Text("Bundled, offline. Only models that improved the accuracy benchmark are used. In use: ${ui.models}", style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Keep digit crops of confirmed labels for retraining", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Switch(ui.saveCrops, onSaveCrops)
+        }
+        Text("Stored only on this phone; nothing is uploaded. Export them to add to the training data (training/README.md).", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton(onClick = onExportCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Export ${ui.cropCount} crops") }
+            androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Delete crops") }
+        }
         Text("Theme follows the system dark mode setting.", style = MaterialTheme.typography.bodySmall)
     }
 }

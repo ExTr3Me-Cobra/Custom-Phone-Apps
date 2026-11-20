@@ -1,0 +1,110 @@
+name: Train models
+
+# Trains the three on-device models on a CPU runner from synthetic damaged-label data,
+# benchmarks recovery with and without each one (keeping only models that measurably help),
+# publishes the .tflite files as release artifacts and commits them to the branch so the next
+# app build bundles them.
+on:
+  workflow_dispatch:
+    inputs:
+      scale:
+        description: "Dataset size (1.0 = full, 0.1 = quick smoke run)"
+        default: "1.0"
+      commit:
+        description: "Commit the trained models to this branch"
+        type: boolean
+        default: true
+  # Pushes run it only when asked: put "[train models]" in the commit message. (The manual
+  # "Run workflow" button appears once this file is on the default branch.)
+  push:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train-models-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_PLATFORM: "platforms;android-37.2"
+  ANDROID_BUILD_TOOLS: "build-tools;37.0.0"
+
+jobs:
+  train:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[train models]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: training/requirements.txt
+
+      - name: Python packages
+        run: pip install -r training/requirements.txt
+
+      - name: Label fonts for the synthetic data
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q fonts-dejavu-core fonts-liberation fonts-freefont-ttf fonts-noto-mono fonts-jetbrains-mono fonts-crosextra-carlito
+          fc-list : family | sort -u | head -40
+
+      - name: Android SDK packages (Gradle configures the app project too)
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate data, train, export, benchmark
+        env:
+          PYTHON: python
+          KERAS_DIR: ${{ runner.temp }}/keras
+        run: training/train_all.sh "${{ inputs.scale || '1.0' }}"
+
+      - name: Check the JVM reference matches LiteRT
+        run: ./gradlew --no-daemon :mltools:test
+
+      - name: Summary
+        run: |
+          cat models/BENCHMARK.md >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat models/TRAINING.json >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LabelRescue-models
+          path: |
+            models/*.tflite
+            models/manifest.json
+            models/BENCHMARK.md
+            models/TRAINING.json
+
+      - name: Publish models as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: models-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Label Rescue models (run ${{ github.run_number }})
+          body_path: models/BENCHMARK.md
+          prerelease: true
+          make_latest: false
+          files: |
+            models/*.tflite
+            models/manifest.json
+            models/TRAINING.json
+
+      - name: Commit models to the branch
+        if: ${{ github.event_name == 'push' || inputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models/
+          if git diff --cached --quiet; then echo "Models unchanged."; exit 0; fi
+          git commit -m "Retrained on-device models (train-models run ${{ github.run_number }})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

@@ -16,6 +16,7 @@ import com.labelrescue.core.candidates.StructurePrior
 import com.labelrescue.core.fusion.NormRect
 import com.labelrescue.core.image.GrayImage
 import com.labelrescue.app.pipeline.MlKitBarcode
+import com.labelrescue.app.pipeline.OnDeviceModels
 import com.labelrescue.core.barcode.ZxingDecoder
 import com.labelrescue.core.fusion.CancelledException
 import com.labelrescue.core.fusion.Progress
@@ -25,6 +26,7 @@ import com.labelrescue.app.data.ConfirmedNumber
 import com.labelrescue.app.data.HistoryDb
 import com.labelrescue.app.data.HistoryFile
 import com.labelrescue.app.data.Settings
+import com.labelrescue.app.data.TrainingCrops
 import com.labelrescue.app.verify.VerificationController
 import com.labelrescue.core.verify.LabelContext
 import com.labelrescue.core.verify.VerificationPrior
@@ -51,11 +53,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val message: StateFlow<String?> = _message
     fun messageShown() { _message.value = null }
 
+    private val crops by lazy { TrainingCrops(app) }
+
     fun confirm(tracking: String, source: String) {
         viewModelScope.launch {
             db.confirmed().insert(ConfirmedNumber(tracking = tracking, confirmedAt = System.currentTimeMillis(), source = source))
-            _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels."
+            var saved = 0
+            val out = photoOutput
+            if (source == "photo" && out != null && settings().saveTrainingCrops) {
+                saved = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value) }.getOrDefault(0) }
+            }
+            _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." +
+                if (saved > 0) " $saved digit crops kept for retraining." else ""
         }
+    }
+
+    fun exportTrainingCrops(uri: Uri) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { crops.exportZip(getApplication(), uri) }.isSuccess }
+            _message.value = if (ok) "Training crops exported." else "Couldn't write the file."
+        }
+    }
+
+    fun clearTrainingCrops() {
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear() }; loadSettings(); _message.value = "Training crops deleted." }
     }
 
     fun deleteConfirmed(id: Long) { viewModelScope.launch { db.confirmed().delete(id) } }
@@ -94,6 +115,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     data class SettingsUi(
         val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false,
         val autoVerify: Boolean = true, val requestsPerHour: Int = 60, val cached: Int = 0, val loaded: Boolean = false,
+        val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -105,7 +127,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun settingsUiFrom(st: Settings) = withContext(Dispatchers.IO) {
-        SettingsUi(st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true)
+        SettingsUi(
+            st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true,
+            st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
+        )
+    }
+
+    fun setSaveCrops(on: Boolean) {
+        viewModelScope.launch { val st = settings(); withContext(Dispatchers.IO) { st.saveTrainingCrops = on }; _settingsUi.value = settingsUiFrom(st) }
     }
 
     fun saveSettings(enabled: Boolean, clientId: String, secret: String?, autoVerify: Boolean, perHour: Int) {
@@ -228,7 +257,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.Default) {
                     MlKitBarcode().use { mb ->
                         MlKitText().use { mt ->
-                            RecoveryPipeline(listOf(mb, ZxingDecoder()), mt).run(
+                            RecoveryPipeline(listOf(mb, ZxingDecoder()), mt, models = OnDeviceModels.load(getApplication())).run(
                                 frames,
                                 RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value),
                                 progress = { _progress.value = it },

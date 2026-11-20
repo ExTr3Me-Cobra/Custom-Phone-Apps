@@ -11,6 +11,9 @@ import com.labelrescue.core.image.Affine
 import com.labelrescue.core.image.GrayImage
 import com.labelrescue.core.image.IntRect
 import com.labelrescue.core.image.Variants
+import com.labelrescue.core.ml.DetectedRegion
+import com.labelrescue.core.ml.Models
+import com.labelrescue.core.usps.TrackingFormat
 import com.labelrescue.core.ocr.OcrInterpreter
 import com.labelrescue.core.ocr.OcrPage
 import com.labelrescue.core.ocr.TextRecognizer
@@ -35,6 +38,8 @@ class RecoveryPipeline(
     private val decoders: List<BarcodeDecoder>,
     private val text: TextRecognizer?,
     private val partialDecoder: Code128Partial = Code128Partial(),
+    /** Optional on-device models (digit classifier, restoration, region detector). */
+    private val models: Models = Models.NONE,
 ) {
     data class Options(
         val barcodeCrop: NormRect? = null,
@@ -139,19 +144,26 @@ class RecoveryPipeline(
             notes += "No tracking number found. Try cropping to the number, more light, or type the digits."
             return RecoveryOutput.empty(labelText, stats, notes)
         }
-        val ocr = Fusion.consensus(observations, format)
-        val slots = Fusion.fuse(format, ocr, partial)
+        val ocrObs = observations.filter { it.source == Source.OCR }
+        val modelObs = observations.filter { it.source == Source.DIGIT_MODEL }
+        val ocr = Fusion.consensus(ocrObs, format)
+        val digitModel = if (modelObs.any { it.format == format }) Fusion.consensus(modelObs, format) else emptyList()
+        val slots = Fusion.fuse(format, ocr, partial, digitModel)
         val perSource = HashMap<Source, List<SlotDist?>>()
-        if (observations.any { it.format == format }) perSource[Source.OCR] = ocr
+        if (ocrObs.any { it.format == format }) perSource[Source.OCR] = ocr
+        if (digitModel.isNotEmpty()) perSource[Source.DIGIT_MODEL] = digitModel
         if (partial != null && partial.structure.trackingFormat == format) {
             perSource[Source.BARCODE_PARTIAL] = partial.trackingDigits
             notes += "Damaged barcode read as ${partial.structure.name}; ${partial.recovered.size} digits filled in or checked by the barcode checksums."
         }
         val locs = Fusion.locations(format, observations, partial) { p, t -> barcodeLocation(p, t, evidence) }
         val zip = partial?.zipDigits?.takeIf { z -> z.isNotEmpty() && z.all { it.bestP > 0.9 } }?.joinToString("") { it.best.toString() }
-        notes += "${observations.count { it.format == format }} printed-number reads, ${evidence.size} barcode measurements."
+        notes += "${ocrObs.count { it.format == format }} printed-number reads, ${evidence.size} barcode measurements" +
+            (if (models.names.isNotEmpty()) "; models: ${models.names.joinToString()}" else "") + "."
         return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes)
     }
+
+    private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
 
     /** All layers on one frame. Throws [FoundException] on a verified full decode. */
     private fun processFrame(fi: Int, frame: GrayImage, opt: Options, stopped: () -> Boolean): FrameWork {
@@ -178,10 +190,30 @@ class RecoveryPipeline(
             }
         }
 
-        // Barcode regions: user crop, located barcodes, the area just above the number line, the whole frame.
+        // Region detector (optional): barcode, number text, ZIPs and service banner.
+        val detected = if (models.regions != null && opt.barcodeCrop == null) models.regions.detect(frame) else emptyList()
+        for (d in detected.filter { it.kind == DetectedRegion.Kind.TRACKING_TEXT }.take(2)) lineBoxes += d.box
+        if (text != null) {
+            // Re-read the ZIP and service banner areas zoomed in, for the label context.
+            val extra = StringBuilder()
+            for (d in detected.filter { it.kind == DetectedRegion.Kind.ZIP || it.kind == DetectedRegion.Kind.SERVICE_BANNER }.take(4)) {
+                val r = d.box.inflate(d.box.width / 10 + 4, d.box.height / 3 + 4).intersect(IntRect(0, 0, frame.width, frame.height))
+                if (r.isEmpty) continue
+                val crop = frame.crop(r).let { if (it.height < 60) it.scaledBy(2.0) else it }
+                extra.append('\n').append(text.recognize(crop).text)
+                w.ocrReads++
+            }
+            if (extra.isNotEmpty()) w.labelText += extra.toString()
+        }
+
+        // Barcode regions: user crop, detected/located barcodes, the area above the number line, the whole frame.
         val regions = ArrayList<Pair<IntRect, Boolean>>()
         opt.barcodeCrop?.let { regions += it.toPixels(frame.width, frame.height) to false }
-        if (regions.isEmpty()) {
+        for (d in detected.filter { it.kind == DetectedRegion.Kind.BARCODE }.take(2)) {
+            val b = d.box
+            regions += b.inflate(b.width / 8 + 8, b.height / 4 + 4) to (b.height > b.width * 1.5)
+        }
+        if (opt.barcodeCrop == null) {
             for (r in BarcodeLocator.locate(frame)) regions += r.rect to r.vertical
             lineBoxes.firstOrNull()?.let { lb ->
                 val lw = lb.width
@@ -193,7 +225,7 @@ class RecoveryPipeline(
             check()
             val (img, outer) = regionImage(frame, rect, vertical)
             val whole = rect.width == frame.width && rect.height == frame.height
-            val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900))
+            val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, restore = if (whole) null else restorer))
                 .filter { !whole || it.name == "gray" || it.name == "clahe" }
             for (v in vs) {
                 check()
@@ -218,11 +250,25 @@ class RecoveryPipeline(
             for (lr in lines) {
                 val r = lr.intersect(IntRect(0, 0, frame.width, frame.height))
                 if (r.isEmpty) continue
-                for (v in Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = listOf(-2.0, 2.0)))) {
+                for (v in Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = listOf(-2.0, 2.0), restore = restorer))) {
                     check()
                     val page = text.recognize(v.image)
                     w.ocrReads++; w.variants++
                     w.observations += OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                }
+            }
+        }
+
+        // Digit classifier (optional): classify every position's crop, including ones OCR missed
+        // (their boxes are estimated from the pitch), using the best OCR read of each format.
+        val digits = models.digits
+        if (digits != null) {
+            val best = w.observations.filter { it.source == Source.OCR && it.format != TrackingFormat.S10 }
+                .groupBy { it.format }.mapValues { (_, os) -> os.maxBy { o -> o.weight * o.boxes.count { it != null } } }
+            for ((format, o) in best) {
+                val slots = o.boxes.map { b -> b?.takeIf { !it.isEmpty }?.let { SlotDist(SlotDist.DIGITS, digits.classify(frame, it)) } }
+                if (slots.count { it != null } >= format.length / 2) {
+                    w.observations += Observation(Source.DIGIT_MODEL, format, slots, 0.7, fi, "digit-model", o.boxes, o.boxQuality)
                 }
             }
         }

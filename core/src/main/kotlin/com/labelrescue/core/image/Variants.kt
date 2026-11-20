@@ -19,6 +19,8 @@ object Variants {
         val upscaleBelow: Int = 1400,
         val rotations: List<Double> = listOf(-3.0, 3.0),
         val includeThreshold: Boolean = true,
+        /** Optional learned restoration (denoise/deblur), added as its own variant. */
+        val restore: ((GrayImage) -> GrayImage)? = null,
     )
 
     fun make(frame: GrayImage, region: IntRect? = null, opt: Options = Options()): List<Variant> {
@@ -43,6 +45,7 @@ object Variants {
         out += Variant("clahe", clahe, toFrame)
         out += Variant("sharpen", Filters.sharpen(base), toFrame)
         if (opt.includeThreshold) out += Variant("threshold", Filters.adaptiveThreshold(clahe), toFrame)
+        opt.restore?.let { r -> out += Variant("restored", r(base), toFrame) }
         if (longest < opt.upscaleBelow) {
             val f = if (longest < opt.upscaleBelow / 2) 3.0 else 2.0
             out += Variant("upscale${f.toInt()}x", Filters.sharpen(base.scaledBy(f), 1.0, 0.8), Affine.scale(1 / f).then(toFrame))
