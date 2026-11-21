@@ -1,5 +1,7 @@
 package com.labelrescue.app.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -33,14 +35,37 @@ import com.labelrescue.core.fusion.RecoveryOutput
 import com.labelrescue.core.fusion.Source
 
 @Composable
-fun ProcessingScreen(progress: Progress?, status: String?, onCancel: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Running every decoder on every frame and image variant. Accuracy first, so this can take a while.", style = MaterialTheme.typography.bodyLarge)
+fun ProcessingScreen(progress: Progress?, status: String?, onCancel: () -> Unit, live: List<String> = emptyList()) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (progress != null && progress.total > 0) {
             LinearProgressIndicator({ (progress.done.toFloat() / progress.total).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
         } else LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(progress?.phase ?: status ?: "Working…", style = MaterialTheme.typography.titleMedium)
         status?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        // Everything the pipeline reads and decides, scrolling by as it happens.
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        androidx.compose.runtime.LaunchedEffect(live.size, live.lastOrNull()) { if (live.isNotEmpty()) listState.scrollToItem(live.lastIndex) }
+        androidx.compose.foundation.layout.Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .background(androidx.compose.ui.graphics.Color(0xFF0B0F14), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                .padding(8.dp),
+        ) {
+            androidx.compose.foundation.lazy.LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                items(live.size) { i ->
+                    val l = live[i]
+                    val color = when {
+                        "FULL DECODE" in l || "early stop" in l -> androidx.compose.ui.graphics.Color(0xFF7CFC9A)
+                        "=====" in l || "checkpoint" in l || "adaptive" in l -> androidx.compose.ui.graphics.Color(0xFF7FD4FF)
+                        "barcode" in l || "420+" in l || "layout" in l -> androidx.compose.ui.graphics.Color(0xFFFFD27F)
+                        else -> androidx.compose.ui.graphics.Color(0xFFB8C4CF)
+                    }
+                    Text(
+                        l, color = color, maxLines = 2,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 10.sp, lineHeight = 12.sp),
+                    )
+                }
+            }
+        }
         OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Cancel") }
     }
 }

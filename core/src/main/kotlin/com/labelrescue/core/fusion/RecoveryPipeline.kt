@@ -57,11 +57,19 @@ class RecoveryPipeline(
         val learnFromIntact: Boolean = false,
         /** Skip the remaining frames once the ranked answer is settled (see [STOP_CONFIDENCE]). */
         val earlyStop: Boolean = true,
+        /** Always use the lighter mode (tests: what it costs in accuracy). */
+        val forceLite: Boolean = false,
     )
 
     companion object {
         /** Frames processed before the first checkpoint. */
         const val MIN_FRAMES = 4
+        /** A scan projected to take longer than this (a slow phone) switches to the lighter mode. */
+        const val SLOW_BUDGET_MS = 25_000L
+        /** 2D-code retries on crops: only the sharpest few frames (a code that won't decode there won't on blurrier ones). */
+        const val TILE_FRAMES = 3
+        /** Image variants kept in the lighter mode. */
+        val LITE_VARIANTS = setOf("gray", "clahe", "threshold", "upscale2x", "upscale3x")
         /** Stop when two checkpoints in a row agree on the top answer and it has at least this confidence. */
         const val STOP_CONFIDENCE = 0.8
     }
@@ -79,6 +87,8 @@ class RecoveryPipeline(
 
     private class FrameWork(
         val frame: Int,
+        /** Not read: past the adaptive frame limit on a slow phone. */
+        val skipped: Boolean = false,
         val pages: MutableList<PageRec> = ArrayList(),
         /** Frame-0 full-page OCR lines in frame coordinates, for whiting out names and addresses. */
         val privacyLines: MutableList<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>> = ArrayList(),
@@ -161,18 +171,37 @@ class RecoveryPipeline(
         val results = ArrayList<FrameWork>()
         val checkpoints = ArrayList<Checkpoint>()
         var stoppedEarly = false
+        // Adaptive: after the first frame, estimate the whole scan's time. On a slow phone, the
+        // remaining frames use the lighter mode and fewer of them are read.
+        val lite = AtomicBoolean(opt.forceLite)
+        val frameLimit = AtomicInteger(total)
+        val phase2Start = System.currentTimeMillis()
         try {
-            val futures = order.map { fi ->
+            val futures = order.mapIndexed { rank, fi ->
                 pool.submit<FrameWork> {
-                    val r = processFrame(fi, work[fi], opt, collectPrivacy = fi == order[0]) { stop.get() || cancelled() }
-                    progress(Progress("Read ${finished.incrementAndGet()} of $total frames", finished.get(), total))
+                    if (rank >= frameLimit.get()) return@submit FrameWork(fi, skipped = true)
+                    val r = processFrame(fi, work[fi], opt, collectPrivacy = fi == order[0], rank = rank, lite = lite.get()) { stop.get() || cancelled() }
+                    progress(Progress("Read ${finished.incrementAndGet()} of ${frameLimit.get()} frames", finished.get(), frameLimit.get()))
                     r
                 }
             }
             progress(Progress("Reading $total frames", 0, total))
             for (fu in futures) {
                 try {
-                    results += fu.get()
+                    val got = fu.get()
+                    if (got.skipped) continue
+                    results += got
+                    if (results.size == 1 && total > 1) {
+                        val first = System.currentTimeMillis() - phase2Start
+                        val projected = first * ((total + threads - 1) / threads)
+                        if (projected > SLOW_BUDGET_MS) {
+                            lite.set(true)
+                            // The lighter mode takes about half as long per frame.
+                            val affordable = (SLOW_BUDGET_MS / (first * 0.5) * threads).toInt()
+                            frameLimit.set(affordable.coerceIn(minOf(total, MIN_FRAMES), total))
+                            log?.line("adaptive: first frame took ${first} ms (whole scan ~${projected / 1000} s): lighter mode, ${frameLimit.get()} of $total frames")
+                        } else log?.line("adaptive: first frame took ${first} ms (whole scan ~${projected / 1000} s): full mode")
+                    }
                 } catch (e: ExecutionException) {
                     when (val c = e.cause) {
                         is FoundException -> { stop.set(true); return done(c.found, c.labelText, c.frame) }
@@ -399,7 +428,11 @@ class RecoveryPipeline(
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
 
     /** All layers on one frame. Throws [FoundException] on a verified full decode. */
-    private fun processFrame(fi: Int, frame: GrayImage, opt: Options, collectPrivacy: Boolean, stopped: () -> Boolean): FrameWork {
+    /**
+     * [rank] is the frame's place in the sharpest-first order. [lite]: the lighter mode for slow
+     * phones (no tilted variants, fewer image variants, the second OCR on the two main ones only).
+     */
+    private fun processFrame(fi: Int, frame: GrayImage, opt: Options, collectPrivacy: Boolean, rank: Int = 0, lite: Boolean = false, stopped: () -> Boolean): FrameWork {
         val w = FrameWork(fi)
         fun check() { if (stopped()) throw CancelledException() }
         fun full(img: GrayImage, where: String) {
@@ -465,8 +498,9 @@ class RecoveryPipeline(
             check()
             val (img, outer) = regionImage(frame, rect, vertical)
             val whole = rect.width == frame.width && rect.height == frame.height
-            val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, restore = if (whole) null else restorer))
+            val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, rotations = if (lite) emptyList() else listOf(-3.0, 3.0), restore = if (whole || lite) null else restorer))
                 .filter { !whole || it.name == "gray" || it.name == "clahe" }
+                .filter { !lite || it.name in LITE_VARIANTS }
             for (v in vs) {
                 check()
                 w.variants++
@@ -478,14 +512,16 @@ class RecoveryPipeline(
             }
         }
 
-        // DataMatrix (and any barcode) on many crops: Reed-Solomon survives heavy damage.
-        for (crop in tiles(frame)) {
+        // DataMatrix (and any barcode) on many crops: Reed-Solomon survives heavy damage. Only on
+        // the sharpest few frames (the sharpest one alone in the lighter mode).
+        val tileCrops = if (rank < (if (lite) 1 else TILE_FRAMES)) tiles(frame) else emptyList()
+        for (crop in tileCrops) {
             check()
             val vs = Variants.make(frame, crop, Variants.Options(maxSide = 1600, rotations = emptyList()))
                 .filter { it.name in setOf("gray", "clahe", "threshold", "upscale2x", "upscale3x") }
             for (v in vs) { w.variants++; full(v.image, "frame ${fi + 1} crop ${v.name}") }
         }
-        log?.line("f$fi 2D codes: full decoders found no valid tracking number in ${tiles(frame).size} crops")
+        if (tileCrops.isNotEmpty()) log?.line("f$fi 2D codes: full decoders found no valid tracking number in ${tileCrops.size} crops")
 
         // OCR again, zoomed onto the number line, with every variant (and the second engine).
         if (text != null || text2 != null) {
@@ -493,7 +529,9 @@ class RecoveryPipeline(
             for (lr in lines) {
                 val r = lr.intersect(IntRect(0, 0, frame.width, frame.height))
                 if (r.isEmpty) continue
-                for (v in Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = listOf(-2.0, 2.0), restore = restorer))) {
+                val lineVariants = Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = if (lite) emptyList() else listOf(-2.0, 2.0), restore = if (lite) null else restorer))
+                    .filter { !lite || it.name in LITE_VARIANTS }
+                for (v in lineVariants) {
                     check()
                     w.variants++
                     if (text != null) {
@@ -504,7 +542,10 @@ class RecoveryPipeline(
                         w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
                         log?.ocr(fi, "ML Kit line ${v.name}", page, obs)
                     }
-                    if (text2 != null) {
+                    // The second OCR (the slower one): every variant normally (on a close call each
+                    // one counts: a real label flipped when some were dropped), only the two main
+                    // ones in the lighter mode for slow phones.
+                    if (text2 != null && (!lite || v.name == "gray" || v.name == "clahe")) {
                         val page = text2.recognize(v.image)
                         w.ocrReads++
                         val obs = OcrInterpreter.interpret(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)

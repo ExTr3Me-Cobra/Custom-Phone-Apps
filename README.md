@@ -237,6 +237,22 @@ allowed once:
 
 After 8 seconds, **Capture anyway** appears.
 
+## Speed on slower phones
+
+* After the first (sharpest) frame, the app estimates how long the whole scan will take. If
+  that's over 25 seconds, the remaining frames use a lighter mode and fewer of them are read:
+  * no tilted variants
+  * fewer image variants
+  * the second OCR only on the two main variants
+  * 2D-code crop retries only on the sharpest frame
+
+  On the 19 real-label tests, the lighter mode still puts 18 true numbers first; the 19th is
+  4th. The diagnostic log says which mode ran ("adaptive: ...").
+* For every phone, the 2D-code crop retries run only on the 3 sharpest frames: a code that
+  won't decode on them won't on blurrier ones.
+* While a scan runs, the progress screen streams the diagnostic log live (names and addresses
+  hidden).
+
 ## Damaged-barcode examples
 
 With **Keep digit crops of confirmed labels** or **Learn from intact labels** on, the app also

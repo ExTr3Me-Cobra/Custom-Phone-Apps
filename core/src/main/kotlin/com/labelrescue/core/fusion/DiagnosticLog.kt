@@ -19,8 +19,15 @@ class DiagnosticLog {
     private val lines = ArrayList<String>()
     private val t0 = System.currentTimeMillis()
 
-    @Synchronized
-    fun line(s: String) { lines += "[%6.2fs] %s".format((System.currentTimeMillis() - t0) / 1000.0, s) }
+    /** Called with each new line as it's written (e.g. to show progress live); any thread. */
+    @Volatile var onLine: ((String) -> Unit)? = null
+
+    // Frames are processed in parallel, so lines arrive from several threads.
+    fun line(s: String) {
+        val l = "[%6.2fs] %s".format((System.currentTimeMillis() - t0) / 1000.0, s)
+        synchronized(lines) { lines += l }
+        onLine?.invoke(l)
+    }
 
     fun section(title: String) = line("===== $title =====")
 
@@ -90,7 +97,10 @@ class DiagnosticLog {
      * (keeps digits, ZIPs and words like USPS / PRIORITY / GROUND / MAILED / CREATED).
      */
     @Synchronized
-    fun text(redact: Boolean = false): String = if (!redact) lines.joinToString("\n") else lines.joinToString("\n") { redactLine(it) }
+    fun text(redact: Boolean = false): String {
+        val copy = synchronized(lines) { lines.toList() }
+        return if (!redact) copy.joinToString("\n") else copy.joinToString("\n") { redactLine(it) }
+    }
 
     companion object {
         private val KEEP = setOf(

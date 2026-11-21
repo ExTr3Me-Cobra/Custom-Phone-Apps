@@ -107,7 +107,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 Screen.PROCESSING -> {
                     val status by vm.status.collectAsStateWithLifecycle()
                     val progress by vm.progress.collectAsStateWithLifecycle()
-                    ProcessingScreen(progress, status, onCancel = { back() })
+                    val live by vm.liveLog.collectAsStateWithLifecycle()
+                    ProcessingScreen(progress, status, onCancel = { back() }, live = live)
                 }
                 Screen.HISTORY -> {
                     val items by vm.history.collectAsStateWithLifecycle()

@@ -353,6 +353,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
         currentLog = log
+        // Live view of the log on the progress screen: names and addresses hidden, recent lines
+        // only, refreshed a few times a second (lines arrive from several threads).
+        val live = ArrayDeque<String>()
+        val liveDirty = java.util.concurrent.atomic.AtomicBoolean(false)
+        _liveLog.value = emptyList()
+        log.onLine = { l ->
+            val shown = DiagnosticLog.redactLine(l).let { if (it.length > 140) it.take(139) + "…" else it }
+            synchronized(live) { live.addLast(shown); while (live.size > LIVE_LINES) live.removeFirst() }
+            liveDirty.set(true)
+        }
+        val ticker = viewModelScope.launch {
+            while (true) {
+                if (liveDirty.getAndSet(false)) { _liveLog.value = synchronized(live) { live.toList() } }
+                kotlinx.coroutines.delay(80)
+            }
+        }
         val now = java.util.Date()
         scanId = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(now)
         scanTime = java.text.DateFormat.getDateTimeInstance().format(now)
@@ -393,6 +409,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 null
             } finally {
                 _progress.value = null
+                log.onLine = null
+                ticker.cancel()
             }
             if (out == null) return@launch
             val format = out.format
@@ -431,7 +449,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
 
+    private val _liveLog = MutableStateFlow<List<String>>(emptyList())
+    /** The latest diagnostic lines while a scan is processed (redacted). */
+    val liveLog: StateFlow<List<String>> = _liveLog
+
     private companion object {
+        /** Lines kept for the live view on the progress screen. */
+        const val LIVE_LINES = 300
         /** Learn mode keeps at most this many intact labels per shipper (Mailer ID). */
         const val LEARN_LABELS_PER_SHIPPER = 5
     }

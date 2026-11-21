@@ -38,7 +38,7 @@ class RealCasesTest {
             val (l, t, r, b) = box.split(",").map { it.trim().toFloat() }
             val log = DiagnosticLog()
             val out = RecoveryPipeline(listOf(ZxingDecoder()), null, models = Models(digits = digits), text2 = paddle, log = log)
-                .run(listOf(img), RecoveryPipeline.Options(numberCrop = NormRect(l / img.width, t / img.height, r / img.width, b / img.height), maxFrames = 1))
+                .run(listOf(img), RecoveryPipeline.Options(numberCrop = NormRect(l / img.width, t / img.height, r / img.width, b / img.height), maxFrames = 1, forceLite = System.getenv("LITE") == "1"))
             if (truth.startsWith("1Z")) {
                 val found = out.ups.map { it.tracking }
                 report.append("$file: UPS ${if (truth in found) "found" else "MISSED"}: $found\n")
