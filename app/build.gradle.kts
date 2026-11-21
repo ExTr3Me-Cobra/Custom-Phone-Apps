@@ -117,6 +117,8 @@ dependencies {
     implementation(libs.mlkit.barcode)
     implementation(libs.zxing.core)
     implementation(libs.security.crypto)
+    // Custom Tabs: ups.com / usps.com open in Chrome over the app; back returns to the same spot.
+    implementation(libs.androidx.browser)
     implementation(libs.exifinterface)
     implementation(libs.coroutines.android)
     implementation(libs.litert)

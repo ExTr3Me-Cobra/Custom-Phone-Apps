@@ -81,6 +81,10 @@ Results show the best guess in large digits grouped 4-4-4-4-4-2:
   digit.
 * **Copy**, **Share** and **Mark as confirmed** buttons. Confirmed numbers go into the local
   history, and their Mailer IDs and service codes help rank future labels.
+* **Check all guesses on USPS.com** opens USPS's tracking page with the candidates filled in
+  (up to 35, the most it takes at once), so you see which one is a real package. It opens as a
+  browser tab over the app: back returns to the same spot. The app itself stays offline; the
+  browser does the lookup, and nothing is read back from the page.
 
 ## How recovery works
 
@@ -239,8 +243,8 @@ to USPS for the last mile. Their labels carry both a UPS "1Z" number and the USP
 * **Find USPS tracking on UPS.com** appears when the UPS number is above 89% sure (a barcode or
   MaxiCode read 99%, printed text passing the check digit 93%, printed text that needed a
   lookalike correction 80%) and the USPS number is below 76% (a full decode is 100%, otherwise
-  the top candidate's confidence; no USPS reading at all counts as 0%). It opens UPS's normal
-  tracking page in your browser with the 1Z number filled in.
+  the top candidate's confidence; no USPS reading at all counts as 0%). It opens UPS's tracking page
+  as a browser tab over the app, with the 1Z number filled in.
 * There, long-press the USPS tracking number, tap **Copy**, and come back. The app finds the
   number on the clipboard (or tap **Paste USPS number**), checks its check digit, and compares it
   with the label: a different length, or digits the label shows clearly (90%+) as something

@@ -12,6 +12,7 @@ mlkitText = "16.0.1"
 mlkitBarcode = "17.3.0"
 zxing = "3.5.4"
 securityCrypto = "1.1.0"
+browser = "1.10.0"
 exifinterface = "1.4.2"
 coroutines = "1.11.0"
 litert = "1.4.2"
@@ -43,6 +44,7 @@ mlkit-text = { module = "com.google.mlkit:text-recognition", version.ref = "mlki
 mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkitBarcode" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
+androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
 exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

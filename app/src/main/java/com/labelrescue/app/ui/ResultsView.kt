@@ -1,5 +1,9 @@
 package com.labelrescue.app.ui
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -195,6 +199,9 @@ fun ResultsPanel(
             }
         }
 
+        ranked?.takeIf { it.candidates.size > 1 }?.let { r ->
+            CheckOnUspsButton(r.candidates.size) { openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
+        }
         ranked?.let { r ->
             Text(
                 "Top candidates" + if (r.complete) " (all ${r.candidates.size})" else " (${r.candidates.size} of ${formatCount(r.totalValid)})",
@@ -393,6 +400,71 @@ fun formatPct(p: Double): String = when {
 fun formatCount(n: Double): String = when {
     n < 1e6 -> "%,d".format(n.toLong())
     else -> "%.1e".format(n)
+}
+
+/**
+ * Opens [url] in a Custom Tab (the browser shown over the app: back returns to exactly where you
+ * were), or in the browser if no Custom Tabs browser is installed. The app itself has no network
+ * access; the browser does the browsing.
+ */
+fun openWeb(ctx: Context, url: String) {
+    val uri = Uri.parse(url)
+    try {
+        androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(ctx, uri)
+    } catch (e: Exception) {
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+    }
+}
+
+/** USPS.com tracking for several numbers at once (its tLabels takes up to 35, comma-separated). */
+fun uspsComUrl(numbers: List<String>): String =
+    "https://tools.usps.com/go/TrackConfirmAction?tLabels=" + numbers.take(USPS_COM_MAX).joinToString("%2C")
+
+const val USPS_COM_MAX = 35
+
+/** Close to USPS's blue and red, not their exact trade dress. */
+private val PostalBlue = Color(0xFF34366B)
+private val PostalRed = Color(0xFFE2232A)
+
+/** "Check all guesses on USPS.com": postal blue, thin red border, white lettering, pulsing with a blue shine. */
+@Composable
+fun CheckOnUspsButton(count: Int, onClick: () -> Unit) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "usps")
+    val pulse by t.animateFloat(
+        1f, 1.03f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "pulse",
+    )
+    val shine by t.animateFloat(
+        -0.3f, 1.3f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "shine",
+    )
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(PostalBlue)
+            .drawWithContent {
+                drawContent()
+                val x = size.width * shine
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(Color.Transparent, Color(0x6680B4FF), Color.Transparent),
+                        start = Offset(x - 120f, 0f), end = Offset(x + 120f, size.height),
+                    ),
+                )
+            }
+            .border(1.5.dp, PostalRed, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Check all guesses on USPS.com", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (count >= USPS_COM_MAX) Text("top $USPS_COM_MAX, the most USPS.com takes at once", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+        }
+    }
 }
 
 fun copy(ctx: Context, text: String) {

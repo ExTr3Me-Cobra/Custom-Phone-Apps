@@ -234,10 +234,10 @@ private fun UpsNumberCard(
                 FindOnUpsButton {
                     launched = true; pasted = null; noNumber = false
                     val url = "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking
-                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    openWeb(ctx, url)
                 }
                 Text(
-                    "Opens UPS's tracking page in your browser. Long-press the USPS tracking number there, tap Copy, then come back here.",
+                    "Opens UPS's tracking page over the app. Long-press the USPS tracking number there, tap Copy, then press back.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
