@@ -37,15 +37,15 @@ GitHub keeps artifacts for 90 days by default.
 ### Signed release builds (optional)
 
 The workflow's second job builds a signed release APK and AAB (artifact **LabelRescue-release**).
-It skips itself, with a notice, when these repository secrets are missing (Settings > Secrets
-and variables > Actions):
+It skips itself, with a notice, when the first two of these repository secrets are missing
+(Settings > Secrets and variables > Actions > **Secrets** tab, Repository secrets):
 
 | Secret | Value |
 |---|---|
 | `LABELRESCUE_KEYSTORE_BASE64` | the keystore file, base64-encoded |
 | `LABELRESCUE_KEYSTORE_PASSWORD` | keystore password |
-| `LABELRESCUE_KEY_ALIAS` | key alias |
-| `LABELRESCUE_KEY_PASSWORD` | key password |
+| `LABELRESCUE_KEY_ALIAS` | key alias (optional, default `labelrescue`) |
+| `LABELRESCUE_KEY_PASSWORD` | key password (optional, default: the keystore password) |
 
 Make a keystore once, and keep it safe. Every future update must be signed with the same key.
 

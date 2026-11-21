@@ -42,7 +42,12 @@ jobs:
           LABELRESCUE_KEY_ALIAS: ${{ secrets.LABELRESCUE_KEY_ALIAS }}
           LABELRESCUE_KEY_PASSWORD: ${{ secrets.LABELRESCUE_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && [ -n "$LABELRESCUE_KEY_ALIAS" ] && [ -n "$LABELRESCUE_KEY_PASSWORD" ]; then
+          # Only the keystore and its password are required; the alias defaults to "labelrescue" and
+          # the key password to the keystore password (as in the keystore the README describes).
+          export LABELRESCUE_KEY_ALIAS="${LABELRESCUE_KEY_ALIAS:-labelrescue}"
+          export LABELRESCUE_KEY_PASSWORD="${LABELRESCUE_KEY_PASSWORD:-$LABELRESCUE_KEYSTORE_PASSWORD}"
+          echo "Signing secrets present: keystore=$([ -n "$KEYSTORE_BASE64" ] && echo yes || echo NO), password=$([ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && echo yes || echo NO)"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ]; then
             export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/app.keystore"
             echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
             echo "Signed with the app's own key: installs as an update." >> "$GITHUB_STEP_SUMMARY"
@@ -101,11 +106,11 @@ jobs:
       - name: Check signing secrets
         id: secrets
         run: |
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && [ -n "$LABELRESCUE_KEY_ALIAS" ] && [ -n "$LABELRESCUE_KEY_PASSWORD" ]; then
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Release signing skipped::Add LABELRESCUE_KEYSTORE_BASE64, LABELRESCUE_KEYSTORE_PASSWORD, LABELRESCUE_KEY_ALIAS and LABELRESCUE_KEY_PASSWORD as repository secrets to build a signed release (see README)."
+            echo "::notice title=Release signing skipped::Add the LABELRESCUE_KEYSTORE_BASE64 and LABELRESCUE_KEYSTORE_PASSWORD repository secrets (Settings > Secrets and variables > Actions > Secrets) to build a signed release (see README)."
             echo "Release signing secrets are not set, so the signed release was skipped. The debug APK is in the other job." >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -128,6 +133,8 @@ jobs:
       - name: Build signed APK and AAB
         if: steps.secrets.outputs.ready == 'true'
         run: |
+          export LABELRESCUE_KEY_ALIAS="${LABELRESCUE_KEY_ALIAS:-labelrescue}"
+          export LABELRESCUE_KEY_PASSWORD="${LABELRESCUE_KEY_PASSWORD:-$LABELRESCUE_KEYSTORE_PASSWORD}"
           export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
           echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
           ./gradlew --stacktrace :app:assembleRelease :app:bundleRelease
