@@ -20,6 +20,8 @@ on:
 
 permissions:
   contents: write
+  # To start the app build after committing models (a push by this workflow's token starts none).
+  actions: write
 
 # Ordinary pushes (no "[train models]") land in a separate group, so they never cancel a
 # training run that is in progress; a newer training run waits for the current one.
@@ -115,3 +117,8 @@ jobs:
           if git diff --cached --quiet; then echo "Models unchanged."; exit 0; fi
           git commit -m "Retrained on-device models (train-models run ${{ github.run_number }})"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+          # Pushes made with this workflow's token don't start other workflows: start the app build
+          # by hand so an APK with the new models is published.
+          gh workflow run build.yml --ref "${GITHUB_REF_NAME}"
+        env:
+          GH_TOKEN: ${{ github.token }}
