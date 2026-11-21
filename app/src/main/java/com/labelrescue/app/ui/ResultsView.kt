@@ -422,8 +422,8 @@ fun uspsComUrl(numbers: List<String>): String =
 
 const val USPS_COM_MAX = 35
 
-/** Close to USPS's blue and red, not their exact trade dress. */
-private val PostalBlue = Color(0xFF34366B)
+/** USPS blue (#333366, the logo and brand blue) and a near-USPS red. */
+private val PostalBlue = Color(0xFF333366)
 private val PostalRed = Color(0xFFE2232A)
 
 /** "Check all guesses on USPS.com": postal blue, thin red border, white lettering, pulsing with a blue shine. */
