@@ -286,6 +286,26 @@ allowed once:
 
 After 8 seconds, **Capture anyway** appears.
 
+## Getting your own API keys (optional)
+
+Both are free and only needed for the online checks. Recovery works fully offline.
+
+**USPS** (Settings > USPS verification):
+
+1. Go to developers.usps.com and choose **Getting Started**.
+2. Sign in with a USPS Business account, or create one (the Customer Onboarding Portal walks you through it).
+3. Open **My Apps** (or **Apps**), choose **Add App**, give it a name, accept the terms, and include the Tracking API.
+4. Open the app and copy its **Consumer Key** and **Consumer Secret**.
+5. In Label Rescue: Settings > USPS verification. Paste them as the client ID and secret, turn it on, and tap Save.
+
+**UPS** (Settings > UPS → USPS lookup):
+
+1. Go to developer.ups.com and sign in with a ups.com account, or create one.
+2. Open **My Apps** and choose **Add App** (or **Create Application**).
+3. Pick the **Tracking** API. If it asks for a UPS account number, link your UPS account; you may need to open a free one on ups.com first.
+4. Save. The app page shows the **Client ID** and **Client Secret**.
+5. In Label Rescue: Settings > UPS → USPS lookup. Paste them, turn it on, and tap Save UPS settings.
+
 ## UPS packages delivered by USPS
 
 Some UPS services (Ground Saver and SurePost, service code YW in the 1Z number) hand the package
