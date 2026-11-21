@@ -20,6 +20,8 @@ object TrainingReport {
         out: RecoveryOutput,
         ranked: RankResult?,
         confirmed: String?,
+        /** A number the user found on USPS.com / ups.com and pasted in ("Use this number"). */
+        pasted: String? = null,
     ): String {
         val sb = StringBuilder()
         sb.append("=== Scan $id · $time\n")
@@ -62,7 +64,11 @@ object TrainingReport {
             } ?: sb.append("barcode: no usable reading\n")
         }
         sb.append("confirmed in app: ${confirmed?.let { TrackingFormat.grouped(it) } ?: "no"}\n")
-        sb.append("REAL NUMBER (fill in): ______________________\n")
+        pasted?.let { sb.append("pasted from website: ${TrackingFormat.grouped(it)}\n") }
+        // A number the user confirmed or looked up on the carrier's site is the real one.
+        val real = confirmed ?: pasted
+        if (real != null) sb.append("REAL NUMBER: ${TrackingFormat.grouped(real)} (${if (confirmed != null) "confirmed in app" else "pasted from website"})\n")
+        else sb.append("REAL NUMBER (fill in): ______________________\n")
         return sb.toString()
     }
 

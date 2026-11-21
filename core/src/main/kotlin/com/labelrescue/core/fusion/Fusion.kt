@@ -104,6 +104,27 @@ object Fusion {
     const val EPS_PARTIAL = 0.03
     const val EPS_DIGIT_MODEL = 0.25
     const val EPS_OCR2 = 0.08
+    /** Floor for the barcode and digit model where the printed digit is clear: they can still tip it, barely. */
+    const val EPS_OUTVOTED = 0.6
+
+    /**
+     * Positions whose printed digit was read the same way in nearly every OCR read: at least
+     * [minReads] reads saw a digit there and at least 90% of them the same one. 1 and 7 don't
+     * count: a partly erased 6, 8 or 9 reads as those, consistently.
+     */
+    fun unanimous(obs: List<Observation>, format: TrackingFormat, minReads: Int = 6): Set<Int> {
+        val same = obs.filter { it.format == format }
+        val out = HashSet<Int>()
+        for (i in 0 until format.length) {
+            if (format.isLetterPosition(i)) continue
+            val reads = same.mapNotNull { o -> o.slots[i]?.takeIf { it.bestP >= 0.5 }?.best }
+            if (reads.size < minReads) continue
+            val (digit, n) = reads.groupingBy { it }.eachCount().maxBy { it.value }
+            if (digit == '1' || digit == '7') continue
+            if (n >= 0.9 * reads.size) out += i
+        }
+        return out
+    }
 
     fun floored(p: Double, eps: Double) = eps / 10 + (1 - eps) * p
 
@@ -165,15 +186,21 @@ object Fusion {
         partial: PartialResult?,
         digitModel: List<SlotDist?> = emptyList(),
         ocr2: List<SlotDist?> = emptyList(),
+        /** Positions where the printed digit was read the same way almost every time (see [unanimous]). */
+        printedClear: Set<Int> = emptySet(),
     ): List<SlotDist> {
         val bar = partial?.takeIf { it.structure.trackingFormat == format }?.trackingDigits
         return List(format.length) { i ->
             val alphabet = if (format.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS
             val p = DoubleArray(alphabet.length) { 1.0 }
             ocr.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR) }
-            digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_DIGIT_MODEL) }
+            // A clearly printed digit, read the same way in nearly every read, outweighs a damaged
+            // barcode symbol or a digit-model guess at that spot (a real label: a clear 6 lost to
+            // the barcode's 1 and the model's 0).
+            val clear = i in printedClear
+            digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_DIGIT_MODEL) }
             ocr2.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR2) }
-            bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_PARTIAL) }
+            bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_PARTIAL) }
             SlotDist(alphabet, p)
         }
     }

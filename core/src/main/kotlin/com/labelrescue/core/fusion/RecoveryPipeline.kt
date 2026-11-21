@@ -311,7 +311,7 @@ class RecoveryPipeline(
         var ocr = Fusion.consensus(ocrObs, format)
         var ocr2 = if (ocr2Obs.any { it.format == format }) Fusion.consensus(ocr2Obs, format) else emptyList()
         var digitModel: List<SlotDist?> = emptyList()
-        var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+        var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
         // Re-align every OCR read against the fused evidence (twice): reads that dropped a digit
         // stop shifting the rest, and the consensus sharpens.
         val pages = results.flatMap { it.pages }
@@ -331,7 +331,7 @@ class RecoveryPipeline(
             ocr2Obs = again.filter { it.source == Source.OCR2 }
             ocr = Fusion.consensus(ocrObs, format)
             ocr2 = if (ocr2Obs.isNotEmpty()) Fusion.consensus(ocr2Obs, format) else emptyList()
-            slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+            slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
             finalReads = again.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
             log?.line("re-alignment pass $pass: " + finalReads.joinToString(" | "))
         }
@@ -352,7 +352,7 @@ class RecoveryPipeline(
             }
             if (modelObs.isNotEmpty()) {
                 digitModel = Fusion.consensus(modelObs, format)
-                slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2)
+                slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
                 log?.line("digit model: " + modelObs.joinToString(" | ") { "f${it.frame}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
             }
         }

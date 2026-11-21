@@ -67,13 +67,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var scanId: String? = null
     @Volatile private var scanTime: String = ""
     @Volatile private var scanConfirmed: String? = null
+    @Volatile private var scanPasted: String? = null
     @Volatile private var lastRanked: com.labelrescue.core.candidates.RankResult? = null
 
     private fun writeReport() {
         val id = scanId ?: return
         val out = photoOutput ?: return
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
-        val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed)
+        val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, scanPasted)
         val frame = _frames.value.getOrNull(out.privacyFrame)
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
@@ -123,11 +124,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * typed number instead).
      */
     fun useUspsNumber(n: com.labelrescue.core.usps.ParsedNumber): Boolean {
+        // Whatever the format, it's the photographed label's real number: record it for the report.
+        currentLog?.line("USPS number pasted from the website: ${n.tracking}")
+        scanPasted = n.tracking
+        writeReport()
         val st = photo.state.value ?: return false
         if (st.format.trackingFormat != n.format.trackingFormat) return false
         val off = st.format.routingLength
         photo.pickAll(n.tracking.withIndex().associate { (i, c) -> off + i to c })
-        currentLog?.line("USPS number pasted from ups.com: ${n.tracking}")
         return true
     }
 
@@ -303,7 +307,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         exactEvidence = { photoOutput?.exactEvidence() },
         onRanked = { r ->
             currentLog?.candidates(r)
-            lastRanked = r
+            // The report keeps the app's own ranking, not one after digits were picked or pasted.
+            if (photo.state.value?.overrides.isNullOrEmpty()) lastRanked = r
             writeReport()
         },
     )
@@ -328,7 +333,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val now = java.util.Date()
         scanId = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(now)
         scanTime = java.text.DateFormat.getDateTimeInstance().format(now)
-        scanConfirmed = null
+        scanConfirmed = null; scanPasted = null
         lastRanked = null
         job = viewModelScope.launch {
             _progress.value = Progress("Starting", 0, frames.size)
