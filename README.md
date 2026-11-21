@@ -104,7 +104,7 @@ showing, including the black screen, so a tap always works.
 
 ## Build
 GitHub Actions (`.github/workflows/build-mammy-frame.yml`) builds a signed APK on every push and
-publishes it as a release. Signing uses the `MAMMYFRAME_KEYSTORE` repository secret if set
-(base64 keystore, alias `mammyframe`, password `android`), otherwise a key kept in the build cache.
+publishes it as a release. Every build is signed with the repository secret `MAMMYFRAME_KEYSTORE` (base64 keystore, alias
+`mammyframe`, password `android`), so new versions install over old ones. Without it the build stops.
 
 The Great Vibes font is under the SIL Open Font License (see `FONT-LICENSE-GreatVibes.txt`).
