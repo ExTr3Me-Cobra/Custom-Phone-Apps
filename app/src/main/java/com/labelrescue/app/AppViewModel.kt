@@ -56,6 +56,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val crops by lazy { TrainingCrops(app) }
     private val barcodeExamples by lazy { com.labelrescue.app.data.BarcodeExamples(app) }
+    private val barcodeLayouts by lazy { com.labelrescue.app.data.BarcodeLayouts(app) }
 
     /** Keep a damaged-barcode example when collecting training data is on (either setting). */
     private fun keepBarcodeExample(tracking: String, out: RecoveryOutput?, truthFrom: String) {
@@ -116,7 +117,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     com.labelrescue.app.data.TrainingExport.write(
                         getApplication(), report, crops, barcodeExamples, diagnosticLog(redact = true),
-                        db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME,
+                        db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME, layout = barcodeLayouts.file,
                     )
                 }
             }
@@ -387,6 +388,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             val paddle = OnDeviceModels.paddle(app)
                             val quick = settings().quickScan
                             val learn = settings().learnFromIntact
+                            val layout = runCatching { barcodeLayouts.load() }.getOrNull()?.takeIf { it.size > 0 }
+                            log.line("learned barcode positions: ${layout?.size ?: 0}")
                             log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
                             log.line("device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${Runtime.getRuntime().availableProcessors()} cores")
                             log.line("models: ${OnDeviceModels.status}")
@@ -395,7 +398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 models = models, text2 = paddle, log = log,
                             ).run(
                                 frames,
-                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value, earlyStop = quick, learnFromIntact = learn),
+                                RecoveryPipeline.Options(barcodeCrop = _barcodeCrop.value, numberCrop = _numberCrop.value, earlyStop = quick, learnFromIntact = learn, layout = layout),
                                 progress = { _progress.value = it },
                                 cancelled = { !isActive },
                             )
@@ -435,15 +438,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // A 2D code (or another barcode) proved the number while the main 1D barcode didn't
             // read: that barcode is a labeled example of real damage.
             if (fd != null && !out.barcodeRead) keepBarcodeExample(fd.tracking, out, "2d-code")
+            // Learn mode: where this intact label's barcodes sat, to look there first on damaged ones.
+            var layoutNote = ""
+            if (fd != null && out.layoutSamples.isNotEmpty()) {
+                val n = withContext(Dispatchers.IO) { runCatching { barcodeLayouts.add(out.layoutSamples) }.getOrNull() }
+                if (n != null) layoutNote = " Barcode position learned ($n known)."
+            }
+            if (fd != null && out.locations.isEmpty() && layoutNote.isNotEmpty()) _message.value = "Learn mode:$layoutNote"
             if (fd != null && out.locations.isNotEmpty() && settings().learnFromIntact) {
                 val same = withContext(Dispatchers.IO) { this@AppViewModel.crops.labelsFromSameShipper(fd.tracking) }
                 if (same >= LEARN_LABELS_PER_SHIPPER) {
                     // Enough of this shipper's printer and font: more would only crowd out other fonts.
-                    _message.value = "Learn mode: already have $same labels from this shipper, so this one isn't saved. Labels from other shippers help more."
+                    _message.value = "Learn mode: already have $same labels from this shipper, so this one isn't saved. Labels from other shippers help more." + layoutNote
                 } else {
                     val res = withContext(Dispatchers.IO) { runCatching { this@AppViewModel.crops.save(fd.tracking, out, frames, trusted = true) }.getOrNull() }
                     _message.value = "Learn mode: ${res?.saved ?: 0} digit crops saved from this intact label" +
-                        (res?.skipped?.takeIf { it > 0 }?.let { " ($it skipped)" } ?: "") + " (${same + 1} of $LEARN_LABELS_PER_SHIPPER from this shipper)."
+                        (res?.skipped?.takeIf { it > 0 }?.let { " ($it skipped)" } ?: "") + " (${same + 1} of $LEARN_LABELS_PER_SHIPPER from this shipper)." + layoutNote
                 }
             }
         }

@@ -34,6 +34,8 @@ object TrainingExport {
         diagnosticLog: String?,
         confirmed: List<ConfirmedNumber>,
         appVersion: String,
+        /** Learned barcode positions (numbers only). */
+        layout: File? = null,
     ): Result {
         val name = "LabelRescue-training-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".zip"
         var entries = 0
@@ -54,6 +56,7 @@ object TrainingExport {
             for (f in photos) putFile("report_photos/${f.name}", f)
             for (f in cropFiles) putFile("training_crops/${f.name}", f)
             for (f in barcodeFiles) putFile("barcode_examples/${f.name}", f)
+            layout?.takeIf { it.exists() && it.length() > 0 }?.let { putFile("barcode_layout.txt", it) }
             diagnosticLog?.takeIf { it.isNotBlank() }?.let { put("diagnostic_log.txt", it.toByteArray()) }
             if (confirmed.isNotEmpty()) {
                 put("confirmed_numbers.csv", ("tracking,confirmed_at,source\n" + confirmed.joinToString("") { "${it.tracking},${it.confirmedAt},${it.source}\n" }).toByteArray())

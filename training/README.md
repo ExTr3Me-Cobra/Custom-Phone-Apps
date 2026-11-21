@@ -100,6 +100,13 @@ same kind; about 20-50 is plenty. You don't need to keep track of what you've sc
 * **In training:** each shipper's crops together count like at most 5 labels, also for crops
   exported before the cap. The held-out accuracy check weighs shippers equally too.
 
+**Barcode positions** are learned in learn mode too: on an intact label the app decodes each
+barcode-shaped area on its own to find exactly which one holds the USPS number (and which the
+UPS 1Z number), and stores where it sat relative to the printed number, the "USPS TRACKING #"
+line and the UPS "TRACKING #: 1Z" line (offsets only, no text or images; at most 5 per shipper).
+From two labels on, damaged labels are searched there first and the UPS block is left out. The
+export includes them as `barcode_layout.txt`.
+
 **Export training data** (Settings) saves one ZIP in Downloads; its `training_crops/` folder
 has `labels.csv` (`file,digit,trusted,agreed_by,tracking`) and the PNGs. Unzip it and retrain:
 

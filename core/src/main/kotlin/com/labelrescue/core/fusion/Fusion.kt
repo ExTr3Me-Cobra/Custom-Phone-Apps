@@ -67,6 +67,8 @@ class RecoveryOutput(
     var ups: List<com.labelrescue.core.ups.UpsNumber> = emptyList()
     var framesStoppedEarly: Boolean = false
     var checkpoints: List<RecoveryPipeline.Checkpoint> = emptyList()
+    /** Learn mode: where this intact label's barcodes sat relative to its printed text. */
+    var layoutSamples: List<com.labelrescue.core.usps.LayoutSample> = emptyList()
 
     val recovered: List<RecoveredDigit> get() = partial?.recovered.orEmpty()
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)

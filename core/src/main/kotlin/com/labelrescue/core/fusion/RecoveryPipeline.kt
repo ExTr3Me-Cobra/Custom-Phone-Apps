@@ -59,6 +59,8 @@ class RecoveryPipeline(
         val earlyStop: Boolean = true,
         /** Always use the lighter mode (tests: what it costs in accuracy). */
         val forceLite: Boolean = false,
+        /** Barcode positions learned from intact labels (null: the built-in layout rules only). */
+        val layout: com.labelrescue.core.usps.LearnedLayout? = null,
     )
 
     companion object {
@@ -140,10 +142,11 @@ class RecoveryPipeline(
                 val l = learnIntact(fi, frame, fmt, p.tracking)
                 notes += "Learn mode: ${l.locations.size} of ${fmt.length} printed digits located for training."
                 log?.line("learn from intact label: ${l.locations.size} digits located; reads: " + l.reads.joinToString(" | "))
+                val layout = learnLayout(frame, p, l)
                 return mark(withUps(RecoveryOutput(
                     fmt, slots, mapOf(Source.OCR to l.ocr), p, f.by, p.zip, listOf(label, l.labelText).filter { it.isNotBlank() }.joinToString("\n"),
                     null, l.locations, stats.copy(millis = System.currentTimeMillis() - t0), notes, log, l.reads, l.privacy, fi,
-                )))
+                ))).also { it.layoutSamples = layout }
             }
             return mark(withUps(RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log)))
         }
@@ -261,7 +264,35 @@ class RecoveryPipeline(
     private class Learned(
         val locations: Map<Int, Location>, val ocr: List<SlotDist?>, val reads: List<String>,
         val labelText: String, val privacy: List<IntRect>?,
+        val lines: List<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>> = emptyList(),
+        val numberLines: List<IntRect> = emptyList(),
     )
+
+    /**
+     * Learn mode: finds exactly which barcode on the intact label holds the USPS number (and which
+     * the UPS 1Z number), by decoding each barcode-shaped area on its own, and measures where they
+     * sit relative to the printed text. Those positions guide the search on damaged labels.
+     */
+    private fun learnLayout(frame: GrayImage, p: ParsedNumber, l: Learned): List<com.labelrescue.core.usps.LayoutSample> {
+        val anchors = com.labelrescue.core.usps.LabelZones.anchors(l.lines, l.numberLines)
+        if (anchors.number == null && anchors.uspsLine == null && anchors.upsLine == null) {
+            log?.line("layout: no printed anchors found, nothing learned"); return emptyList()
+        }
+        val bounds = IntRect(0, 0, frame.width, frame.height)
+        var uspsBar: IntRect? = null; var upsBar: IntRect? = null
+        for (r in BarcodeLocator.locate(frame, 8).filter { !it.vertical }) {
+            if (uspsBar != null && (upsBar != null || anchors.upsLine == null)) break
+            val box = r.rect.inflate(r.rect.width / 10 + 6, r.rect.height / 6 + 4).intersect(bounds)
+            if (box.isEmpty) continue
+            val crop = frame.crop(box)
+            val texts = decoders.flatMap { d -> try { d.decode(crop) } catch (e: Exception) { emptyList() } }.map { it.text }
+            if (uspsBar == null && texts.any { t -> ImpbParser.extractFromPayload(t).any { it.tracking == p.tracking } }) uspsBar = r.rect
+            else if (upsBar == null && texts.any { t -> UpsNumber.find(t, "").isNotEmpty() }) upsBar = r.rect
+        }
+        val samples = com.labelrescue.core.usps.LayoutSample.fromLabel(anchors, uspsBar, upsBar, p.mailerId ?: "")
+        log?.line("layout: USPS barcode ${uspsBar ?: "not located"}, UPS barcode ${upsBar ?: "none"}; anchors $anchors; learned ${samples.size} position(s)")
+        return samples
+    }
 
     /**
      * Reads the printed number of a label whose barcode decoded, aligned to the known number, and
@@ -304,7 +335,7 @@ class RecoveryPipeline(
         }
         val reads = same.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
         return Learned(locations, if (same.isNotEmpty()) Fusion.consensus(same, fmt) else emptyList(), reads, labelText,
-            Redactor.blankBoxes(privacyLines, frame.width, frame.height))
+            Redactor.blankBoxes(privacyLines, frame.width, frame.height), privacyLines, lineBoxes)
     }
 
     /** The widest barcode-shaped horizontal area in [frame] (padded a little), or null. */
@@ -485,12 +516,12 @@ class RecoveryPipeline(
 
         // Where the barcodes are, from the printed text: the USPS barcode between "USPS TRACKING #"
         // and the number, the UPS one under "TRACKING #: 1Z…" (left out: it isn't the USPS number).
-        val zones = if (opt.barcodeCrop == null) com.labelrescue.core.usps.LabelZones.find(grayLines, lineBoxes, frame.width, frame.height)
+        val zones = if (opt.barcodeCrop == null) com.labelrescue.core.usps.LabelZones.find(grayLines, lineBoxes, frame.width, frame.height, opt.layout)
         else com.labelrescue.core.usps.LabelZones.NONE
         w.zones = zones
         // The UPS "TRACKING #: 1Z…" line has enough digits to pass for the number line: drop it.
         lineBoxes.removeAll { zones.centerInUps(it) }
-        if (zones.ups != null || zones.usps != null) log?.line("f$fi label layout: USPS barcode area ${zones.usps ?: "?"}, UPS barcode area ${zones.ups ?: "none"}")
+        if (zones.ups != null || zones.usps != null) log?.line("f$fi label layout${if (zones.learned) " (learned)" else ""}: USPS barcode area ${zones.usps ?: "?"}, UPS barcode area ${zones.ups ?: "none"}")
 
         // Barcode regions: user crop, the USPS barcode area, detected/located barcodes, the area above
         // the number line, the whole frame.
