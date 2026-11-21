@@ -31,7 +31,8 @@ import com.labelrescue.app.AppViewModel
 fun SettingsScreen(
     ui: AppViewModel.SettingsUi,
     onSaveCrops: (Boolean) -> Unit = {},
-    onExportCrops: () -> Unit = {},
+    onExportTraining: () -> Unit = {},
+    diagnosticLog: (Boolean) -> String? = { null },
     onClearCrops: () -> Unit = {},
     onReviewCrops: () -> Unit = {},
     onQuickScan: (Boolean) -> Unit = {},
@@ -79,13 +80,36 @@ fun SettingsScreen(
         androidx.compose.material3.FilledTonalButton(onClick = onReviewCrops, enabled = ui.cropCount > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
             Text("Review ${ui.cropCount} crops")
         }
-        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            val any = ui.cropCount > 0 || ui.barcodeCount > 0
-            androidx.compose.material3.OutlinedButton(onClick = onExportCrops, enabled = any, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
-                Text("Export ${ui.cropCount} crops" + if (ui.barcodeCount > 0) " + ${ui.barcodeCount} barcodes" else "")
-            }
-            androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = any, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Delete all") }
+        Text("Training data", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "${ui.reportCount} report entr${if (ui.reportCount == 1) "y" else "ies"} · ${ui.cropCount} digit crops · ${ui.barcodeCount} barcode examples. " +
+                "Export saves all of it, with the report photos and the last scan's diagnostic log, as one ZIP in Downloads: the file to send. " +
+                "The report clears after; crops and barcodes stay until you delete them.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Button(
+            onClick = onExportTraining, enabled = ui.reportCount > 0 || ui.cropCount > 0 || ui.barcodeCount > 0 || ui.hasDiagnosticLog,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        ) { Text("Export training data") }
+        androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = ui.cropCount > 0 || ui.barcodeCount > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Delete crops and barcode examples")
         }
+        Text("Diagnostic log", style = MaterialTheme.typography.titleLarge)
+        var redact by remember { mutableStateOf(true) }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        Text(
+            "Everything the app read and decided for the last scan: OCR reads, barcode measurements, per-digit evidence and the ranked candidates. " +
+                "It's in the export too (names and addresses hidden).",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(redact, { redact = it })
+            Text("Hide names and addresses", style = MaterialTheme.typography.bodyMedium)
+        }
+        androidx.compose.material3.OutlinedButton(
+            onClick = { diagnosticLog(redact)?.let { share(ctx, it.take(400_000)) } }, enabled = ui.hasDiagnosticLog,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (ui.hasDiagnosticLog) "Share last scan's log" else "No scan yet") }
         Text("Theme follows the system dark mode setting.", style = MaterialTheme.typography.bodySmall)
     }
 }

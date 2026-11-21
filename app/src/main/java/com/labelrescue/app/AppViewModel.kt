@@ -105,11 +105,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshReportCount() { viewModelScope.launch(Dispatchers.IO) { _reportCount.value = report.count(); _reportPhotos.value = report.photos().size } }
 
-    /** The whole report; clears it (call after handing it to the clipboard or share sheet). */
-    fun takeTrainingReport(): TrainingReportStore.Export? {
-        val export = report.take() ?: return null
-        _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
-        return export
+    /**
+     * Everything for training in one ZIP in Downloads (report + photos, digit crops, barcode
+     * examples, the last diagnostic log, confirmed numbers). The training report clears after.
+     */
+    fun exportTrainingData() {
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.labelrescue.app.data.TrainingExport.write(
+                        getApplication(), report, crops, barcodeExamples, diagnosticLog(redact = true),
+                        db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME,
+                    )
+                }
+            }
+            res.onSuccess { r ->
+                _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
+                _message.value = "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file."
+            }.onFailure { _message.value = "Couldn't save the export: ${it.message}" }
+            loadSettings()
+        }
     }
 
     fun confirm(tracking: String, source: String) {
@@ -163,15 +178,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { withContext(Dispatchers.IO) { crops.deleteUntrusted() }; loadCrops(); _message.value = "Untrusted crops deleted." }
     }
 
-    fun exportTrainingCrops(uri: Uri) {
-        viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { crops.exportZip(getApplication(), uri, mapOf("barcode_examples" to barcodeExamples.files())) }.isSuccess
-            }
-            _message.value = if (ok) "Training crops exported." else "Couldn't write the file."
-        }
-    }
-
     fun clearTrainingCrops() {
         viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
     }
@@ -215,6 +221,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val quickScan: Boolean = true,
         val learnFromIntact: Boolean = false,
         val barcodeCount: Int = 0,
+        val reportCount: Int = 0,
+        val hasDiagnosticLog: Boolean = false,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -228,7 +236,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun settingsUiFrom(st: Settings) = withContext(Dispatchers.IO) {
         SettingsUi(
             true, st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
-            st.quickScan, st.learnFromIntact, barcodeExamples.count(),
+            st.quickScan, st.learnFromIntact, barcodeExamples.count(), report.count(), currentLog != null,
         )
     }
 

@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- Only the share cache: training-report photos, already redacted. -->
-    <cache-path name="share" path="share/" />
-</paths>

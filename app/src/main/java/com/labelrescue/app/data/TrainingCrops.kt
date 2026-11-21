@@ -24,11 +24,11 @@ import kotlin.math.roundToInt
  * - only positions where OCR located the character on the label;
  * - only crops where at least one reader agreed with the confirmed digit
  *   ([TrainingCropFilter]), which drops misaligned crops and most wrong confirmations;
- * - crops of a number USPS confirmed are marked trusted (training weighs them more);
+ * - crops from an intact label (its barcode proved the number) are marked trusted;
  * - the user can review and delete crops before exporting.
  */
 class TrainingCrops(ctx: Context) {
-    private val dir = File(ctx.filesDir, "training_crops").apply { mkdirs() }
+    val dir = File(ctx.filesDir, "training_crops").apply { mkdirs() }
     private val labels = File(dir, "labels.csv")
 
     data class Item(val file: File, val digit: Char, val trusted: Boolean, val agreedBy: String, val tracking: String)

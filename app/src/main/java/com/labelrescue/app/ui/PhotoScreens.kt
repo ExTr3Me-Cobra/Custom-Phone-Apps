@@ -1,7 +1,6 @@
 package com.labelrescue.app.ui
 
 import androidx.compose.ui.graphics.asImageBitmap
-import com.labelrescue.app.data.TrainingReportStore
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -53,9 +52,8 @@ fun PhotoResultsScreen(
     actions: ResultActions,
     onManual: () -> Unit,
     onRetry: () -> Unit,
-    diagnosticLog: (Boolean) -> String? = { null },
     reportCount: Int = 0,
-    takeReport: () -> TrainingReportStore.Export? = { null },
+    onExportTraining: () -> Unit = {},
     reportPhotos: Int = 0,
     reportPhoto: android.graphics.Bitmap? = null,
     /** A USPS number copied from ups.com, accepted by the user. */
@@ -68,8 +66,7 @@ fun PhotoResultsScreen(
             noResult?.let { UpsNumberCard(it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber) }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
-            TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
-            DiagnosticsCard(diagnosticLog)
+            TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
             return@Column
         }
         // (How it was read, frame counts and timing are in the diagnostic log, not on screen.)
@@ -79,96 +76,35 @@ fun PhotoResultsScreen(
             UpsNumberCard(out.ups, uspsConf, state, onUseUspsNumber)
         }
         ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
-        TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
-        DiagnosticsCard(diagnosticLog)
+        TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
     }
 }
 
 /**
- * The training report: a short entry per scan (what the app read, per digit) plus, optionally, the
- * photo with names and addresses whited out. Copying or sharing it clears it.
+ * The training report: a short entry per scan (what the app read, per digit) plus the photo with
+ * names and addresses whited out, so it can be checked before export. One button exports
+ * everything for training to Downloads (see Settings for the rest).
  */
 @Composable
-private fun TrainingReportCard(count: Int, photoCount: Int, preview: android.graphics.Bitmap?, take: () -> TrainingReportStore.Export?) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var withPhotos by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
+private fun TrainingReportCard(count: Int, photoCount: Int, preview: android.graphics.Bitmap?, onExport: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Training report · $count scan${if (count == 1) "" else "s"} · $photoCount photo${if (photoCount == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium)
             Text(
-                "One short entry per scan: what the app read and why, digit by digit. Photos have every line of text " +
-                    "whited out except the tracking number and label wording (service, \"Mailed from\", dates). " +
-                    "Check the photo below before you send it. Everything clears after you copy or share.",
+                "One short entry per scan, and its photo with every line of text whited out except the tracking number and label wording. " +
+                    "Check the photo below. Export saves everything for training as one ZIP in Downloads; the report then clears.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (preview != null && withPhotos) {
+            if (preview != null) {
                 androidx.compose.foundation.Image(
                     preview.asImageBitmap(), "Latest report photo, names and addresses whited out",
                     Modifier.fillMaxWidth().heightIn(max = 420.dp),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 )
             }
-            if (photoCount > 0) {
-                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    androidx.compose.material3.Checkbox(withPhotos, { withPhotos = it })
-                    Text("Include photos", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    take()?.let { ex ->
-                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Label Rescue training report", ex.text.take(LOG_LIMIT)))
-                        val saved = if (withPhotos) savePhotosToGallery(ctx, ex.photos) else 0
-                        android.widget.Toast.makeText(
-                            ctx,
-                            "Training report copied" + (if (saved > 0) "; $saved photo${if (saved == 1) "" else "s"} saved to Pictures/Label Rescue" else "") + ". Cleared.",
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }, enabled = count > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Copy & clear") }
-                OutlinedButton(onClick = {
-                    take()?.let { ex -> shareReport(ctx, ex.text.take(LOG_LIMIT), if (withPhotos) ex.photos else emptyList()) }
-                }, enabled = count > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
-                    Text("Share & clear")
-                }
-            }
+            Button(onClick = onExport, enabled = count > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Export training data") }
         }
     }
-}
-
-/** Shares the report text with its photos attached (through the app's FileProvider). */
-private fun shareReport(ctx: android.content.Context, text: String, photos: List<java.io.File>) {
-    val uris = ArrayList(photos.map { androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".share", it) })
-    val i = if (uris.isEmpty()) {
-        android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-    } else {
-        android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).setType("image/jpeg")
-            .putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
-            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    i.putExtra(android.content.Intent.EXTRA_TEXT, text)
-    if (uris.isNotEmpty()) {
-        i.clipData = android.content.ClipData.newRawUri("photo", uris[0]).apply { uris.drop(1).forEach { addItem(android.content.ClipData.Item(it)) } }
-    }
-    ctx.startActivity(android.content.Intent.createChooser(i, "Share training report"))
-}
-
-/** Copies the (already redacted) photos to Pictures/Label Rescue so they can be attached anywhere. Android 10+. */
-private fun savePhotosToGallery(ctx: android.content.Context, photos: List<java.io.File>): Int {
-    if (android.os.Build.VERSION.SDK_INT < 29) return 0
-    var n = 0
-    for (f in photos) runCatching {
-        val values = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, f.name)
-            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Label Rescue")
-        }
-        val uri = ctx.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@runCatching
-        ctx.contentResolver.openOutputStream(uri)?.use { out -> f.inputStream().use { it.copyTo(out) } }
-        n++
-    }
-    return n
 }
 
 /** Show "Find USPS tracking on UPS.com" when the UPS number is above this confidence ... */
@@ -260,39 +196,6 @@ private fun FindOnUpsButton(onClick: () -> Unit) {
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         Text("Find USPS tracking on UPS.com", color = UpsGold, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-    }
-}
-
-/** Clipboard and share intents have size limits (the Binder buffer is about 1 MB). */
-private const val LOG_LIMIT = 400_000
-
-/** Copy or share the detailed log (for development). Names and addresses hidden by default. */
-@Composable
-private fun DiagnosticsCard(diagnosticLog: (Boolean) -> String?) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var redact by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Diagnostic log", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Everything the app read and decided for this photo: OCR reads with per-character confidence, barcode measurements and layouts, the per-digit evidence and the ranked candidates. For troubleshooting; nothing is sent anywhere.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(redact, { redact = it })
-                Text("Hide names and addresses", style = MaterialTheme.typography.bodyMedium)
-            }
-            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    diagnosticLog(redact)?.let {
-                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Label Rescue diagnostic log", it.take(LOG_LIMIT)))
-                        android.widget.Toast.makeText(ctx, "Diagnostic log copied (${it.length / 1024} KB)", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Copy log") }
-                OutlinedButton(onClick = { diagnosticLog(redact)?.let { share(ctx, it.take(LOG_LIMIT)) } }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Share log") }
-            }
-        }
     }
 }
 

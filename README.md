@@ -165,8 +165,8 @@ ranking and never removes a candidate.
   ("SP' GROUN) ADVANTAGE"), or from the large service letter (G = Ground Advantage,
   P = Priority Mail, E = Priority Mail Express, F = First-Class). It boosts candidates with a
   matching service code.
-* **Diagnostic log:** the results screen has **Copy log** and **Share log**. The log is a
-  detailed, text-only record of the recovery for troubleshooting:
+* **Diagnostic log** (Settings, for the last scan; also in every training export): a detailed,
+  text-only record of the recovery for troubleshooting:
   * every OCR read, with per-character confidence, alternatives and positions
   * how each read aligned to digit positions
   * every barcode decode and partial-decoder measurement, and the layout candidates
@@ -178,10 +178,14 @@ ranking and never removes a candidate.
 * **Training report:** one short entry per scan, and one photo per scan with names and addresses
   whited out. Every OCR'd text line is blanked unless it is only the tracking number or label
   wording (service, "USPS TRACKING #", "Mailed from", dates, weights). Barcodes and 2D codes stay.
-  If OCR gives no line positions, no photo is kept. OCR can miss a faint line, so the card shows
-  the photo before you send it, and **Include photos** can be turned off. **Share & clear**
-  attaches the photos. **Copy & clear** copies the text and saves the photos to
-  Pictures/Label Rescue (Android 10+). Either one clears the report.
+  If OCR gives no line positions, no photo is kept. OCR can miss a faint line, so the results
+  card shows the photo before you export.
+* **Export training data** (results card or Settings): one ZIP in **Downloads**,
+  `LabelRescue-training-<date>.zip`, with everything needed to improve the models:
+  `training_report.txt` + `report_photos/`, `training_crops/` (digit crops + `labels.csv`),
+  `barcode_examples/` (+ `barcodes.csv`), `diagnostic_log.txt` (last scan, names hidden) and
+  `confirmed_numbers.csv`. Nothing goes to the gallery or the clipboard. The report clears after;
+  crops and barcode examples stay until you delete them.
 
 ## On-device models
 

@@ -100,8 +100,8 @@ same kind; about 20-50 is plenty. You don't need to keep track of what you've sc
 * **In training:** each shipper's crops together count like at most 5 labels, also for crops
   exported before the cap. The held-out accuracy check weighs shippers equally too.
 
-**Export crops** gives a ZIP (`labels.csv` with `file,digit,trusted,agreed_by,tracking`, plus
-PNGs). Unzip it and retrain:
+**Export training data** (Settings) saves one ZIP in Downloads; its `training_crops/` folder
+has `labels.csv` (`file,digit,trusted,agreed_by,tracking`) and the PNGs. Unzip it and retrain:
 
 ```sh
 python training/train_digits.py --data build/datasets --out models --extra path/to/training_crops
