@@ -96,4 +96,21 @@ class ServiceHintsFuzzyTest {
         org.junit.Assert.assertEquals("Priority Mail Express", ServiceHints.serviceHints("PRIORITY MAIL EXPRES5").single().service)
         org.junit.Assert.assertTrue(ServiceHints.serviceHints("SHIP TO JANE").isEmpty())
     }
+
+    @Test fun gs1HumanReadableFormKeepsTheChannel() {
+        // As some decoders return it: brackets around the GS1 labels. "(93)" belongs to the number.
+        // A real label: split at the brackets, "93" fell off and the other 20 digits passed as a
+        // legacy 20-digit number (their check digit happens to be valid too).
+        fun first(p: String) = ImpbParser.extractFromPayload(p).first { it.checkValid }
+        val a = first("(420)056418373(93)00120787713680351566")
+        org.junit.Assert.assertEquals("9300120787713680351566", a.tracking)
+        org.junit.Assert.assertEquals("056418373", a.zip)
+        org.junit.Assert.assertEquals("9300120787713680351566", first("(420)05641(93)00120787713680351566").tracking)
+        // From real labels (zxing-cpp text): ZIP+4 with a 22-digit number, ZIP5 with a 26-digit one.
+        org.junit.Assert.assertEquals("9334611047400005115178", first("(420)610088786(93)34611047400005115178").tracking)
+        org.junit.Assert.assertEquals("92612909888642571048257340", first("(420)05641(92)612909888642571048257340").tracking)
+        // The raw GS-separated form still works.
+        org.junit.Assert.assertEquals("9300120787713680351566", first("42005641\u001D9300120787713680351566").tracking)
+        org.junit.Assert.assertEquals("9300120787713680351566", first("]C142005641\u001D9300120787713680351566").tracking)
+    }
 }

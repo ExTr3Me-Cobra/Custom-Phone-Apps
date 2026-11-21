@@ -111,7 +111,11 @@ object ImpbParser {
     fun extractFromPayload(payload: String): List<ParsedNumber> {
         val out = LinkedHashMap<String, ParsedNumber>()
         // Split on GS (0x1D), FNC1 markers and anything that isn't a digit or letter.
-        val clean = payload.replace("\u001D", " ").replace("]C1", " ").replace("]d2", " ")
+        // GS1 human-readable form "(420)05641(93)0012...": the brackets only label the parts, and
+        // "(93)" is the first two digits of the tracking number, so they join, not split. (Split
+        // on them, "93" fell off and the other 20 digits once passed as a legacy 20-digit number.)
+        val joined = payload.replace(Regex("\\((\\d{2,4})\\)"), "$1")
+        val clean = joined.replace("\u001D", " ").replace("]C1", " ").replace("]d2", " ")
         val tokens = clean.split(Regex("[^0-9A-Za-z]+")).filter { it.isNotEmpty() }
         var pendingZip: String? = null
         for (tok in tokens) {
