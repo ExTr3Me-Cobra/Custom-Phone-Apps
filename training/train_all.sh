@@ -13,7 +13,10 @@ PY="${PYTHON:-python3}"
 EP_SCALE=$("$PY" -c "print(1 if float('$SCALE') >= 0.5 else 0)")
 EPOCHS_ARGS=()
 if [ "$EP_SCALE" = "0" ]; then EPOCHS_ARGS=(--epochs 3); fi
-"$PY" training/train_digits.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
+# Real crops from the app, re-cut and verified (./gradlew :mltools:curateCrops; training/real_crops).
+EXTRA_ARGS=()
+if [ -f training/real_crops/labels.csv ]; then EXTRA_ARGS=(--extra training/real_crops); fi
+"$PY" training/train_digits.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}" "${EXTRA_ARGS[@]}"
 "$PY" training/train_restore.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
 "$PY" training/train_regions.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
 ./gradlew --no-daemon :mltools:benchmark -Pcases="${CASES:-96}"

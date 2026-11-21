@@ -34,7 +34,6 @@ fun SettingsScreen(
     onExportTraining: () -> Unit = {},
     diagnosticLog: (Boolean) -> String? = { null },
     onClearCrops: () -> Unit = {},
-    onReviewCrops: () -> Unit = {},
     onQuickScan: (Boolean) -> Unit = {},
     onLearnFromIntact: (Boolean) -> Unit = {},
 ) {
@@ -72,14 +71,11 @@ fun SettingsScreen(
         }
         Text(
             "Stored only on this phone; nothing is uploaded. A digit is kept only if at least one reader (OCR, barcode or digit model) also read it that way, " +
-                "so misaligned or wrongly confirmed crops are skipped. Crops from an intact label (learn mode) are marked trusted. Review them before exporting. " +
+                "so misaligned or wrongly confirmed crops are skipped. Crops from an intact label (learn mode) are marked trusted. Every export is checked crop by crop (re-cut, verified, wrong ones dropped) before training. " +
                 "With this or learn mode on, a damaged barcode is also kept with its true number whenever that's known (a 2D code read it, or you confirmed or pasted it): " +
                 "examples of real damage to improve the barcode decoder.",
             style = MaterialTheme.typography.bodySmall,
         )
-        androidx.compose.material3.FilledTonalButton(onClick = onReviewCrops, enabled = ui.cropCount > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-            Text("Review ${ui.cropCount} crops")
-        }
         Text("Training data", style = MaterialTheme.typography.titleLarge)
         Text(
             "${ui.reportCount} report entr${if (ui.reportCount == 1) "y" else "ies"} · ${ui.cropCount} digit crops · ${ui.barcodeCount} barcode examples. " +

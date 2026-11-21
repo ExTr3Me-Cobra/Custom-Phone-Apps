@@ -107,6 +107,14 @@ line and the UPS "TRACKING #: 1Z" line (offsets only, no text or images; at most
 From two labels on, damaged labels are searched there first and the UPS block is left out. The
 export includes them as `barcode_layout.txt`.
 
+**Curated real crops** (`training/real_crops/`): the crops from every export are re-cut and
+verified before training with `./gradlew :mltools:curateCrops -Pcrops=<export>/training_crops`.
+Each crop is cut again the way the app now cuts (centered on one character, neighbors blanked),
+the glyph the digit model reads as the crop's label is kept, and crops that can't be confirmed,
+are tiny print, half a glyph or crossed by a line are dropped. The tool writes a review sheet;
+crops found wrong by eye go into `excluded.txt` (never re-added). `train_all.sh` trains on the
+set automatically. There is no review screen in the app any more: this is done on each export.
+
 **Export training data** (Settings) saves one ZIP in Downloads; its `training_crops/` folder
 has `labels.csv` (`file,digit,trusted,agreed_by,tracking`) and the PNGs. Unzip it and retrain:
 

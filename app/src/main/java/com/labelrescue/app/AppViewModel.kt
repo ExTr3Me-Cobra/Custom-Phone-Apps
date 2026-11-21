@@ -164,20 +164,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Training crop review ----
-    private val _cropItems = MutableStateFlow<List<TrainingCrops.Item>>(emptyList())
-    val cropItems: StateFlow<List<TrainingCrops.Item>> = _cropItems
-
-    fun loadCrops() { viewModelScope.launch { _cropItems.value = withContext(Dispatchers.IO) { crops.items() } } }
-
-    fun cropThumbnail(item: TrainingCrops.Item): android.graphics.Bitmap? = crops.thumbnail(item)
-
-    fun deleteCrop(item: TrainingCrops.Item) {
-        viewModelScope.launch { withContext(Dispatchers.IO) { crops.delete(item) }; loadCrops() }
-    }
-
-    fun deleteUntrustedCrops() {
-        viewModelScope.launch { withContext(Dispatchers.IO) { crops.deleteUntrusted() }; loadCrops(); _message.value = "Untrusted crops deleted." }
-    }
 
     fun clearTrainingCrops() {
         viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }

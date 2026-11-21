@@ -171,7 +171,11 @@ object Generators {
         val cy = box.centerY + (rnd.nextDouble() * 2 - 1) * jitter * h
         val sc = 1 + (rnd.nextDouble() * 2 - 1) * jitter
         val bw = box.width * sc; val bh = h * sc
-        val jbox = IntRect((cx - bw / 2).roundToInt(), (cy - bh / 2).roundToInt(), (cx + bw / 2).roundToInt(), (cy + bh / 2).roundToInt())
+        var jbox = IntRect((cx - bw / 2).roundToInt(), (cy - bh / 2).roundToInt(), (cx + bw / 2).roundToInt(), (cy + bh / 2).roundToInt())
+        // A box shifted so far that the crop lands on a neighbor would teach the neighbor's digit
+        // under this label: use the true box then (the crop is what the app cuts for a good box).
+        val glyph = CharCrop.refine(img, jbox)
+        if (glyph.centerX < box.left || glyph.centerX > box.right) jbox = box
         val crop = CharCrop.extract(img, jbox)
         return ByteArray(crop.size) { (crop[it] * 255).roundToInt().coerceIn(0, 255).toByte() } to digits[target]
     }

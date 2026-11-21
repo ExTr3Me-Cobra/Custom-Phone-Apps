@@ -53,3 +53,20 @@ tasks.test {
     maxHeapSize = "2g"
     testLogging { showStandardStreams = true; events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
+
+/**
+ * ./gradlew :mltools:curateCrops -Pcrops=<export>/training_crops
+ * Re-cuts and verifies the digit crops of an app export into training/real_crops (see CurateCrops.kt).
+ */
+tasks.register<JavaExec>("curateCrops") {
+    group = "ml"
+    description = "Re-cuts and verifies exported digit crops into training/real_crops."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.labelrescue.mltools.CurateCropsKt")
+    jvmArgs("-Xmx2g", "-Djava.awt.headless=true")
+    args(
+        (project.findProperty("crops") as String?) ?: "",
+        rootProject.layout.projectDirectory.dir("training/real_crops").asFile.path,
+        modelsDir.asFile.path,
+    )
+}

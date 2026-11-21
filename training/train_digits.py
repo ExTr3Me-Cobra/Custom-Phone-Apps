@@ -137,7 +137,10 @@ def main():
         old_acc = tflite_accuracy(old_path, *real_test)
         os.remove(tmp)
         print(f"held-out real crops: new model {new_acc:.3f}, current model {old_acc if old_acc is None else round(old_acc, 3)}")
-        if old_acc is not None and new_acc < old_acc and not a.force:
+        # The curated real crops were checked with the current model (training/real_crops: a crop is
+        # kept only where it reads as its label), so it scores near 100% on them by construction: a
+        # new model may trail it by up to 2 points (the recovery benchmark still has to pass).
+        if old_acc is not None and new_acc < old_acc - 0.02 and not a.force:
             print("New model is worse on your real labels; keeping the current model (use --force to override).")
             return
     if not a.export_only:

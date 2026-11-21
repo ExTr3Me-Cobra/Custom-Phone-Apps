@@ -31,7 +31,7 @@ import com.labelrescue.app.camera.CropScreen
 
 enum class Screen(val title: String) {
     HOME("Label Rescue"), MANUAL("Type digits"), CAMERA("Scan label"), CROP("Crop (optional)"), PROCESSING("Recovering"), RESULTS("Results"),
-    HISTORY("Confirmed history"), SETTINGS("Settings"), CROPS("Training crops")
+    HISTORY("Confirmed history"), SETTINGS("Settings")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,7 +42,6 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
         screen = when (screen) {
             Screen.CROP -> Screen.HOME
             Screen.PROCESSING -> { vm.cancelRecovery(); Screen.CROP }
-            Screen.CROPS -> { vm.loadSettings(); Screen.SETTINGS }
             Screen.RESULTS -> Screen.CROP
             else -> Screen.HOME
         }
@@ -124,15 +123,9 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                     SettingsScreen(
                         ui, vm::setSaveCrops,
                         vm::exportTrainingData, vm::diagnosticLog, vm::clearTrainingCrops,
-                        onReviewCrops = { screen = Screen.CROPS },
                         onQuickScan = vm::setQuickScan,
                         onLearnFromIntact = vm::setLearnFromIntact,
                     )
-                }
-                Screen.CROPS -> {
-                    LaunchedEffect(Unit) { vm.loadCrops() }
-                    val items by vm.cropItems.collectAsStateWithLifecycle()
-                    CropReviewScreen(items, vm::cropThumbnail, vm::deleteCrop, vm::deleteUntrustedCrops)
                 }
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()
