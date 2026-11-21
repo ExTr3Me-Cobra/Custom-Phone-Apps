@@ -83,11 +83,16 @@ jobs:
           name: LabelRescue-models
           path: |
             models/*.tflite
+            models/*.lrw
+            models/*.testvec.json
             models/manifest.json
             models/BENCHMARK.md
             models/TRAINING.json
 
+      # A release is a convenience: if GitHub refuses it (a renamed branch once did, with 403),
+      # the models must still be committed below.
       - name: Publish models as a release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: models-${{ github.run_number }}
