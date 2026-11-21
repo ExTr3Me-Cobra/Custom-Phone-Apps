@@ -178,7 +178,9 @@ class Code128Partial(private val maxLines: Int = 32) {
     fun closings(img: GrayImage): List<Int> {
         if (img.width < 300) return listOf(0)
         val runs = ArrayList<Double>()
-        for (ln in scanlines(img, false).let { it.subList(it.size / 3, maxOf(it.size / 3 + 1, 2 * it.size / 3)) }) {
+        val all = scanlines(img, false)
+        if (all.isEmpty()) return listOf(0) // nothing barcode-like (a blank area)
+        for (ln in all.subList(all.size / 3, minOf(all.size, maxOf(all.size / 3 + 1, 2 * all.size / 3)))) {
             for (i in 1 until ln.edges.size) runs += ln.edges[i] - ln.edges[i - 1]
         }
         if (runs.size < 20) return listOf(0)

@@ -74,6 +74,12 @@ class RecoveryPipeline(
         val LITE_VARIANTS = setOf("gray", "clahe", "threshold", "upscale2x", "upscale3x")
         /** Stop when two checkpoints in a row agree on the top answer and it has at least this confidence. */
         const val STOP_CONFIDENCE = 0.8
+        /** Image variants of the quick read of the printed number. */
+        val QUICK_VARIANTS = setOf("gray", "clahe", "sharpen", "upscale2x", "upscale3x")
+        /** The quick read stops the scan when at least this many reads agree exactly. */
+        const val QUICK_READS = 5
+        /** Each digit's probability after a clear quick read. */
+        const val QUICK_DIGIT = 0.99
     }
 
     /** UPS 1Z numbers seen in this run (barcodes, MaxiCode, printed text). */
@@ -169,6 +175,13 @@ class RecoveryPipeline(
         val total = work.size
         val order = work.indices.sortedByDescending { com.labelrescue.core.image.Filters.sharpness(work[it]) }
         log?.line("processing order (sharpest first): " + order.joinToString { "f$it" })
+        // Quick read: a clearly printed number needs no barcode work. The printed number alone, on
+        // the two sharpest frames; if enough reads agree exactly (and the check digit holds), done.
+        if (opt.earlyStop && text != null && opt.barcodeCrop == null) {
+            progress(Progress("Reading the printed number", 0, 1))
+            quickRead(work, order.take(2), opt, stats, t0, notes)?.let { return withUps(it) }
+        }
+
         val finished = AtomicInteger(0)
         val stop = AtomicBoolean(false)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
@@ -347,6 +360,60 @@ class RecoveryPipeline(
         }.maxByOrNull { it.rect.width }?.rect
     }
 
+    /**
+     * The quick read (see [run]): the result if the printed number is clear, else null. Clear:
+     * at least [QUICK_READS] OCR reads give exactly the same complete number, from 2+ frames, none
+     * gives another complete number, the check digit holds, and the ranking agrees at 98%+.
+     */
+    private fun quickRead(work: List<GrayImage>, frames: List<Int>, opt: Options, stats: PipelineStats, t0: Long, notes: MutableList<String>): RecoveryOutput? {
+        val t = System.currentTimeMillis()
+        val pool = Executors.newFixedThreadPool(frames.size.coerceAtLeast(1))
+        val results = try {
+            frames.map { fi -> pool.submit<FrameWork> { processFrame(fi, work[fi], opt, collectPrivacy = fi == frames.first(), ocrOnly = true) { false } } }
+                .map { it.get() }
+        } catch (e: ExecutionException) {
+            throw (e.cause ?: e)
+        } finally {
+            pool.shutdownNow()
+        }
+        val complete = results.flatMap { it.observations }.filter { it.source == Source.OCR && it.slots.all { s -> s != null && s.bestP >= 0.5 } }
+        val byNumber = complete.groupBy { o -> o.format to o.slots.joinToString("") { it!!.best.toString() } }
+        val (key, agreeing) = byNumber.maxByOrNull { it.value.size } ?: run { log?.line("quick read: no complete number read (${System.currentTimeMillis() - t} ms)"); return null }
+        val (format, number) = key
+        val parsed = ImpbParser.parse(number)
+        val frameCount = agreeing.map { it.frame }.distinct().size
+        val others = complete.size - agreeing.size
+        val why = when {
+            agreeing.size < QUICK_READS -> "only ${agreeing.size} reads agree"
+            frameCount < minOf(2, frames.size) -> "reads from one frame only"
+            others > 0 -> "$others reads give another number"
+            parsed == null || !parsed.checkValid -> "check digit fails"
+            format != TrackingFormat.S10 && parsed.channel !in ImpbParser.CHANNELS && format.trackingFormat != TrackingFormat.IMPB_20 -> "doesn't start like a USPS number"
+            else -> null
+        }
+        if (why != null) {
+            log?.line("quick read: $number not clear enough ($why), reading everything (${System.currentTimeMillis() - t} ms)")
+            return null
+        }
+        val out = combine(results, work, stats, t0, log, notes)
+        val ranked = if (out.format != null) rankQuick(out) else null
+        if (ranked?.best?.tracking != number || out.format != format) {
+            log?.line("quick read: $number, but the ranking says ${ranked?.best?.tracking} ${((ranked?.best?.confidence ?: 0.0) * 100).toInt()}%: reading everything")
+            return null
+        }
+        // Five or more identical complete reads from two frames, with the check digit holding:
+        // each digit is at least 99% sure (a misread would have to repeat in every read and still
+        // pass the check digit).
+        out.slots = out.slots.mapIndexed { i, sd -> val c = number[i]; if (sd.p(c) >= QUICK_DIGIT) sd else SlotDist.likely(c, QUICK_DIGIT, sd.alphabet) }
+        log?.line("quick read: printed number clear, ${agreeing.size} reads from $frameCount frames agree: $number (${System.currentTimeMillis() - t} ms); barcodes not needed")
+        notes += "Printed number read clearly (${agreeing.size} reads agree); the barcode wasn't needed."
+        out.framesUsed = results.size
+        out.framesStoppedEarly = true
+        out.checkpoints = listOf(Checkpoint(results.size, number, rankQuick(out)?.best?.confidence ?: 0.0))
+        out.barcodeArea = results.firstOrNull()?.let { w -> mainBarcode(work[w.frame], w.zones)?.let { Location(w.frame, it, Source.BARCODE) } }
+        return out
+    }
+
     /** Ranked answer after the first [frames] processed frames (for early stop and the training report). */
     class Checkpoint(val frames: Int, val top: String?, val confidence: Double)
 
@@ -466,7 +533,12 @@ class RecoveryPipeline(
      * [rank] is the frame's place in the sharpest-first order. [lite]: the lighter mode for slow
      * phones (no tilted variants, fewer image variants, the second OCR on the two main ones only).
      */
-    private fun processFrame(fi: Int, frame: GrayImage, opt: Options, collectPrivacy: Boolean, rank: Int = 0, lite: Boolean = false, stopped: () -> Boolean): FrameWork {
+    private fun processFrame(
+        fi: Int, frame: GrayImage, opt: Options, collectPrivacy: Boolean, rank: Int = 0, lite: Boolean = false,
+        /** The quick read: the printed number only (no barcodes, no second OCR, a few image variants). */
+        ocrOnly: Boolean = false,
+        stopped: () -> Boolean,
+    ): FrameWork {
         val w = FrameWork(fi)
         fun check() { if (stopped()) throw CancelledException() }
         fun full(img: GrayImage, where: String) {
@@ -514,6 +586,57 @@ class RecoveryPipeline(
             if (extra.isNotEmpty()) w.labelText += extra.toString()
         }
 
+        if (ocrOnly) {
+            val z = com.labelrescue.core.usps.LabelZones.find(grayLines, lineBoxes, frame.width, frame.height, opt.layout)
+            lineBoxes.removeAll { z.centerInUps(it) }
+        }
+        if (!ocrOnly) barcodeWork(fi, frame, opt, w, grayLines, lineBoxes, detected, rank, lite, ::check, ::full)
+
+        // OCR again, zoomed onto the number line, with every variant (and the second engine).
+        if (text != null || text2 != null) {
+            val lines = (lineBoxes.map { it.inflate(it.width / 12 + 6, it.height + 4) } + listOfNotNull(numberRegion)).take(2)
+            for (lr in lines) {
+                val r = lr.intersect(IntRect(0, 0, frame.width, frame.height))
+                if (r.isEmpty) continue
+                val lineVariants = Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = if (lite || ocrOnly) emptyList() else listOf(-2.0, 2.0), restore = if (lite || ocrOnly) null else restorer))
+                    .filter { !lite || it.name in LITE_VARIANTS }
+                    .filter { !ocrOnly || it.name in QUICK_VARIANTS }
+                for (v in lineVariants) {
+                    check()
+                    w.variants++
+                    if (text != null) {
+                        val page = text.recognize(v.image)
+                        w.ocrReads++
+                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
+                        w.observations += obs
+                        w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
+                        log?.ocr(fi, "ML Kit line ${v.name}", page, obs)
+                    }
+                    // The second OCR (the slower one): every variant normally (on a close call each
+                    // one counts: a real label flipped when some were dropped), only the two main
+                    // ones in the lighter mode for slow phones, none in the quick read.
+                    if (text2 != null && !ocrOnly && (!lite || v.name == "gray" || v.name == "clahe")) {
+                        val page = text2.recognize(v.image)
+                        w.ocrReads++
+                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
+                        w.observations += obs
+                        w.pages += PageRec(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
+                        log?.ocr(fi, "PaddleOCR line ${v.name}", page, obs)
+                    }
+                }
+            }
+        }
+
+        return w
+    }
+
+    /** The barcode layers of [processFrame]: located areas, partial measurements, 2D codes. */
+    private fun barcodeWork(
+        fi: Int, frame: GrayImage, opt: Options, w: FrameWork,
+        grayLines: List<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>>, lineBoxes: MutableList<IntRect>,
+        detected: List<DetectedRegion>, rank: Int, lite: Boolean,
+        check: () -> Unit, full: (GrayImage, String) -> Unit,
+    ) {
         // Where the barcodes are, from the printed text: the USPS barcode between "USPS TRACKING #"
         // and the number, the UPS one under "TRACKING #: 1Z…" (left out: it isn't the USPS number).
         val zones = if (opt.barcodeCrop == null) com.labelrescue.core.usps.LabelZones.find(grayLines, lineBoxes, frame.width, frame.height, opt.layout)
@@ -587,42 +710,6 @@ class RecoveryPipeline(
             for (v in vs) { w.variants++; full(v.image, "frame ${fi + 1} crop ${v.name}") }
         }
         if (tileCrops.isNotEmpty()) log?.line("f$fi 2D codes: full decoders found no valid tracking number in ${tileCrops.size} crops")
-
-        // OCR again, zoomed onto the number line, with every variant (and the second engine).
-        if (text != null || text2 != null) {
-            val lines = (lineBoxes.map { it.inflate(it.width / 12 + 6, it.height + 4) } + listOfNotNull(numberRegion)).take(2)
-            for (lr in lines) {
-                val r = lr.intersect(IntRect(0, 0, frame.width, frame.height))
-                if (r.isEmpty) continue
-                val lineVariants = Variants.make(frame, r, Variants.Options(maxSide = 2400, upscaleBelow = 1600, rotations = if (lite) emptyList() else listOf(-2.0, 2.0), restore = if (lite) null else restorer))
-                    .filter { !lite || it.name in LITE_VARIANTS }
-                for (v in lineVariants) {
-                    check()
-                    w.variants++
-                    if (text != null) {
-                        val page = text.recognize(v.image)
-                        w.ocrReads++
-                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
-                        w.observations += obs
-                        w.pages += PageRec(page, v.toFrame, fi, v.name, Source.OCR)
-                        log?.ocr(fi, "ML Kit line ${v.name}", page, obs)
-                    }
-                    // The second OCR (the slower one): every variant normally (on a close call each
-                    // one counts: a real label flipped when some were dropped), only the two main
-                    // ones in the lighter mode for slow phones.
-                    if (text2 != null && (!lite || v.name == "gray" || v.name == "clahe")) {
-                        val page = text2.recognize(v.image)
-                        w.ocrReads++
-                        val obs = OcrInterpreter.interpret(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
-                        w.observations += obs
-                        w.pages += PageRec(page, v.toFrame, fi, "paddle-${v.name}", Source.OCR2)
-                        log?.ocr(fi, "PaddleOCR line ${v.name}", page, obs)
-                    }
-                }
-            }
-        }
-
-        return w
     }
 
     private fun fullDecode(img: GrayImage, where: String): Found? {

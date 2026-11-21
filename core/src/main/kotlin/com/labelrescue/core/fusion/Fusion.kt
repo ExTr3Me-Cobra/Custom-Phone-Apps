@@ -36,7 +36,7 @@ class RecoveryOutput(
     /** Tracking format (unrouted), or null if no number was found. */
     val format: TrackingFormat?,
     /** Fused distribution per tracking position. */
-    val slots: List<SlotDist>,
+    slots: List<SlotDist>,
     /** Per-source consensus, for display. */
     val perSource: Map<Source, List<SlotDist?>>,
     /** A full decode that passed the check digit, if any. */
@@ -57,6 +57,9 @@ class RecoveryOutput(
     /** The frame [privacyBlank] applies to (the sharpest one, processed first). */
     val privacyFrame: Int = 0,
 ) {
+    /** Fused distribution per tracking position (the quick read can firm it up, see RecoveryPipeline). */
+    var slots: List<SlotDist> = slots
+
     /** How many frames were fully processed, whether the rest were skipped, and the answer at each checkpoint. */
     var framesUsed: Int = 0
     /** Where the main 1D barcode is (frame and box), for saving damaged-barcode examples. */
