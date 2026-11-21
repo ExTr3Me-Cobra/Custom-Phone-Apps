@@ -193,78 +193,33 @@ private fun UpsNumberCard(
     state: ResultState?,
     onUse: (com.labelrescue.core.usps.ParsedNumber) -> Unit,
 ) {
-    val u = ups.firstOrNull { !it.corrected } ?: ups.firstOrNull() ?: return
+    // Only numbers read as-is (barcode, MaxiCode, or printed text passing the check digit): a
+    // number that needed a correction is too likely to be made up to show at all.
+    val u = ups.filter { !it.corrected }.maxByOrNull { it.confidence } ?: return
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var launched by androidx.compose.runtime.saveable.rememberSaveable(u.tracking) { androidx.compose.runtime.mutableStateOf(false) }
-    var pasted by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf<com.labelrescue.core.usps.ParsedNumber?>(null) }
-    var noNumber by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf(false) }
-    var used by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val showButton = u.confidence > UPS_MIN_CONFIDENCE && uspsConfidence != null && uspsConfidence < USPS_MAX_CONFIDENCE
-
-    fun readClipboard() {
-        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
-        val text = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
-        val n = com.labelrescue.core.usps.LabelFit.findUsps(text)
-        if (n != null && n.tracking != used) { pasted = n; noNumber = false } else if (n == null) noNumber = true
-    }
-    // Back from the browser: look for the copied USPS number. (Android only lets an app read the
-    // clipboard while it's in front, so this runs on return, shortly after the window has focus.)
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    androidx.compose.runtime.DisposableEffect(lifecycle, launched) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && launched) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ readClipboard() }, 400)
-            }
-        }
-        lifecycle.addObserver(obs)
-        onDispose { lifecycle.removeObserver(obs) }
-    }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("UPS number on the label", style = MaterialTheme.typography.titleMedium)
             Text(u.grouped, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Read from the " + u.source + (if (u.corrected) " (one character corrected)" else "") +
-                    " · ${(u.confidence * 100).toInt()}% sure" +
+                "Read from the " + u.source + " · ${(u.confidence * 100).toInt()}% sure" +
                     (if (u.isUspsHandoff) ". UPS Ground Saver / SurePost: delivered by USPS." else "."),
                 style = MaterialTheme.typography.bodySmall,
             )
             if (showButton) {
                 FindOnUpsButton {
-                    launched = true; pasted = null; noNumber = false
-                    val url = "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking
-                    openWeb(ctx, url)
+                    launched = true
+                    openWeb(ctx, "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking)
                 }
                 Text(
                     "Opens UPS's tracking page over the app. Long-press the USPS tracking number there, tap Copy, then press back.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                PasteNumberPanel(state, listenAfterReturn = launched, onUse = onUse)
             }
-            val p = pasted
-            if (p != null) {
-                val fit = state?.let { com.labelrescue.core.usps.LabelFit.check(p, it.format, it.baseSlots) }
-                Text("Copied from UPS.com:", style = MaterialTheme.typography.labelLarge)
-                Text(com.labelrescue.core.usps.TrackingFormat.grouped(p.tracking), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    when {
-                        fit == null -> "Valid USPS number (check digit OK). The label's own USPS number wasn't readable, so it can't be compared."
-                        !fit.sameFormat -> "Valid USPS number, but a different length than the label's (${p.tracking.length} vs ${state.format.trackingLength} digits). Check you copied the right number."
-                        fit.conflicts.isNotEmpty() -> "Doesn't match the label: ${fit.conflicts.size} digit(s) the label shows clearly are different (positions ${fit.conflicts.joinToString { (it + 1).toString() }}). Check you copied the right number."
-                        else -> "Fits the label: no clearly printed digit disagrees, check digit OK."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (fit != null && !fit.fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onUse(p); used = p.tracking; pasted = null }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Use this number") }
-                    OutlinedButton(onClick = { pasted = null }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Not this") }
-                }
-            } else if (launched) {
-                if (noNumber) Text("No USPS number on the clipboard yet.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { readClipboard() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Paste USPS number") }
-            }
-            used?.let { Text("Using ${com.labelrescue.core.usps.TrackingFormat.grouped(it)} from UPS.com.", style = MaterialTheme.typography.bodySmall) }
             OutlinedButton(onClick = { copy(ctx, u.tracking) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Copy UPS number") }
         }
     }

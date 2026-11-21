@@ -88,6 +88,8 @@ class ResultActions(
     val onUnpick: (Int) -> Unit,
     val onSelect: (Int) -> Unit,
     val onConfirm: ((String) -> Unit)?,
+    /** A USPS number pasted from elsewhere (copied on USPS.com or ups.com): use it as the result. */
+    val onUseNumber: ((com.labelrescue.core.usps.ParsedNumber) -> Unit)? = null,
 )
 
 /** Certainty of a digit, for coloring. */
@@ -200,7 +202,9 @@ fun ResultsPanel(
         }
 
         ranked?.takeIf { it.candidates.size > 1 }?.let { r ->
-            CheckOnUspsButton(r.candidates.size) { openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
+            var launched by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+            CheckOnUspsButton(r.candidates.size) { launched = true; openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
+            actions.onUseNumber?.let { use -> PasteNumberPanel(state, listenAfterReturn = launched, onUse = use) }
         }
         ranked?.let { r ->
             Text(
@@ -463,6 +467,82 @@ fun CheckOnUspsButton(count: Int, onClick: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Check all guesses on USPS.com", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (count >= USPS_COM_MAX) Text("top $USPS_COM_MAX, the most USPS.com takes at once", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+/** The first valid USPS number on the clipboard, or null. Only works while the app is in front. */
+fun clipboardUsps(ctx: Context): com.labelrescue.core.usps.ParsedNumber? {
+    val cm = ctx.getSystemService(ClipboardManager::class.java)
+    val text = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
+    return com.labelrescue.core.usps.LabelFit.findUsps(text)
+}
+
+/**
+ * Paste a USPS number copied elsewhere (USPS.com, ups.com): a "Paste tracking number" button, and
+ * when [listenAfterReturn], an automatic look at the clipboard each time the app comes back to the
+ * front. The number is checked (check digit, and against the label's clearly read digits) before
+ * it's offered.
+ */
+@Composable
+fun PasteNumberPanel(state: ResultState?, listenAfterReturn: Boolean, onUse: (com.labelrescue.core.usps.ParsedNumber) -> Unit) {
+    val ctx = LocalContext.current
+    var pasted by remember { mutableStateOf<com.labelrescue.core.usps.ParsedNumber?>(null) }
+    var empty by remember { mutableStateOf(false) }
+    var used by remember { mutableStateOf<String?>(null) }
+    fun look(manual: Boolean) {
+        val n = clipboardUsps(ctx)
+        when {
+            n == null -> if (manual) empty = true
+            n.tracking == used -> if (manual) { pasted = n; empty = false }
+            else -> { pasted = n; empty = false }
+        }
+    }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle, listenAfterReturn) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            // Shortly after the window has focus: Android only lets the app in front read the clipboard.
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && listenAfterReturn) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ look(manual = false) }, 400)
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+    val p = pasted
+    if (p != null) {
+        PastedNumberCard(p, state, onUse = { onUse(p); used = p.tracking; pasted = null }, onDismiss = { pasted = null })
+    } else {
+        OutlinedButton(onClick = { look(manual = true) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("Paste tracking number")
+        }
+        if (empty) Text("No USPS tracking number on the clipboard. Long-press the number on the website and tap Copy first.", style = MaterialTheme.typography.bodySmall)
+    }
+    used?.let { Text("Using ${TrackingFormat.grouped(it)}.", style = MaterialTheme.typography.bodySmall) }
+}
+
+/** A pasted USPS number, how it fits the label, and Use / Not this. */
+@Composable
+fun PastedNumberCard(p: com.labelrescue.core.usps.ParsedNumber, state: ResultState?, onUse: () -> Unit, onDismiss: () -> Unit) {
+    val fit = state?.let { com.labelrescue.core.usps.LabelFit.check(p, it.format, it.baseSlots) }
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Copied tracking number", style = MaterialTheme.typography.labelLarge)
+            Text(TrackingFormat.grouped(p.tracking), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.headlineSmall)
+            Text(
+                when {
+                    fit == null -> "Valid USPS number (check digit OK). The label's own USPS number wasn't readable, so it can't be compared."
+                    !fit.sameFormat -> "Valid USPS number, but a different length than the label's (${p.tracking.length} vs ${state.format.trackingLength} digits). Check you copied the right number."
+                    fit.conflicts.isNotEmpty() -> "Doesn't match the label: ${fit.conflicts.size} digit(s) the label shows clearly are different (positions ${fit.conflicts.joinToString { (it + 1).toString() }}). Check you copied the right number."
+                    else -> "Fits the label: no clearly printed digit disagrees, check digit OK."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (fit != null && !fit.fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onUse, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Use this number") }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Not this") }
+            }
         }
     }
 }

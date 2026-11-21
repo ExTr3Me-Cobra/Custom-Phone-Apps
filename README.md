@@ -84,7 +84,9 @@ Results show the best guess in large digits grouped 4-4-4-4-4-2:
 * **Check all guesses on USPS.com** opens USPS's tracking page with the candidates filled in
   (up to 35, the most it takes at once), so you see which one is a real package. It opens as a
   browser tab over the app: back returns to the same spot. The app itself stays offline; the
-  browser does the lookup, and nothing is read back from the page.
+  browser does the lookup, and nothing is read back from the page. Found the real one? Long-press
+  it there, tap **Copy**, and press back: the app picks the number up from the clipboard (or tap
+  **Paste tracking number**), checks it against the label, and **Use this number** sets it.
 
 ## How recovery works
 

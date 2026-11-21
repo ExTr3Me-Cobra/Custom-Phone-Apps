@@ -39,24 +39,35 @@ data class UpsNumber(val tracking: String, val source: String, val corrected: Bo
             return (10 - sum % 10) % 10 == t[17] - '0'
         }
 
-        /** Valid 1Z numbers in decoded barcode text or OCR text (spaces allowed, as printed). */
+        /**
+         * Valid 1Z numbers in decoded barcode text or OCR text (spaces allowed, as printed).
+         *
+         * Guards against inventing one from other digits, which a check digit alone can't (1 in
+         * 10 random strings pass it): the "1Z" must start a token (not sit inside a longer run of
+         * characters), and lines that look like a USPS number (20+ digits, hardly any letters) are
+         * skipped. With [allowCorrection], one lookalike swap after the "1Z" is tried, a printed
+         * "IZ"/"LZ" counts as "1Z", and so does "12" when the rest of the number has a letter.
+         */
         fun find(text: String, source: String, allowCorrection: Boolean = false): List<UpsNumber> {
             val out = LinkedHashMap<String, UpsNumber>()
-            val up = text.uppercase()
-            for (m in PATTERN.findAll(up)) {
-                val t = m.value.filter { !it.isWhitespace() }
-                if (isValid(t)) { out.putIfAbsent(t, UpsNumber(t, source)); continue }
-                if (allowCorrection) corrected(t)?.let { out.putIfAbsent(it, UpsNumber(it, source, corrected = true)) }
-            }
-            // OCR often reads the "Z" as 2 or the "1" as I/l: try those prefixes too.
-            if (allowCorrection) for (m in Regex("[1IL]\\s*[Z2](?:\\s*[A-Z0-9]){16}").findAll(up)) {
-                val t = "1Z" + m.value.filter { !it.isWhitespace() }.substring(2)
-                // Real 1Z numbers are mostly digits (package number, check digit, service code):
-                // this keeps address words read across a line from passing as one.
-                if (t.substring(2).count { it in '0'..'9' } < 9) continue
-                if (t in out) continue
-                if (isValid(t)) out[t] = UpsNumber(t, source, corrected = true)
-                else corrected(t)?.let { out.putIfAbsent(it, UpsNumber(it, source, corrected = true)) }
+            for (line in text.uppercase().lines()) {
+                val digits = line.count { it in '0'..'9' }
+                val letters = line.count { it in 'A'..'Z' }
+                if (digits >= 20 && letters <= 2) continue
+                val prefix = if (allowCorrection) "[1IL]\\s*[Z2]" else "1\\s*Z"
+                for (m in Regex("(?<![A-Z0-9])$prefix(?:\\s*[A-Z0-9]){16}(?![A-Z0-9])").findAll(line)) {
+                    val raw = m.value.filter { !it.isWhitespace() }
+                    val t = "1Z" + raw.substring(2)
+                    // OCR reads the Z of "1Z" as 2 all the time. A "12" only counts when the rest has
+                    // a letter (USPS numbers never do), so digits can't turn into a UPS number.
+                    if (raw[1] == '2' && t.substring(2).none { it in 'A'..'Z' }) continue
+                    val fixed = raw[0] != '1'
+                    if (isValid(t)) { out.putIfAbsent(t, UpsNumber(t, source, corrected = fixed)); continue }
+                    if (!allowCorrection) continue
+                    // Real 1Z numbers are mostly digits (package number, check digit, service code).
+                    if (t.substring(2).count { it in '0'..'9' } < 9) continue
+                    corrected(t)?.let { out.putIfAbsent(it, UpsNumber(it, source, corrected = true)) }
+                }
             }
             return out.values.toList()
         }

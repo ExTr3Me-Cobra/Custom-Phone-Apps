@@ -91,6 +91,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.manual::pick, vm.manual::unpick, vm.manual::select,
                             onConfirm = { vm.confirm(it, "manual") },
+                            onUseNumber = { vm.onManualText(it.tracking) },
                         ),
                     )
                 }
@@ -143,6 +144,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.photo::pick, vm.photo::unpick, vm.photo::select,
                             onConfirm = { vm.confirm(it, "photo") },
+                            onUseNumber = { n -> if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL } },
                         ),
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
