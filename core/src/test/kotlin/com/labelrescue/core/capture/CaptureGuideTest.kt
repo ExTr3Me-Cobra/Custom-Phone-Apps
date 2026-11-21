@@ -16,9 +16,9 @@ class CaptureGuideTest {
      * A portrait frame: a white label of [scale] × the guide size, shifted by [dx],[dy] pixels, on a
      * brown box (or on [background]), with the barcode across 70% of the label's width.
      */
-    private fun frame(scale: Double = 1.0, dx: Int = 0, dy: Int = 0, blur: Double = 0.0, background: Int = 95): GrayImage {
+    private fun frame(scale: Double = 1.0, dx: Int = 0, dy: Int = 0, blur: Double = 0.0, background: Int = 95, shape: com.labelrescue.core.fusion.NormRect = CaptureGuide.DEFAULT_GUIDE): GrayImage {
         val f = GrayImage.filled(W, H, background)
-        val g = CaptureGuide.DEFAULT_GUIDE.toPixels(W, H)
+        val g = shape.toPixels(W, H)
         val lw = (g.width * scale).toInt(); val lh = (g.height * scale).toInt()
         val lx = (W - lw) / 2 + dx; val ly = (H - lh) / 2 + dy
         for (y in ly until ly + lh) for (x in lx until lx + lw) if (x in 0 until W && y in 0 until H) f[x, y] = 225
@@ -64,6 +64,21 @@ class CaptureGuideTest {
             assertTrue("stripes=$stripes: ${s.message}", s.ready)
             assertTrue("no region as big as the label", s.regions.none { (it.right - it.left) * (it.bottom - it.top) > 0.25f })
         }
+    }
+
+    @Test fun landscapeLabelTurnsTheMarks() {
+        val g = CaptureGuide()
+        val wide = frame(shape = CaptureGuide.LANDSCAPE_GUIDE)
+        var s = g.evaluate(wide)
+        assertFalse("one frame doesn't turn the marks", s.landscape)
+        repeat(CaptureGuide.ORIENTATION_FRAMES + 2) { s = g.evaluate(wide) }
+        assertTrue(s.landscape)
+        assertEquals(CaptureGuide.LANDSCAPE_GUIDE, s.guide)
+        assertTrue(s.message, s.ready)
+        // Back to a portrait label: the marks turn back.
+        repeat(CaptureGuide.ORIENTATION_FRAMES + 2) { s = g.evaluate(frame()) }
+        assertFalse(s.landscape)
+        assertTrue(s.message, s.ready)
     }
 
     @Test fun onAWhiteBoxTheBarcodeDecides() {

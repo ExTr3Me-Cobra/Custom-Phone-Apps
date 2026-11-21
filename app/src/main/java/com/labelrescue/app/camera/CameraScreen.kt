@@ -216,7 +216,7 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
         while (status?.issue == CaptureGuide.Issue.BLURRY) {
             val w = previewView.width.toFloat(); val h = previewView.height.toFloat()
             if (w > 0 && h > 0) {
-                val g = status?.barcode ?: guide.guide
+                val g = status?.barcode ?: status?.guide ?: guide.guide
                 val p = previewView.meteringPointFactory.createPoint(w * (g.left + g.right) / 2, h * (g.top + g.bottom) / 2)
                 camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(p).build())
             }
@@ -369,6 +369,12 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
             isAntiAlias = true; textSize = 30f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
         }
     }
+    val target = status?.guide ?: guide.guide
+    val spec = androidx.compose.animation.core.tween<Float>(350)
+    val gL by androidx.compose.animation.core.animateFloatAsState(target.left, spec, label = "gl")
+    val gT by androidx.compose.animation.core.animateFloatAsState(target.top, spec, label = "gt")
+    val gR by androidx.compose.animation.core.animateFloatAsState(target.right, spec, label = "gr")
+    val gB by androidx.compose.animation.core.animateFloatAsState(target.bottom, spec, label = "gb")
     BoxWithConstraints(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val vw = size.width; val vh = size.height
@@ -384,9 +390,9 @@ private fun GuideOverlay(guide: CaptureGuide, status: CaptureGuide.Status?, burs
                 drawContext.canvas.nativeCanvas.drawRect(x - 4, y - 30, x + tw + 6, y + 6, bg)
                 drawContext.canvas.nativeCanvas.drawText(text, x, y, labelPaint)
             }
-            val g = guide.guide
-            val gl = ox + g.left * fw; val gt = oy + g.top * fh
-            val gr = ox + g.right * fw; val gb = oy + g.bottom * fh
+            // The marks turn to landscape for a landscape label (animated, see below).
+            val gl = ox + gL * fw; val gt = oy + gT * fh
+            val gr = ox + gR * fw; val gb = oy + gB * fh
             val color = when {
                 burst || status?.ready == true -> Color(0xFF66BB6A)
                 status?.aligned == true -> Color(0xFFFFC107)

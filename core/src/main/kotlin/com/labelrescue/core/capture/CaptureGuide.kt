@@ -17,6 +17,10 @@ import kotlin.math.min
  * - the label's paper fills the marks (each edge near its mark), when the paper stands out from
  *   the background; on a white box, where it doesn't, this check is skipped;
  * - a barcode is inside the marks, wide enough for the label to be at the right distance, and straight.
+ *
+ * Landscape labels (wider than tall, like small Priority Mail labels) get landscape marks: when the
+ * paper is found landscape on a few frames in a row the marks turn to [LANDSCAPE_GUIDE], and back
+ * once it's found portrait again.
  */
 class CaptureGuide(
     /** The label frame, as fractions of the (upright) camera frame. */
@@ -41,7 +45,17 @@ class CaptureGuide(
         val label: NormRect? = null,
         /** Everything that looks like a 1D barcode (fractions of the frame), for the live overlay. */
         val regions: List<NormRect> = emptyList(),
+        /** The corner marks in use (portrait, or landscape for a landscape label). */
+        val guide: NormRect = DEFAULT_GUIDE,
+        val landscape: Boolean = false,
     )
+
+    /** The marks in use now: [guide], or [LANDSCAPE_GUIDE] while a landscape label is in view. */
+    @Volatile var current: NormRect = guide
+        private set
+    @Volatile var landscape: Boolean = false
+        private set
+    private var orientationVotes = 0
 
     private val recentSharpness = ArrayDeque<Double>()
     private var readyStreak = 0
@@ -60,17 +74,27 @@ class CaptureGuide(
         }
         val st = evaluate(small, all.filter { !it.vertical })
         val sx = small.width.toDouble(); val sy = small.height.toDouble()
-        return st.copy(regions = all.map { r -> NormRect((r.rect.left / sx).toFloat(), (r.rect.top / sy).toFloat(), (r.rect.right / sx).toFloat(), (r.rect.bottom / sy).toFloat()) })
+        return st.copy(guide = current, landscape = landscape, regions = all.map { r -> NormRect((r.rect.left / sx).toFloat(), (r.rect.top / sy).toFloat(), (r.rect.right / sx).toFloat(), (r.rect.bottom / sy).toFloat()) })
     }
 
     private fun evaluate(small: GrayImage, regions: List<BarcodeLocator.Region>): Status {
         val sx = small.width.toDouble(); val sy = small.height.toDouble()
-        val g = guide.toPixels(small.width, small.height)
         fun norm(r: IntRect) = NormRect((r.left / sx).toFloat(), (r.top / sy).toFloat(), (r.right / sx).toFloat(), (r.bottom / sy).toFloat())
 
         // The paper's edges are advice, never a blocker: on busy backgrounds they can't always
         // be found, and labels come in other sizes than 4x6. The barcode decides.
         val paper = paperRect(small)
+        // Portrait or landscape marks: switch after a few frames that agree, so they don't flicker.
+        if (paper != null) {
+            val wide = paper.width > paper.height * 1.05
+            if (wide != landscape) {
+                orientationVotes++
+                if (orientationVotes >= ORIENTATION_FRAMES) {
+                    landscape = wide; current = if (wide) LANDSCAPE_GUIDE else guide; orientationVotes = 0
+                }
+            } else orientationVotes = 0
+        }
+        val g = current.toPixels(small.width, small.height)
         val paperNorm = paper?.let(::norm)
         val paperSmall = paper != null && max(paper.width.toDouble() / g.width, paper.height.toDouble() / g.height) < 0.75
         val paperOff = paper != null && run {
@@ -102,7 +126,7 @@ class CaptureGuide(
         // On a 4×6 label the main barcode spans roughly 45-95% of the label's width.
         val widthFrac = r.width.toDouble() / g.width
         // A label found clearly smaller than the marks: closer gives a sharper read.
-        val tooFar = widthFrac < MIN_BARCODE_WIDTH || paperSmall
+        val tooFar = widthFrac < (if (landscape) MIN_BARCODE_WIDTH_LANDSCAPE else MIN_BARCODE_WIDTH) || paperSmall
         val aligned = !tooFar && !paperTooBig && !paperOff && abs(tilt) <= maxTiltDegrees
         val focused = sharp >= minSharpness && sharp >= 0.8 * peak
 
@@ -117,16 +141,17 @@ class CaptureGuide(
             else -> null to "Lined up and sharp"
         }
         if (issue != null) return notReady(issue, msg, norm(r), paperNorm, sharp, tilt, aligned, focused)
+        val lined = if (landscape) "Landscape label lined up and sharp" else "Lined up and sharp"
         readyStreak++
         // Two good checks in a row, so a passing blur doesn't count.
         val ready = readyStreak >= 2
-        return Status(ready, null, if (ready) "Lined up and sharp: tap Burst capture" else "Hold still…", aligned, focused, sharp, tilt, norm(r), paperNorm)
+        return Status(ready, null, if (ready) "$lined: tap Burst capture" else "Hold still…", aligned, focused, sharp, tilt, norm(r), paperNorm)
     }
 
     /**
      * The label's paper: the largest bright area once thin dark features (ruled lines, text,
      * barcode bars) are closed over, if it's clearly brighter than its surroundings and shaped like
-     * a label (portrait, mostly filling its box). Null when it can't be told apart: a white or
+     * a label (portrait or landscape, mostly filling its box). Null when it can't be told apart: a white or
      * striped background, or paper cut into pieces.
      */
     private fun paperRect(img: GrayImage): IntRect? {
@@ -173,10 +198,11 @@ class CaptureGuide(
         }
         val bb = best ?: return null
         val bw = bb[2] - bb[0]; val bh = bb[3] - bb[1]
-        // Shaped like a label: big enough, fills most of its box, portrait (4x6 is 1.5).
-        if (bestArea < w * h * 0.15) return null
+        // Shaped like a label: big enough, fills most of its box, portrait (4x6 is 1.5) or
+        // landscape (6x4, the small Priority Mail labels).
+        if (bestArea < w * h * 0.15 * (if (bw > bh) 0.6 else 1.0)) return null
         if (bestArea < 0.6 * bw * bh) return null
-        val aspect = bh.toDouble() / max(1, bw)
+        val aspect = max(bw, bh).toDouble() / max(1, min(bw, bh))
         if (aspect < 1.05 || aspect > 2.3) return null
         if (bb[0] <= 1 && bb[1] <= 1 && bb[2] >= w - 1 && bb[3] >= h - 1) return null
         val f = img.width.toDouble() / w
@@ -204,6 +230,16 @@ class CaptureGuide(
             val h = w * 3f * 1.5f / 4f // label height as a fraction of the frame height
             NormRect((1 - w) / 2, (1 - h) / 2, (1 + w) / 2, (1 + h) / 2)
         }
+        /** A 3:2 landscape label (6×4 in.) filling 92% of the width of the 3:4 portrait frame. */
+        val LANDSCAPE_GUIDE: NormRect = run {
+            val w = 0.92f
+            val h = w * 3f / 1.5f / 4f
+            NormRect((1 - w) / 2, (1 - h) / 2, (1 + w) / 2, (1 + h) / 2)
+        }
         const val MIN_BARCODE_WIDTH = 0.38
+        /** On a landscape label the barcode spans less of the label's width. */
+        const val MIN_BARCODE_WIDTH_LANDSCAPE = 0.28
+        /** Frames in a row the paper must agree on before the marks turn. */
+        const val ORIENTATION_FRAMES = 3
     }
 }
