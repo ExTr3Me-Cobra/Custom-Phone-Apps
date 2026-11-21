@@ -99,6 +99,8 @@ class RecoveryPipeline(
         var ocrReads: Int = 0,
         var barcodeDecodes: Int = 0,
         var measurements: Int = 0,
+        /** Where the UPS and the USPS barcode sit on this frame, from the printed text. */
+        var zones: com.labelrescue.core.usps.LabelZones = com.labelrescue.core.usps.LabelZones.NONE,
     )
 
     private class FoundException(val found: Found, val labelText: String, val frame: Int) : RuntimeException()
@@ -249,7 +251,7 @@ class RecoveryPipeline(
             val x0 = ev.slotX.firstOrNull() ?: 0.0; val x1 = ev.slotX.lastOrNull() ?: 0.0
             val r = IntRect((x0 - 12 * ev.moduleWidth).toInt(), ev.yTop - 6, (x1 + 26 * ev.moduleWidth).toInt(), ev.yBottom + 6)
             Location(le.frame, le.toFrame.mapRect(r), Source.BARCODE_PARTIAL)
-        } ?: results.firstOrNull()?.let { w -> mainBarcode(work[w.frame])?.let { Location(w.frame, it, Source.BARCODE) } }
+        } ?: results.firstOrNull()?.let { w -> mainBarcode(work[w.frame], w.zones)?.let { Location(w.frame, it, Source.BARCODE) } }
         out.framesStoppedEarly = stoppedEarly
         out.checkpoints = checkpoints
         log?.line("checkpoints: " + checkpoints.joinToString { "${it.frames}f=${it.top} ${(it.confidence * 100).toInt()}%" })
@@ -306,10 +308,11 @@ class RecoveryPipeline(
     }
 
     /** The widest barcode-shaped horizontal area in [frame] (padded a little), or null. */
-    private fun mainBarcode(frame: GrayImage): IntRect? {
+    private fun mainBarcode(frame: GrayImage, zones: com.labelrescue.core.usps.LabelZones = com.labelrescue.core.usps.LabelZones.NONE): IntRect? {
         val area = frame.width.toDouble() * frame.height
+        zones.usps?.let { u -> BarcodeLocator.locate(frame.crop(u), 6).filter { !it.vertical }.maxByOrNull { it.rect.width }?.let { return IntRect(u.left + it.rect.left, u.top + it.rect.top, u.left + it.rect.right, u.top + it.rect.bottom) } }
         return BarcodeLocator.locate(frame, 6).filter { r ->
-            !r.vertical && r.rect.width * r.rect.height.toDouble() <= 0.25 * area && r.rect.width >= 1.4 * r.rect.height
+            !zones.inUps(r.rect) && !r.vertical && r.rect.width * r.rect.height.toDouble() <= 0.25 * area && r.rect.width >= 1.4 * r.rect.height
         }.maxByOrNull { it.rect.width }?.rect
     }
 
@@ -443,6 +446,7 @@ class RecoveryPipeline(
         // OCR: whole frame first, to find the number line and the label text.
         val numberRegion = opt.numberCrop?.toPixels(frame.width, frame.height)
         val lineBoxes = ArrayList<IntRect>()
+        val grayLines = ArrayList<Pair<com.labelrescue.core.ocr.OcrLine, IntRect?>>()
         if (text != null) {
             val ocrBase = Variants.make(frame, numberRegion, Variants.Options(maxSide = 2000, rotations = emptyList(), includeThreshold = false))
                 .filter { it.name == "gray" || it.name == "clahe" }
@@ -450,7 +454,10 @@ class RecoveryPipeline(
                 check()
                 val page = text.recognize(v.image)
                 w.ocrReads++; w.variants++
-                if (v.name == "gray") { w.labelText = page.text; log?.line("f$fi label text:\n" + page.text) }
+                if (v.name == "gray") {
+                    w.labelText = page.text; log?.line("f$fi label text:\n" + page.text)
+                    for (l in page.lines) grayLines += l to l.box?.let { v.toFrame.mapRect(it) }
+                }
                 if (collectPrivacy) for (l in page.lines) w.privacyLines += l to l.box?.let { v.toFrame.mapRect(it) }
                 val obs = OcrInterpreter.interpret(page, v.toFrame, fi, v.name)
                 w.observations += obs
@@ -476,9 +483,20 @@ class RecoveryPipeline(
             if (extra.isNotEmpty()) w.labelText += extra.toString()
         }
 
-        // Barcode regions: user crop, detected/located barcodes, the area above the number line, the whole frame.
+        // Where the barcodes are, from the printed text: the USPS barcode between "USPS TRACKING #"
+        // and the number, the UPS one under "TRACKING #: 1Z…" (left out: it isn't the USPS number).
+        val zones = if (opt.barcodeCrop == null) com.labelrescue.core.usps.LabelZones.find(grayLines, lineBoxes, frame.width, frame.height)
+        else com.labelrescue.core.usps.LabelZones.NONE
+        w.zones = zones
+        // The UPS "TRACKING #: 1Z…" line has enough digits to pass for the number line: drop it.
+        lineBoxes.removeAll { zones.centerInUps(it) }
+        if (zones.ups != null || zones.usps != null) log?.line("f$fi label layout: USPS barcode area ${zones.usps ?: "?"}, UPS barcode area ${zones.ups ?: "none"}")
+
+        // Barcode regions: user crop, the USPS barcode area, detected/located barcodes, the area above
+        // the number line, the whole frame.
         val regions = ArrayList<Pair<IntRect, Boolean>>()
         opt.barcodeCrop?.let { regions += it.toPixels(frame.width, frame.height) to false }
+        zones.usps?.let { regions += it to false }
         for (d in detected.filter { it.kind == DetectedRegion.Kind.BARCODE }.take(2)) {
             val b = d.box
             regions += b.inflate(b.width / 8 + 8, b.height / 4 + 4) to (b.height > b.width * 1.5)
@@ -494,10 +512,17 @@ class RecoveryPipeline(
         val chosenRegions = dedupe(regions, frame)
         log?.line("f$fi barcode regions: " + chosenRegions.joinToString { "${it.first}${if (it.second) " vertical" else ""}" } +
             (if (detected.isNotEmpty()) "; detector: " + detected.joinToString { "${it.kind}@${it.box}" } else ""))
+        var droppedUps = 0
         for ((rect, vertical) in chosenRegions) {
             check()
             val (img, outer) = regionImage(frame, rect, vertical)
             val whole = rect.width == frame.width && rect.height == frame.height
+            if (zones.inUps(rect)) {
+                // The UPS barcode: read it whole (for the UPS number) but don't measure it as USPS.
+                full(frame.crop(rect), "frame ${fi + 1} UPS area")
+                log?.line("f$fi $rect is the UPS barcode area: not read as the USPS number")
+                continue
+            }
             val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, rotations = if (lite) emptyList() else listOf(-3.0, 3.0), restore = if (whole || lite) null else restorer))
                 .filter { !whole || it.name == "gray" || it.name == "clahe" }
                 .filter { !lite || it.name in LITE_VARIANTS }
@@ -507,10 +532,19 @@ class RecoveryPipeline(
                 full(v.image, "frame ${fi + 1} ${v.name}")
                 val ms = partialDecoder.measure(v.image)
                 log?.measurements(fi, "$rect ${v.name}", ms)
-                for (ev in ms) w.evidence += LocatedEvidence(ev, fi, v.toFrame.then(outer))
+                for (ev in ms) {
+                    val t = v.toFrame.then(outer)
+                    if (zones.ups != null) {
+                        val x0 = ev.slotX.firstOrNull() ?: 0.0; val x1 = ev.slotX.lastOrNull() ?: 0.0
+                        if (zones.centerInUps(t.mapRect(IntRect(x0.toInt(), ev.yTop, x1.toInt() + 1, ev.yBottom + 1)))) { droppedUps++; continue }
+                    }
+                    w.evidence += LocatedEvidence(ev, fi, t)
+                }
                 w.measurements++
             }
         }
+
+        if (droppedUps > 0) log?.line("f$fi left out $droppedUps barcode readings in the UPS barcode area")
 
         // DataMatrix (and any barcode) on many crops: Reed-Solomon survives heavy damage. Only on
         // the sharpest few frames (the sharpest one alone in the lighter mode).
