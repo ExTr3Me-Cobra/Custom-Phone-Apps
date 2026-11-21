@@ -25,7 +25,7 @@ it to install.
    phones, if **Auto Blocker** stops the install, turn it off in Settings > Security and privacy >
    Auto Blocker, install, then turn it back on.
 
-**Updating instead of reinstalling:** once the four `LABELRESCUE_*` signing secrets (below) are
+**Updating instead of reinstalling:** once the `LABELRESCUE_KEYSTORE` signing secret (below) is
 set, every build's APK is signed with the app's own key, so a new build installs over the old one
 and keeps your history, settings and crops. Without the secrets, each build uses the build
 machine's throwaway debug key, and a newer build won't install over an older one ("App not
@@ -34,25 +34,22 @@ Export your history (History > Export) and training crops first if you want to k
 
 GitHub keeps artifacts for 90 days by default.
 
-### Signed release builds (optional)
+### Signing (one secret)
 
-The workflow's second job builds a signed release APK and AAB (artifact **LabelRescue-release**).
-It skips itself, with a notice, when the first two of these repository secrets are missing
-(Settings > Secrets and variables > Actions > **Secrets** tab, Repository secrets):
+Like the other apps in this repo, signing uses one repository secret, **`LABELRESCUE_KEYSTORE`**
+(Settings > Secrets and variables > Actions > **Secrets** tab, Repository secrets): the keystore
+file, base64-encoded. The keystore's password is the fixed `android` and its key is named
+`labelrescue`; the file itself is what's kept secret. With it set, every build is signed with the
+same key, so updates install over the old app, and the second job also builds a signed release
+APK and AAB (artifact **LabelRescue-release**). If the secret doesn't open with that password,
+the build says so and uses the throwaway debug key.
 
-| Secret | Value |
-|---|---|
-| `LABELRESCUE_KEYSTORE_BASE64` | the keystore file, base64-encoded |
-| `LABELRESCUE_KEYSTORE_PASSWORD` | keystore password |
-| `LABELRESCUE_KEY_ALIAS` | key alias (optional, default `labelrescue`) |
-| `LABELRESCUE_KEY_PASSWORD` | key password (optional, default: the keystore password) |
-
-Make a keystore once, and keep it safe. Every future update must be signed with the same key.
+Make the keystore once, and keep a copy somewhere safe:
 
 ```sh
-keytool -genkeypair -v -keystore labelrescue.keystore -alias labelrescue \
-  -keyalg RSA -keysize 2048 -validity 36500
-base64 -w0 labelrescue.keystore   # paste the output into LABELRESCUE_KEYSTORE_BASE64
+keytool -genkeypair -keystore labelrescue.keystore -storetype PKCS12 -alias labelrescue \
+  -keyalg RSA -keysize 2048 -validity 36500 -storepass android -keypass android -dname "CN=Label Rescue"
+base64 -w0 labelrescue.keystore   # paste the output into LABELRESCUE_KEYSTORE
 ```
 
 Never commit the keystore. `*.keystore` and `*.jks` are in `.gitignore`.

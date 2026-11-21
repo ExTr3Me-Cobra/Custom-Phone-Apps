@@ -33,23 +33,24 @@ jobs:
       - name: Unit tests
         run: ./gradlew --stacktrace :core:test :app:testDebugUnitTest
 
-      # Sign with the app's own key when the LABELRESCUE_* secrets are set (pushes only; pull
+      # Sign with the app's own key when the LABELRESCUE_KEYSTORE secret is set (pushes only; pull
       # requests from forks don't get secrets), so each build updates the installed app.
       - name: Build debug APK (and compile the instrumented benchmark)
         env:
-          KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE_BASE64 }}
-          LABELRESCUE_KEYSTORE_PASSWORD: ${{ secrets.LABELRESCUE_KEYSTORE_PASSWORD }}
-          LABELRESCUE_KEY_ALIAS: ${{ secrets.LABELRESCUE_KEY_ALIAS }}
-          LABELRESCUE_KEY_PASSWORD: ${{ secrets.LABELRESCUE_KEY_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE }}
         run: |
-          # Only the keystore and its password are required; the alias defaults to "labelrescue" and
-          # the key password to the keystore password (as in the keystore the README describes).
-          export LABELRESCUE_KEY_ALIAS="${LABELRESCUE_KEY_ALIAS:-labelrescue}"
-          export LABELRESCUE_KEY_PASSWORD="${LABELRESCUE_KEY_PASSWORD:-$LABELRESCUE_KEYSTORE_PASSWORD}"
-          echo "Signing secrets present: keystore=$([ -n "$KEYSTORE_BASE64" ] && echo yes || echo NO), password=$([ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ] && echo yes || echo NO)"
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ]; then
+          # One secret, LABELRESCUE_KEYSTORE: the keystore file, base64. Like the other apps in
+          # this repo, its password is the fixed "android" and the key is named "labelrescue":
+          # the keystore file itself is what's kept secret.
+          export LABELRESCUE_KEYSTORE_PASSWORD=android LABELRESCUE_KEY_PASSWORD=android LABELRESCUE_KEY_ALIAS=labelrescue
+          echo "LABELRESCUE_KEYSTORE secret visible to this build: $([ -n "$KEYSTORE_BASE64" ] && echo yes || echo NO)"
+          if [ -n "$KEYSTORE_BASE64" ]; then
             export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/app.keystore"
             echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
+            if ! keytool -list -keystore "$LABELRESCUE_KEYSTORE_FILE" -storepass android -alias labelrescue > /dev/null 2>&1; then
+              echo "::error title=LABELRESCUE_KEYSTORE doesn't open::The secret isn't a keystore with password 'android' and key 'labelrescue'. Paste the LABELRESCUE_KEYSTORE.txt contents from the README setup. This build uses the throwaway debug key."
+              rm -f "$LABELRESCUE_KEYSTORE_FILE"; unset LABELRESCUE_KEYSTORE_FILE
+            fi
             echo "Signed with the app's own key: installs as an update." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::notice title=Debug key::Signing secrets not set: this APK uses a throwaway key, so installing it needs an uninstall first."
@@ -98,19 +99,16 @@ jobs:
     name: Signed release APK + AAB
     runs-on: ubuntu-latest
     env:
-      KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE_BASE64 }}
-      LABELRESCUE_KEYSTORE_PASSWORD: ${{ secrets.LABELRESCUE_KEYSTORE_PASSWORD }}
-      LABELRESCUE_KEY_ALIAS: ${{ secrets.LABELRESCUE_KEY_ALIAS }}
-      LABELRESCUE_KEY_PASSWORD: ${{ secrets.LABELRESCUE_KEY_PASSWORD }}
+      KEYSTORE_BASE64: ${{ secrets.LABELRESCUE_KEYSTORE }}
     steps:
       - name: Check signing secrets
         id: secrets
         run: |
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$LABELRESCUE_KEYSTORE_PASSWORD" ]; then
+          if [ -n "$KEYSTORE_BASE64" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Release signing skipped::Add the LABELRESCUE_KEYSTORE_BASE64 and LABELRESCUE_KEYSTORE_PASSWORD repository secrets (Settings > Secrets and variables > Actions > Secrets) to build a signed release (see README)."
+            echo "::notice title=Release signing skipped::Add the LABELRESCUE_KEYSTORE repository secret (Settings > Secrets and variables > Actions > Secrets) to build a signed release (see README)."
             echo "Release signing secrets are not set, so the signed release was skipped. The debug APK is in the other job." >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -133,8 +131,7 @@ jobs:
       - name: Build signed APK and AAB
         if: steps.secrets.outputs.ready == 'true'
         run: |
-          export LABELRESCUE_KEY_ALIAS="${LABELRESCUE_KEY_ALIAS:-labelrescue}"
-          export LABELRESCUE_KEY_PASSWORD="${LABELRESCUE_KEY_PASSWORD:-$LABELRESCUE_KEYSTORE_PASSWORD}"
+          export LABELRESCUE_KEYSTORE_PASSWORD=android LABELRESCUE_KEY_PASSWORD=android LABELRESCUE_KEY_ALIAS=labelrescue
           export LABELRESCUE_KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
           echo "$KEYSTORE_BASE64" | base64 -d > "$LABELRESCUE_KEYSTORE_FILE"
           ./gradlew --stacktrace :app:assembleRelease :app:bundleRelease
