@@ -42,6 +42,30 @@ class CaptureGuideTest {
         assertTrue("label found", s.label != null)
     }
 
+    /** Like a real label: thick black rules across its full width, and a busy striped background. */
+    private fun busy(stripes: Boolean): GrayImage {
+        val f = frame(background = 95)
+        val g = CaptureGuide.DEFAULT_GUIDE.toPixels(W, H)
+        if (stripes) for (y in 0 until H) for (x in 0 until W) if (x !in g.left..g.right || y !in g.top..g.bottom) {
+            f[x, y] = if ((x + y) / 40 % 2 == 0) 230 else 70
+        }
+        for (frac in listOf(0.2, 0.35, 0.5, 0.85)) {
+            val y0 = g.top + (g.height * frac).toInt()
+            for (y in y0 until y0 + 8) for (x in g.left until g.right) f[x, y] = 20
+        }
+        return f
+    }
+
+    @Test fun rulesAcrossTheLabelAndBusyBackgroundStillLineUp() {
+        for (stripes in listOf(false, true)) {
+            val g = CaptureGuide()
+            g.evaluate(busy(stripes))
+            val s = g.evaluate(busy(stripes))
+            assertTrue("stripes=$stripes: ${s.message}", s.ready)
+            assertTrue("no region as big as the label", s.regions.none { (it.right - it.left) * (it.bottom - it.top) > 0.25f })
+        }
+    }
+
     @Test fun onAWhiteBoxTheBarcodeDecides() {
         val g = CaptureGuide()
         g.evaluate(frame(background = 225))

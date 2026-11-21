@@ -226,11 +226,21 @@ the real ML Kit OCR. It hasn't been run here, because this environment has no em
 Four corner marks frame a 4×6 in. label. Line the label's corners up with them. The burst is
 allowed once:
 
-* the label's paper fills the marks (checked when it stands out from the background, such as a
-  brown box; on a white box this check is skipped)
+* the label's paper fills the marks, as a hint: when the paper is clearly found (it stands out
+  from the background and is label-shaped, also with dark rules across it), the app says to move
+  closer, back or to the middle; on a white or busy background the barcode alone decides
 * a barcode inside the marks is wide enough for the right distance, straight, well lit and sharp
 
 After 8 seconds, **Capture anyway** appears.
+
+## Damaged-barcode examples
+
+With **Keep digit crops of confirmed labels** or **Learn from intact labels** on, the app also
+keeps a crop of a damaged 1D barcode together with its true number whenever that number is known
+while the barcode itself didn't decode: a 2D code read it, or you confirmed or pasted it. From
+the number, the exact bar pattern is known, so each damaged symbol is a labeled example of real
+damage. They're exported with the training crops (`barcode_examples/`, with `barcodes.csv`) and
+used to test, and later train, the damaged-barcode decoder.
 
 ## UPS packages delivered by USPS
 

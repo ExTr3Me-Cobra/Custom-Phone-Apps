@@ -54,6 +54,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun messageShown() { _message.value = null }
 
     private val crops by lazy { TrainingCrops(app) }
+    private val barcodeExamples by lazy { com.labelrescue.app.data.BarcodeExamples(app) }
+
+    /** Keep a damaged-barcode example when collecting training data is on (either setting). */
+    private fun keepBarcodeExample(tracking: String, out: RecoveryOutput?, truthFrom: String) {
+        out ?: return
+        val frames = _frames.value
+        viewModelScope.launch(Dispatchers.IO) {
+            val st = settings()
+            if (st.saveTrainingCrops || st.learnFromIntact) runCatching { barcodeExamples.save(tracking, out, frames, truthFrom) }
+        }
+    }
 
     // ---- Training report (one compact entry per scan, cleared after export) ----
     private val report by lazy { TrainingReportStore(app) }
@@ -110,7 +121,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // Trusted only when the barcode itself proved the number (learn mode saves those).
                 res = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value, trusted = false) }.getOrNull() }
             }
-            if (source == "photo") { scanConfirmed = tracking; writeReport() }
+            if (source == "photo") { scanConfirmed = tracking; writeReport(); keepBarcodeExample(tracking, out, "confirmed") }
             _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." + (res?.let { r ->
                 " ${r.saved} digit crops kept for retraining" +
                     (if (r.skipped > 0) ", ${r.skipped} skipped (no reader agreed with the digit)" else "") + "."
@@ -128,6 +139,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         currentLog?.line("USPS number pasted from the website: ${n.tracking}")
         scanPasted = n.tracking
         writeReport()
+        keepBarcodeExample(n.tracking, photoOutput, "pasted")
         val st = photo.state.value ?: return false
         if (st.format.trackingFormat != n.format.trackingFormat) return false
         val off = st.format.routingLength
@@ -153,13 +165,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportTrainingCrops(uri: Uri) {
         viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) { runCatching { crops.exportZip(getApplication(), uri) }.isSuccess }
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { crops.exportZip(getApplication(), uri, mapOf("barcode_examples" to barcodeExamples.files())) }.isSuccess
+            }
             _message.value = if (ok) "Training crops exported." else "Couldn't write the file."
         }
     }
 
     fun clearTrainingCrops() {
-        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear() }; loadSettings(); _message.value = "Training crops deleted." }
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
     }
 
     fun deleteConfirmed(id: Long) { viewModelScope.launch { db.confirmed().delete(id) } }
@@ -200,6 +214,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
         val quickScan: Boolean = true,
         val learnFromIntact: Boolean = false,
+        val barcodeCount: Int = 0,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
     val settingsUi: StateFlow<SettingsUi> = _settingsUi
@@ -213,7 +228,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun settingsUiFrom(st: Settings) = withContext(Dispatchers.IO) {
         SettingsUi(
             true, st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
-            st.quickScan, st.learnFromIntact,
+            st.quickScan, st.learnFromIntact, barcodeExamples.count(),
         )
     }
 
@@ -389,6 +404,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // Learn mode: an intact label's barcode proved the number, so its located printed
             // digits are saved right away as trusted training crops (no confirmation needed).
             val fd = out.fullDecode
+            // A 2D code (or another barcode) proved the number while the main 1D barcode didn't
+            // read: that barcode is a labeled example of real damage.
+            if (fd != null && !out.barcodeRead) keepBarcodeExample(fd.tracking, out, "2d-code")
             if (fd != null && out.locations.isNotEmpty() && settings().learnFromIntact) {
                 val same = withContext(Dispatchers.IO) { this@AppViewModel.crops.labelsFromSameShipper(fd.tracking) }
                 if (same >= LEARN_LABELS_PER_SHIPPER) {

@@ -118,6 +118,9 @@ class RecoveryPipeline(
             notes += "Full decode by ${f.by}; check digit valid."
             log?.line("FULL DECODE ${p.raw} by ${f.by} (check digit valid) -> tracking ${p.tracking}")
             val frame = frames.getOrNull(fi)
+            val area = frame?.let { mainBarcode(it)?.let { r -> Location(fi, r, Source.BARCODE) } }
+            val oneD = f.by.contains("code 128")
+            fun mark(o: RecoveryOutput) = o.also { it.barcodeArea = area; it.barcodeRead = oneD }
             if (opt.learnFromIntact && text != null && frame != null && fmt != TrackingFormat.S10) {
                 // Intact label: the barcode proved the number, so the printed digits are labeled
                 // training examples. Read and line them up against the known number.
@@ -125,12 +128,12 @@ class RecoveryPipeline(
                 val l = learnIntact(fi, frame, fmt, p.tracking)
                 notes += "Learn mode: ${l.locations.size} of ${fmt.length} printed digits located for training."
                 log?.line("learn from intact label: ${l.locations.size} digits located; reads: " + l.reads.joinToString(" | "))
-                return withUps(RecoveryOutput(
+                return mark(withUps(RecoveryOutput(
                     fmt, slots, mapOf(Source.OCR to l.ocr), p, f.by, p.zip, listOf(label, l.labelText).filter { it.isNotBlank() }.joinToString("\n"),
                     null, l.locations, stats.copy(millis = System.currentTimeMillis() - t0), notes, log, l.reads, l.privacy, fi,
-                ))
+                )))
             }
-            return withUps(RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log))
+            return mark(withUps(RecoveryOutput(fmt, slots, emptyMap(), p, f.by, p.zip, label, null, emptyMap(), stats.copy(millis = System.currentTimeMillis() - t0), notes, log)))
         }
         log?.section("Recovery")
         log?.line("frames: " + frames.joinToString { "${it.width}x${it.height}" })
@@ -211,6 +214,13 @@ class RecoveryPipeline(
             checkpoints += Checkpoint(results.size, r?.best?.tracking, r?.best?.confidence ?: 0.0)
         }
         out.framesUsed = results.size
+        // The damaged barcode the partial decoder read (else the widest barcode-shaped area found).
+        out.barcodeArea = out.partial?.let { p -> results.flatMap { it.evidence }.firstOrNull { it.ev === p.evidence } }?.let { le ->
+            val ev = le.ev
+            val x0 = ev.slotX.firstOrNull() ?: 0.0; val x1 = ev.slotX.lastOrNull() ?: 0.0
+            val r = IntRect((x0 - 12 * ev.moduleWidth).toInt(), ev.yTop - 6, (x1 + 26 * ev.moduleWidth).toInt(), ev.yBottom + 6)
+            Location(le.frame, le.toFrame.mapRect(r), Source.BARCODE_PARTIAL)
+        } ?: results.firstOrNull()?.let { w -> mainBarcode(work[w.frame])?.let { Location(w.frame, it, Source.BARCODE) } }
         out.framesStoppedEarly = stoppedEarly
         out.checkpoints = checkpoints
         log?.line("checkpoints: " + checkpoints.joinToString { "${it.frames}f=${it.top} ${(it.confidence * 100).toInt()}%" })
@@ -264,6 +274,14 @@ class RecoveryPipeline(
         val reads = same.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
         return Learned(locations, if (same.isNotEmpty()) Fusion.consensus(same, fmt) else emptyList(), reads, labelText,
             Redactor.blankBoxes(privacyLines, frame.width, frame.height))
+    }
+
+    /** The widest barcode-shaped horizontal area in [frame] (padded a little), or null. */
+    private fun mainBarcode(frame: GrayImage): IntRect? {
+        val area = frame.width.toDouble() * frame.height
+        return BarcodeLocator.locate(frame, 6).filter { r ->
+            !r.vertical && r.rect.width * r.rect.height.toDouble() <= 0.25 * area && r.rect.width >= 1.4 * r.rect.height
+        }.maxByOrNull { it.rect.width }?.rect
     }
 
     /** Ranked answer after the first [frames] processed frames (for early stop and the training report). */

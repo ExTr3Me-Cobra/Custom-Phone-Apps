@@ -71,15 +71,20 @@ fun SettingsScreen(
         }
         Text(
             "Stored only on this phone; nothing is uploaded. A digit is kept only if at least one reader (OCR, barcode or digit model) also read it that way, " +
-                "so misaligned or wrongly confirmed crops are skipped. Crops from an intact label (learn mode) are marked trusted. Review them before exporting.",
+                "so misaligned or wrongly confirmed crops are skipped. Crops from an intact label (learn mode) are marked trusted. Review them before exporting. " +
+                "With this or learn mode on, a damaged barcode is also kept with its true number whenever that's known (a 2D code read it, or you confirmed or pasted it): " +
+                "examples of real damage to improve the barcode decoder.",
             style = MaterialTheme.typography.bodySmall,
         )
         androidx.compose.material3.FilledTonalButton(onClick = onReviewCrops, enabled = ui.cropCount > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
             Text("Review ${ui.cropCount} crops")
         }
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.OutlinedButton(onClick = onExportCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Export ${ui.cropCount} crops") }
-            androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = ui.cropCount > 0, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Delete crops") }
+            val any = ui.cropCount > 0 || ui.barcodeCount > 0
+            androidx.compose.material3.OutlinedButton(onClick = onExportCrops, enabled = any, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                Text("Export ${ui.cropCount} crops" + if (ui.barcodeCount > 0) " + ${ui.barcodeCount} barcodes" else "")
+            }
+            androidx.compose.material3.OutlinedButton(onClick = onClearCrops, enabled = any, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Delete all") }
         }
         Text("Theme follows the system dark mode setting.", style = MaterialTheme.typography.bodySmall)
     }

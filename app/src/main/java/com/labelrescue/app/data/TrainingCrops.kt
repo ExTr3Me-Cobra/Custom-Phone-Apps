@@ -92,11 +92,17 @@ class TrainingCrops(ctx: Context) {
 
     private fun shipperKey(t: String): String? = com.labelrescue.core.usps.ImpbParser.parse(t)?.mailerId
 
-    fun exportZip(ctx: Context, uri: Uri) {
+    /** Digit crops in training_crops/, plus [extra] files (e.g. damaged-barcode examples) under their folder name. */
+    fun exportZip(ctx: Context, uri: Uri, extra: Map<String, List<File>> = emptyMap()) {
         ctx.contentResolver.openOutputStream(uri, "wt")!!.use { os ->
             ZipOutputStream(os).use { zip ->
                 for (f in dir.listFiles().orEmpty()) {
                     zip.putNextEntry(ZipEntry("training_crops/${f.name}"))
+                    f.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+                for ((folder, files) in extra) for (f in files) {
+                    zip.putNextEntry(ZipEntry("$folder/${f.name}"))
                     f.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
                 }

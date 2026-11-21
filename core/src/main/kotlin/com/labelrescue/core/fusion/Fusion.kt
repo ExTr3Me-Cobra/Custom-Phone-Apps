@@ -59,6 +59,10 @@ class RecoveryOutput(
 ) {
     /** How many frames were fully processed, whether the rest were skipped, and the answer at each checkpoint. */
     var framesUsed: Int = 0
+    /** Where the main 1D barcode is (frame and box), for saving damaged-barcode examples. */
+    var barcodeArea: Location? = null
+    /** Whether that 1D barcode itself decoded in full (an intact one teaches little). */
+    var barcodeRead: Boolean = false
     /** UPS 1Z numbers on the label (barcode, MaxiCode or printed), for a UPS → USPS lookup. */
     var ups: List<com.labelrescue.core.ups.UpsNumber> = emptyList()
     var framesStoppedEarly: Boolean = false

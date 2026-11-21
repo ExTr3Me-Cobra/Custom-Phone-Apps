@@ -50,7 +50,14 @@ class CaptureGuide(
     @Synchronized
     fun evaluate(frame: GrayImage): Status {
         val small = frame.limited(640)
-        val all = BarcodeLocator.locate(small, 6)
+        val area = small.width.toDouble() * small.height
+        // Barcode-shaped areas only: the locator can also return a merged area as big as the label
+        // (several codes plus the gaps between them), which is no use for aiming or focus.
+        val all = BarcodeLocator.locate(small, 8).filter { r ->
+            val w = r.rect.width.toDouble(); val h = r.rect.height.toDouble()
+            val along = if (r.vertical) h else w; val across = if (r.vertical) w else h
+            w * h <= 0.25 * area && along >= 1.4 * across
+        }
         val st = evaluate(small, all.filter { !it.vertical })
         val sx = small.width.toDouble(); val sy = small.height.toDouble()
         return st.copy(regions = all.map { r -> NormRect((r.rect.left / sx).toFloat(), (r.rect.top / sy).toFloat(), (r.rect.right / sx).toFloat(), (r.rect.bottom / sy).toFloat()) })
@@ -61,21 +68,28 @@ class CaptureGuide(
         val g = guide.toPixels(small.width, small.height)
         fun norm(r: IntRect) = NormRect((r.left / sx).toFloat(), (r.top / sy).toFloat(), (r.right / sx).toFloat(), (r.bottom / sy).toFloat())
 
+        // The paper's edges are advice, never a blocker: on busy backgrounds they can't always
+        // be found, and labels come in other sizes than 4x6. The barcode decides.
         val paper = paperRect(small)
         val paperNorm = paper?.let(::norm)
-        // Paper check first: it says which way to move even before a barcode is readable.
-        if (paper != null) {
-            val wf = paper.width.toDouble() / g.width; val hf = paper.height.toDouble() / g.height
+        val paperSmall = paper != null && max(paper.width.toDouble() / g.width, paper.height.toDouble() / g.height) < 0.75
+        val paperOff = paper != null && run {
             val dx = ((paper.left + paper.right) - (g.left + g.right)) / 2.0 / g.width
             val dy = ((paper.top + paper.bottom) - (g.top + g.bottom)) / 2.0 / g.height
-            when {
-                max(wf, hf) < 0.8 -> return notReady(Issue.TOO_SMALL, "Move closer: line the label's corners up with the 4 marks", null, paperNorm)
-                abs(dx) > 0.12 || abs(dy) > 0.12 -> return notReady(Issue.OFF_CENTER, "Move the label to the middle: its corners should meet the 4 marks", null, paperNorm)
-            }
+            abs(dx) > 0.2 || abs(dy) > 0.2
         }
+        val paperTooBig = paper != null && paper.width > g.width * 1.12 && paper.height > g.height * 1.12
+
         val inside = regions.filter { overlap(it.rect, g) >= 0.7 }
         val best = inside.maxByOrNull { it.rect.width }
-            ?: return notReady(Issue.NO_BARCODE, "Line the label's 4 corners up with the corner marks", null, paperNorm)
+        if (best == null) {
+            val (issue, msg) = when {
+                paperSmall -> Issue.TOO_SMALL to "Move closer: line the label's corners up with the 4 marks"
+                paperOff -> Issue.OFF_CENTER to "Move the label to the middle: its corners should meet the 4 marks"
+                else -> Issue.NO_BARCODE to "Line the label's 4 corners up with the corner marks"
+            }
+            return notReady(issue, msg, null, paperNorm)
+        }
         val r = best.rect
         val crop = small.crop(r.intersect(IntRect(0, 0, small.width, small.height)))
         val tilt = Filters.estimateSkew(crop)
@@ -87,13 +101,15 @@ class CaptureGuide(
 
         // On a 4×6 label the main barcode spans roughly 45-95% of the label's width.
         val widthFrac = r.width.toDouble() / g.width
-        val paperTooBig = paper != null && (paper.width > g.width * 1.12 && paper.height > g.height * 1.12)
-        val aligned = widthFrac >= MIN_BARCODE_WIDTH && !paperTooBig && abs(tilt) <= maxTiltDegrees
+        // A label found clearly smaller than the marks: closer gives a sharper read.
+        val tooFar = widthFrac < MIN_BARCODE_WIDTH || paperSmall
+        val aligned = !tooFar && !paperTooBig && !paperOff && abs(tilt) <= maxTiltDegrees
         val focused = sharp >= minSharpness && sharp >= 0.8 * peak
 
         val (issue, msg) = when {
+            tooFar -> Issue.TOO_SMALL to "Move closer: line the label's corners up with the 4 marks"
+            paperOff -> Issue.OFF_CENTER to "Move the label to the middle: its corners should meet the 4 marks"
             paperTooBig -> Issue.TOO_CLOSE to "Move back: the whole label should fit inside the 4 marks"
-            widthFrac < MIN_BARCODE_WIDTH -> Issue.TOO_SMALL to "Move closer: line the label's corners up with the 4 marks"
             abs(tilt) > maxTiltDegrees -> Issue.TILTED to "Straighten the phone (label tilted ${abs(tilt).toInt()}°)"
             mean < 45 -> Issue.TOO_DARK to "More light needed (try the torch)"
             mean > 238 -> Issue.GLARE to "Too much glare: tilt the phone slightly"
@@ -108,24 +124,40 @@ class CaptureGuide(
     }
 
     /**
-     * The label's paper: the largest bright area, if it is clearly brighter than its surroundings
-     * (brown box, dark table). Null when the background is as bright as the label.
+     * The label's paper: the largest bright area once thin dark features (ruled lines, text,
+     * barcode bars) are closed over, if it's clearly brighter than its surroundings and shaped like
+     * a label (portrait, mostly filling its box). Null when it can't be told apart: a white or
+     * striped background, or paper cut into pieces.
      */
     private fun paperRect(img: GrayImage): IntRect? {
         val s = img.limited(160)
-        val hist = IntArray(256)
-        for (b in s.data) hist[b.toInt() and 0xFF]++
-        val t = Filters.otsu(IntArray(s.data.size) { s.data[it].toInt() and 0xFF })
-        // Need two clearly different populations: paper and background.
-        var lo = 0.0; var nlo = 0; var hi = 0.0; var nhi = 0
-        for (v in 0..255) if (v <= t) { lo += v.toDouble() * hist[v]; nlo += hist[v] } else { hi += v.toDouble() * hist[v]; nhi += hist[v] }
-        if (nlo == 0 || nhi == 0 || hi / nhi - lo / nlo < 40) return null
         val w = s.width; val h = s.height
+        val v = IntArray(w * h) { s.data[it].toInt() and 0xFF }
+        val t = Filters.otsu(v)
+        // Two clearly different populations: paper and background.
+        var lo = 0.0; var nlo = 0; var hi = 0.0; var nhi = 0
+        for (x in v) if (x <= t) { lo += x; nlo++ } else { hi += x; nhi++ }
+        if (nlo == 0 || nhi == 0 || hi / nhi - lo / nlo < 40) return null
+        // Closing of the bright mask (dilate, then erode, radius 2): ruled lines and text on the
+        // label no longer split it into pieces.
+        var mask = BooleanArray(w * h) { v[it] > t }
+        fun morph(m: BooleanArray, dilate: Boolean, r: Int): BooleanArray = BooleanArray(w * h) { p ->
+            val x = p % w; val y = p / w
+            var hit = !dilate
+            loop@ for (dy in -r..r) for (dx in -r..r) {
+                val xx = x + dx; val yy = y + dy
+                val b = if (xx in 0 until w && yy in 0 until h) m[yy * w + xx] else !dilate
+                if (dilate && b) { hit = true; break@loop }
+                if (!dilate && !b) { hit = false; break@loop }
+            }
+            hit
+        }
+        mask = morph(morph(mask, true, 2), false, 2)
         val seen = BooleanArray(w * h)
         val stack = IntArray(w * h)
         var best: IntArray? = null; var bestArea = 0
         for (start in 0 until w * h) {
-            if (seen[start] || (s.data[start].toInt() and 0xFF) <= t) continue
+            if (seen[start] || !mask[start]) continue
             var sp = 0; stack[sp++] = start; seen[start] = true
             var l = w; var tp = h; var r = 0; var b = 0; var area = 0
             while (sp > 0) {
@@ -133,15 +165,19 @@ class CaptureGuide(
                 area++
                 if (x < l) l = x; if (x > r) r = x; if (y < tp) tp = y; if (y > b) b = y
                 for (q in intArrayOf(if (x > 0) p - 1 else -1, if (x < w - 1) p + 1 else -1, if (y > 0) p - w else -1, if (y < h - 1) p + w else -1)) {
-                    if (q < 0 || seen[q] || (s.data[q].toInt() and 0xFF) <= t) continue
+                    if (q < 0 || seen[q] || !mask[q]) continue
                     seen[q] = true; stack[sp++] = q
                 }
             }
             if (area > bestArea) { bestArea = area; best = intArrayOf(l, tp, r + 1, b + 1) }
         }
         val bb = best ?: return null
-        // Too small to be the label, or it touches every edge (background as bright as paper).
-        if (bestArea < w * h * 0.12) return null
+        val bw = bb[2] - bb[0]; val bh = bb[3] - bb[1]
+        // Shaped like a label: big enough, fills most of its box, portrait (4x6 is 1.5).
+        if (bestArea < w * h * 0.15) return null
+        if (bestArea < 0.6 * bw * bh) return null
+        val aspect = bh.toDouble() / max(1, bw)
+        if (aspect < 1.05 || aspect > 2.3) return null
         if (bb[0] <= 1 && bb[1] <= 1 && bb[2] >= w - 1 && bb[3] >= h - 1) return null
         val f = img.width.toDouble() / w
         return IntRect((bb[0] * f).toInt(), (bb[1] * f).toInt(), min(img.width, (bb[2] * f).toInt()), min(img.height, (bb[3] * f).toInt()))
