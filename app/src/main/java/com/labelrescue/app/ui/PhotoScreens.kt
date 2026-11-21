@@ -72,7 +72,7 @@ fun PhotoResultsScreen(
             DiagnosticsCard(diagnosticLog)
             return@Column
         }
-        state.photo?.output?.let { EvidenceSummary(it) }
+        // (How it was read, frame counts and timing are in the diagnostic log, not on screen.)
         state.photo?.output?.let { out ->
             // How sure the USPS number is: a full decode is certain; otherwise the top candidate's share.
             val uspsConf = if (out.fullDecode != null) 1.0 else state.ranked?.best?.confidence

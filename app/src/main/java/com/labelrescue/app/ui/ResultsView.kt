@@ -196,7 +196,8 @@ fun ResultsPanel(
             }
         }
 
-        ranked?.takeIf { it.candidates.size > 1 }?.let { r ->
+        // Also for a single, certain number: a look at USPS.com confirms it's the right package.
+        ranked?.takeIf { it.candidates.isNotEmpty() }?.let { r ->
             var launched by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             CheckOnUspsButton(r.candidates.size) { launched = true; openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
             actions.onUseNumber?.let { use -> PasteNumberPanel(state, listenAfterReturn = launched, onUse = use) }
@@ -460,7 +461,7 @@ fun CheckOnUspsButton(count: Int, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Check all guesses on USPS.com", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(if (count == 1) "Check on USPS.com" else "Check all guesses on USPS.com", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (count >= USPS_COM_MAX) Text("top $USPS_COM_MAX, the most USPS.com takes at once", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
         }
     }
