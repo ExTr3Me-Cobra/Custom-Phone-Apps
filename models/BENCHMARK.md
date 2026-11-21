@@ -4,10 +4,10 @@ Synthetic damaged labels (rendered, physically damaged, photographed twice), ZXi
 
 | Configuration | Top-1 | Top-3 | Fixed | Broke | Kept |
 |---|---|---|---|---|---|
-| No models | 60/96 | 64/96 | | | |
-| + digit_classifier | 76/96 | 78/96 | 16 | 0 | yes |
-| + restore | 61/96 | 64/96 | 2 | 1 | no |
-| + region_detector | 59/96 | 60/96 | 1 | 2 | no |
-| Kept models together | 76/96 | 78/96 | | | |
+| No models | 65/96 | 70/96 | | | |
+| + digit_classifier | 78/96 | 80/96 | 13 | 0 | yes |
+| + restore | 63/96 | 68/96 | 0 | 2 | no |
+| + region_detector | 67/96 | 70/96 | 3 | 1 | no |
+| Kept models together | 78/96 | 80/96 | | | |
 
 Rule: keep if (cases fixed - cases broken) >= 3 (3% of cases, at least 2) and neither top-1 nor top-3 is lower than without it.
