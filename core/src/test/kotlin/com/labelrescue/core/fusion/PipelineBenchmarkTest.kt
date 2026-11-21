@@ -78,36 +78,41 @@ class PipelineBenchmarkTest {
         return img
     }
 
+    /** One case's outcome: (full decode, top-1, top-5, barcode-only top-1). */
+    private fun runCase(n: Int, truth: String): BooleanArray {
+        val engine = CandidateEngine()
+        val level = 1 + n % 3
+        val frames = List(2) { damaged(truth, Random(n * 31 + it), level) }
+        val out = RecoveryPipeline(listOf(ZxingDecoder()), FakeOcr(truth, Random(n), 0.12, 0.08)).run(frames)
+        if (out.fullDecode != null) {
+            assertEquals(truth, out.fullDecode!!.tracking)
+            return booleanArrayOf(true, true, true, true)
+        }
+        val f = out.format ?: return BooleanArray(4)
+        val nums = engine.rank(f, out.slots, out.prior(HistoryStats.EMPTY), out.exactEvidence()).candidates.map { it.tracking }
+        // Barcode evidence alone (no OCR).
+        val barOnly = RecoveryPipeline(listOf(ZxingDecoder()), null).run(frames)
+        val barTop1 = barOnly.fullDecode?.tracking == truth || barOnly.format?.let { bf ->
+            engine.rank(bf, barOnly.slots, barOnly.prior(HistoryStats.EMPTY), barOnly.exactEvidence()).best?.tracking == truth
+        } == true
+        return booleanArrayOf(false, nums.firstOrNull() == truth, truth in nums.take(5), barTop1)
+    }
+
     @Test fun recoveryRate() {
         val rnd = Random(2024)
-        val engine = CandidateEngine()
         val cases = 24
-        var full = 0; var top1 = 0; var top5 = 0; var barcodeOnlyTop1 = 0
-        for (n in 0 until cases) {
-            val truth = randomTracking(rnd)
-            val level = 1 + n % 3
-            val frames = List(2) { damaged(truth, Random(n * 31 + it), level) }
-            val pipeline = RecoveryPipeline(listOf(ZxingDecoder()), FakeOcr(truth, Random(n), 0.12, 0.08))
-            val out = pipeline.run(frames)
-            if (out.fullDecode != null) {
-                full++; top1++; top5++
-                assertEquals(truth, out.fullDecode!!.tracking)
-                barcodeOnlyTop1++
-                continue
-            }
-            val f = out.format ?: continue
-            val ranked = engine.rank(f, out.slots, out.prior(HistoryStats.EMPTY), out.exactEvidence())
-            val nums = ranked.candidates.map { it.tracking }
-            if (nums.firstOrNull() == truth) top1++
-            if (truth in nums.take(5)) top5++
-            // Barcode evidence alone (no OCR).
-            val barOnly = RecoveryPipeline(listOf(ZxingDecoder()), null).run(frames)
-            if (barOnly.fullDecode?.tracking == truth) barcodeOnlyTop1++
-            else if (barOnly.format != null) {
-                val r = engine.rank(barOnly.format!!, barOnly.slots, barOnly.prior(HistoryStats.EMPTY), barOnly.exactEvidence())
-                if (r.best?.tracking == truth) barcodeOnlyTop1++
-            }
+        // Truths drawn up front in order, so the cases are the same however they're scheduled.
+        val truths = List(cases) { randomTracking(rnd) }
+        // Cases run side by side (each is independent and seeded): the benchmark was most of the
+        // unit-test time.
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors().coerceIn(2, 4))
+        val results = try {
+            truths.mapIndexed { n, t -> pool.submit<BooleanArray> { runCase(n, t) } }.map { it.get() }
+        } finally {
+            pool.shutdown()
         }
+        val full = results.count { it[0] }; val top1 = results.count { it[1] }
+        val top5 = results.count { it[2] }; val barcodeOnlyTop1 = results.count { it[3] }
         println("BENCHMARK synthetic damaged labels: cases=$cases fullDecode=$full top1=$top1 (${100 * top1 / cases}%) top5=$top5 (${100 * top5 / cases}%) barcodeOnlyTop1=$barcodeOnlyTop1")
         assertTrue("top-1 recovery ${top1}/$cases", top1 >= cases * 0.75)
         assertTrue("top-5 recovery ${top5}/$cases", top5 >= cases * 0.9)

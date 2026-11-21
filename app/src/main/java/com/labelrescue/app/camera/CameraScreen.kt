@@ -1,5 +1,6 @@
 package com.labelrescue.app.camera
 
+import com.labelrescue.app.ui.AppIcons
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.SystemClock
@@ -35,10 +36,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -288,14 +285,14 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
                 FilledTonalIconButton(
                     onClick = { torch = !torch; camera?.cameraControl?.enableTorch(torch) },
                     modifier = Modifier.size(64.dp),
-                ) { Icon(if (torch) Icons.Default.FlashOn else Icons.Default.FlashOff, "Torch") }
+                ) { Icon(if (torch) AppIcons.FlashOn else AppIcons.FlashOff, "Torch") }
                 Spacer(Modifier.width(12.dp))
                 Button(
                     onClick = { startBurst() },
                     enabled = !burstRunning && ready,
                     modifier = Modifier.weight(1f).heightIn(min = 64.dp),
                 ) {
-                    Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(8.dp))
+                    Icon(AppIcons.CameraAlt, null); Spacer(Modifier.width(8.dp))
                     Text(
                         when {
                             burstRunning -> "Capturing $collected…"

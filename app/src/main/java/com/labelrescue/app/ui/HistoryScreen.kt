@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
@@ -73,7 +71,7 @@ fun HistoryScreen(
                         Text(TrackingFormat.grouped(n.tracking), fontFamily = FontFamily.Monospace, fontSize = 17.sp)
                         Text("${DateFormat.getDateTimeInstance().format(Date(n.confirmedAt))} · ${n.source}", style = MaterialTheme.typography.labelSmall)
                     }
-                    IconButton(onClick = { onDelete(n.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Icon(Icons.Default.Delete, "Delete") }
+                    IconButton(onClick = { onDelete(n.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Icon(AppIcons.Delete, "Delete") }
                 }
             }
         }

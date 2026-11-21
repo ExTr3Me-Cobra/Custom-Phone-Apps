@@ -17,6 +17,9 @@ android {
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "0.1.$versionCode"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Phones only: x86/x86_64 native libraries (ML Kit, LiteRT, zxing-cpp) serve emulators
+        // and add about 40 MB to every APK.
+        ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -105,7 +108,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons)
     implementation(libs.camera.core)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)

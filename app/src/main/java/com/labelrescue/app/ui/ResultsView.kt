@@ -30,11 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -178,14 +173,14 @@ fun ResultsPanel(
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = { copy(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
-                Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Copy")
+                Icon(AppIcons.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Copy")
             }
             FilledTonalButton(onClick = { share(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
-                Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
+                Icon(AppIcons.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
             }
             actions.onConfirm?.let { confirm ->
                 Button(onClick = { confirm(cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
-                    Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp)); Text("Mark as confirmed")
+                    Icon(AppIcons.Check, null); Spacer(Modifier.width(6.dp)); Text("Mark as confirmed")
                 }
             }
         }

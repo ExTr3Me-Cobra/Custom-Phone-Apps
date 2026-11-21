@@ -11,12 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -46,12 +40,12 @@ fun HomeScreen(
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.size(4.dp))
-        onScan?.let { BigButton("Scan label (burst)", Icons.Default.CameraAlt, primary = true, onClick = it) }
-        onImport?.let { BigButton("Import photos", Icons.Default.PhotoLibrary, onClick = it) }
-        BigButton("Type digits", Icons.Default.Keyboard, onClick = onManual)
+        onScan?.let { BigButton("Scan label (burst)", AppIcons.CameraAlt, primary = true, onClick = it) }
+        onImport?.let { BigButton("Import photos", AppIcons.PhotoLibrary, onClick = it) }
+        BigButton("Type digits", AppIcons.Keyboard, onClick = onManual)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            onHistory?.let { BigButton("History", Icons.Default.History, Modifier.weight(1f), onClick = it) }
-            onSettings?.let { BigButton("Settings", Icons.Default.Settings, Modifier.weight(1f), onClick = it) }
+            onHistory?.let { BigButton("History", AppIcons.History, Modifier.weight(1f), onClick = it) }
+            onSettings?.let { BigButton("Settings", AppIcons.Settings, Modifier.weight(1f), onClick = it) }
         }
     }
 }
