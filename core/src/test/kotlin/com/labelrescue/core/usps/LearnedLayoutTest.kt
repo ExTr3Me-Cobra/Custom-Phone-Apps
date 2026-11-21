@@ -53,4 +53,13 @@ class LearnedLayoutTest {
         val one = LearnedLayout(LayoutSample.fromLabel(a, bar, null, "x"))
         assertNull(one.area(LayoutSample.Target.USPS, LayoutSample.Anchor.NUMBER, a.number!!))
     }
+
+    @Test
+    fun misreadAnchorSamplesAreDropped() {
+        // From a real export: the barcode 25-31 line heights below its "number line" (an account ID was taken for it).
+        val bad = LayoutSample.decode("USPS|NUMBER|-1.167|1.251|25.345|31.448|301093")!!
+        val good = LayoutSample.decode("USPS|NUMBER|-0.684|1.376|-6.061|0.788|896840")!!
+        assertTrue(!bad.plausible && good.plausible)
+        assertEquals(1, LearnedLayout(listOf(bad, good)).size)
+    }
 }

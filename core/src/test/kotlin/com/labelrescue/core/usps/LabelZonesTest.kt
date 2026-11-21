@@ -51,4 +51,19 @@ class LabelZonesTest {
         assertNotNull(z.usps)
         assertFalse(z.inUps(IntRect(220, 950, 860, 1120)))
     }
+
+    @Test
+    fun accountIdAboveIsNotTheNumberLine() {
+        val lines = listOf(
+            line("D63XXX14950392", 650, 40, 1000),
+            line("USPS TRACKING #", 300, 900, 600),
+            line("9434 6501 0615 1175 671291", 220, 1150, 860),
+        )
+        val boxes = listOf(IntRect(650, 40, 1000, 64), IntRect(220, 1150, 860, 1174))
+        val a = LabelZones.anchors(lines, boxes)
+        assertTrue(a.number == IntRect(220, 1150, 860, 1174))
+        // Even without the text matching (number misread), the line under USPS TRACKING # wins.
+        val misread = listOf(lines[0], lines[1], line("9434 65O1 O6l5 ll75 67l29l", 220, 1150, 860))
+        assertTrue(LabelZones.anchors(misread, boxes).number == IntRect(220, 1150, 860, 1174))
+    }
 }

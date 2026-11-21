@@ -20,6 +20,16 @@ data class LayoutSample(
     enum class Target { USPS, UPS }
     enum class Anchor { NUMBER, USPS_LINE, UPS_LINE }
 
+    /**
+     * Where a barcode can be relative to its anchor: the USPS barcode sits above the number line
+     * and below "USPS TRACKING #", the UPS one below its 1Z line. Anything else came from a
+     * misread anchor (another line taken for it) and is not used.
+     */
+    val plausible: Boolean get() = right - left in 0.3..4.0 && bottom - top in 1.0..40.0 && when (anchor) {
+        Anchor.NUMBER -> bottom in -25.0..2.0 && top < 0
+        Anchor.USPS_LINE, Anchor.UPS_LINE -> top in -2.0..6.0 && bottom > 1.0
+    }
+
     fun encode(): String = listOf(target, anchor, f(left), f(right), f(top), f(bottom), shipper.filter { it.isLetterOrDigit() }).joinToString("|")
 
     /** Where this sample puts the barcode, for an anchor at [a]. */
@@ -42,8 +52,7 @@ data class LayoutSample(
             val w = a.width.toDouble(); val h = a.height.toDouble()
             val s = LayoutSample(target, anchor, (bar.left - a.left) / w, (bar.right - a.left) / w, (bar.top - a.top) / h, (bar.bottom - a.top) / h, shipper)
             // Implausible pairings (an anchor read on the wrong line) are not learned.
-            if (s.right - s.left !in 0.3..4.0 || s.bottom - s.top !in 1.0..40.0 || kotlin.math.abs(s.top) > 40) return null
-            return s
+            return s.takeIf { it.plausible }
         }
 
         /** The samples one intact label teaches: each barcode found, against each anchor found. */
@@ -62,7 +71,7 @@ data class LayoutSample(
 /** What the app learned about barcode positions (see [LayoutSample]). */
 class LearnedLayout(samples: List<LayoutSample>) {
     /** At most [PER_SHIPPER] samples per shipper and kind, most recent last, so one shipper can't dominate. */
-    val samples: List<LayoutSample> = samples.groupBy { Triple(it.target, it.anchor, it.shipper) }.values.flatMap { it.takeLast(PER_SHIPPER) }
+    val samples: List<LayoutSample> = samples.filter { it.plausible }.groupBy { Triple(it.target, it.anchor, it.shipper) }.values.flatMap { it.takeLast(PER_SHIPPER) }
 
     val size: Int get() = samples.size
 

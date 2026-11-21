@@ -47,7 +47,17 @@ data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolea
             val upsLine = boxed.filter { (t, _) -> "USPS" !in t && UPS_LINE.containsMatchIn(t) }.minByOrNull { it.second.top }?.second
             val uspsLine = boxed.filter { (t, _) -> USPS_TRACKING.containsMatchIn(t) && !UPS_LINE.containsMatchIn(t) }
                 .maxByOrNull { it.second.top }?.second
-            val number = numberLines.filter { upsLine == null || it.top > upsLine.bottom }.minByOrNull { it.top }
+            // The USPS number line: a line that reads like one (18+ digits, from 9), else the number-
+            // like line nearest below "USPS TRACKING #", else the first one below the UPS block.
+            // (Not just the topmost: account IDs like Stamps.com's sit higher up on the label.)
+            val below = numberLines.filter { upsLine == null || it.top > upsLine.bottom }
+            val readsLikeOne = boxed.filter { (t, b) ->
+                val d = t.filter { it.isDigit() }
+                d.length >= 18 && d[0] == '9' && (upsLine == null || b.top > upsLine.bottom)
+            }.map { it.second }
+            val number = readsLikeOne.maxByOrNull { it.top }
+                ?: uspsLine?.let { u -> below.filter { it.top > u.bottom }.minByOrNull { it.top } }
+                ?: below.minByOrNull { it.top }
             return Anchors(upsLine, uspsLine, number)
         }
 
