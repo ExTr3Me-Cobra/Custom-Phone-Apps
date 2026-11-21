@@ -4,7 +4,7 @@ import com.labelrescue.core.candidates.RankResult
 import com.labelrescue.core.candidates.SlotDist
 import com.labelrescue.core.usps.ServiceHints
 import com.labelrescue.core.usps.TrackingFormat
-import com.labelrescue.core.verify.LabelContext
+import com.labelrescue.core.usps.LabelContext
 
 /**
  * One compact entry per scan, for the "send me photos and I'll check them" training loop: what
@@ -20,7 +20,6 @@ object TrainingReport {
         out: RecoveryOutput,
         ranked: RankResult?,
         confirmed: String?,
-        verification: Map<String, String> = emptyMap(),
     ): String {
         val sb = StringBuilder()
         sb.append("=== Scan $id · $time\n")
@@ -46,7 +45,6 @@ object TrainingReport {
             sb.append("app reading ($f), top candidates:\n")
             for ((i, c) in ranked.candidates.take(5).withIndex()) {
                 sb.append("  ${i + 1}. ${TrackingFormat.grouped(c.tracking)}  ${"%.0f".format(c.confidence * 100)}%")
-                verification[c.tracking]?.let { sb.append("  [USPS: $it]") }
                 sb.append('\n')
             }
         }

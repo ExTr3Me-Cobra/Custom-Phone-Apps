@@ -83,8 +83,8 @@ uploaded. Safeguards:
   (ML Kit, PaddleOCR, the barcode or the digit model, as its best guess or with ≥ 30%). If every
   reader saw something else, the crop is probably of the wrong spot, or the confirmation is
   wrong, so it's skipped.
-* **Trusted:** crops of a number USPS confirmed (online verification) are marked trusted, also
-  when the confirmation comes after saving.
+* **Trusted:** only crops from an intact label, whose barcode proved the number (learn mode
+  below), are marked trusted.
 * **Review:** Settings > **Review crops** shows every crop with its digit. Tap one that's wrong
   to delete it. You can also delete all untrusted crops.
 

@@ -8,7 +8,7 @@ import com.labelrescue.core.ml.NetRunner
 import com.labelrescue.core.ml.RegionModel
 import com.labelrescue.core.ml.RestoreModel
 import com.labelrescue.core.ocr.PaddleLineRecognizer
-import com.labelrescue.core.verify.Json
+import com.labelrescue.core.util.Json
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate

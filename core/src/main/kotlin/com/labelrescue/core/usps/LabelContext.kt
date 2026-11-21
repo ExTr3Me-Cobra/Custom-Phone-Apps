@@ -1,12 +1,11 @@
-package com.labelrescue.core.verify
+package com.labelrescue.core.usps
 
-import com.labelrescue.core.usps.ServiceHints
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 /**
- * What the label itself says, used to decide whether a USPS record is really this package.
- * The user confirms or edits these before verification, since they drive the match.
+ * What the label itself says: destination and origin ZIPs, mail class and date.
+ * Read from OCR text, for the training report and the ranking hints.
  */
 data class LabelContext(
     val destinationZip: String? = null,

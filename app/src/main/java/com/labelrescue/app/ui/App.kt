@@ -61,15 +61,10 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
     LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
-    val manualV by vm.manualVerify.state.collectAsStateWithLifecycle()
     val reportCount by vm.reportCount.collectAsStateWithLifecycle()
     val reportPhoto by vm.reportPhoto.collectAsStateWithLifecycle()
-    val upsState by vm.ups.state.collectAsStateWithLifecycle()
     val reportPhotos by vm.reportPhotos.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.refreshReportCount() }
-    val photoV by vm.photoVerify.state.collectAsStateWithLifecycle()
-    fun verifyActions(c: com.labelrescue.app.verify.VerificationController, s: com.labelrescue.app.verify.VerificationController.UiState) =
-        VerifyActions(s, c::askContext, c::confirmContext, c::dismissContext, c::cancel)
 
     Scaffold(
         topBar = {
@@ -96,7 +91,6 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.manual::pick, vm.manual::unpick, vm.manual::select,
                             onConfirm = { vm.confirm(it, "manual") },
-                            verify = verifyActions(vm.manualVerify, manualV),
                         ),
                     )
                 }
@@ -129,11 +123,10 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 Screen.SETTINGS -> {
                     val ui by vm.settingsUi.collectAsStateWithLifecycle()
                     SettingsScreen(
-                        ui, vm::saveSettings, vm::clearVerificationCache, vm::setSaveCrops,
+                        ui, vm::setSaveCrops,
                         { cropExporter.launch("label-rescue-digit-crops.zip") }, vm::clearTrainingCrops,
                         onReviewCrops = { screen = Screen.CROPS },
                         onQuickScan = vm::setQuickScan,
-                        onSaveUps = vm::saveUpsSettings,
                         onLearnFromIntact = vm::setLearnFromIntact,
                     )
                 }
@@ -150,7 +143,6 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ResultActions(
                             vm.photo::pick, vm.photo::unpick, vm.photo::select,
                             onConfirm = { vm.confirm(it, "photo") },
-                            verify = verifyActions(vm.photoVerify, photoV),
                         ),
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
@@ -159,9 +151,6 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         takeReport = vm::takeTrainingReport,
                         reportPhotos = reportPhotos,
                         reportPhoto = reportPhoto,
-                        ups = upsState,
-                        onUseUspsNumber = { vm.confirm(it, "ups") },
-                        onRetryUps = vm.ups::retry,
                     )
                 }
             }

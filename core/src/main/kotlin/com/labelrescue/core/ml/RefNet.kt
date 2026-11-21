@@ -1,6 +1,6 @@
 package com.labelrescue.core.ml
 
-import com.labelrescue.core.verify.Json
+import com.labelrescue.core.util.Json
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

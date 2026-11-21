@@ -18,7 +18,7 @@ import com.labelrescue.core.ocr.OcrSymbol
 import com.labelrescue.core.ocr.TextRecognizer
 import com.labelrescue.core.synth.Synth
 import com.labelrescue.core.usps.TrackingFormat
-import com.labelrescue.core.verify.Json
+import com.labelrescue.core.util.Json
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.max

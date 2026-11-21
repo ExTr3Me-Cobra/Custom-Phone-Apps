@@ -2,7 +2,7 @@ package com.labelrescue.mltools
 
 import com.labelrescue.core.ml.CharCrop
 import com.labelrescue.core.ml.RefNet
-import com.labelrescue.core.verify.Json
+import com.labelrescue.core.util.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue

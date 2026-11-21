@@ -1,4 +1,4 @@
-package com.labelrescue.core.verify
+package com.labelrescue.core.util
 
 /**
  * Minimal JSON reader/writer (objects → Map, arrays → List, numbers → Double), so the core

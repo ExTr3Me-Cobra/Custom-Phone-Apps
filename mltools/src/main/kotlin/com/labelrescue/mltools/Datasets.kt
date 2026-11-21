@@ -8,7 +8,7 @@ import com.labelrescue.core.ml.CharCrop
 import com.labelrescue.core.ml.DetectedRegion
 import com.labelrescue.core.ml.RegionModel
 import com.labelrescue.core.synth.Synth
-import com.labelrescue.core.verify.Json
+import com.labelrescue.core.util.Json
 import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage

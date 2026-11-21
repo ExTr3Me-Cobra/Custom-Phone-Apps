@@ -13,9 +13,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.labelrescue.core.verify.LookupOutcome
-import com.labelrescue.core.verify.TrackingFacts
-import com.labelrescue.core.verify.VerificationCache
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -51,39 +48,9 @@ interface ConfirmedDao {
     suspend fun clear()
 }
 
-/**
- * Cached USPS lookups, so a number is never queried twice. [kind] is FOUND, NO_STATUS or
- * NOT_FOUND; [factsJson] holds the tracking facts for FOUND.
- */
-@Entity(tableName = "verification")
-data class VerificationEntry(
-    @PrimaryKey val tracking: String,
-    val kind: String,
-    val factsJson: String?,
-    val code: String?,
-    val message: String?,
-    val fetchedAt: Long,
-)
-
-@Dao
-interface VerificationDao {
-    @Query("SELECT * FROM verification WHERE tracking = :tracking")
-    fun get(tracking: String): VerificationEntry?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun put(e: VerificationEntry)
-
-    @Query("SELECT COUNT(*) FROM verification")
-    fun count(): Int
-
-    @Query("DELETE FROM verification")
-    fun clear()
-}
-
-@Database(entities = [ConfirmedNumber::class, VerificationEntry::class], version = 2, exportSchema = true)
+@Database(entities = [ConfirmedNumber::class], version = 3, exportSchema = true)
 abstract class HistoryDb : RoomDatabase() {
     abstract fun confirmed(): ConfirmedDao
-    abstract fun verification(): VerificationDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -95,36 +62,19 @@ abstract class HistoryDb : RoomDatabase() {
             }
         }
 
+        /** Online lookups were removed: drop their cache (it held other packages' tracking data). */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `verification`")
+            }
+        }
+
         @Volatile private var instance: HistoryDb? = null
         fun get(ctx: Context): HistoryDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, HistoryDb::class.java, "history.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
-    }
-}
-
-/** Room-backed [VerificationCache] (call off the main thread). */
-class RoomVerificationCache(private val dao: VerificationDao) : VerificationCache {
-    override fun get(trackingNumber: String): LookupOutcome? {
-        val e = dao.get(trackingNumber) ?: return null
-        return when (e.kind) {
-            "FOUND" -> e.factsJson?.let { runCatching { LookupOutcome.Found(TrackingFacts.fromJson(it)) }.getOrNull() }
-            "NO_STATUS" -> LookupOutcome.NoStatusYet(e.message)
-            "NOT_FOUND" -> LookupOutcome.NotFound(e.code, e.message)
-            else -> null
-        }
-    }
-
-    override fun put(trackingNumber: String, outcome: LookupOutcome) {
-        val now = System.currentTimeMillis()
-        val e = when (outcome) {
-            is LookupOutcome.Found -> VerificationEntry(trackingNumber, "FOUND", outcome.facts.toJson(), null, null, now)
-            is LookupOutcome.NoStatusYet -> VerificationEntry(trackingNumber, "NO_STATUS", null, null, outcome.message, now)
-            is LookupOutcome.NotFound -> VerificationEntry(trackingNumber, "NOT_FOUND", null, outcome.code, outcome.message, now)
-            is LookupOutcome.Failed -> return
-        }
-        dao.put(e)
     }
 }
 

@@ -56,17 +56,10 @@ Never commit the keystore. `*.keystore` and `*.jks` are in `.gitignore`.
 
 ## Using it
 
-* **Scan label (burst):** line the barcode and the number under it up in the on-screen box.
-  The box turns green, and **Burst capture** unlocks, once the label is lined up and in focus:
-  * the barcode is inside the box
-  * it fills most of the box's width
-  * it is straight
-  * the light is OK
-  * the image is sharp
-
-  Hints at the top tell you what to fix, for example "Move closer", "Center the barcode",
-  "Straighten the phone", "Hold steady, focusing…", or "More light needed". Blurry frames trigger
-  autofocus on the box. If a label's barcode is missing or destroyed, **Capture anyway** appears
+* **Scan label (burst):** line the label's 4 corners up with the corner marks (see Camera
+  guide). The marks turn green, and **Burst capture** unlocks, once the label is lined up and in
+  focus. Hints at the top tell you what to fix, for example "Move closer", "Move back",
+  "Straighten the phone", "Hold steady, focusing…", or "More light needed". If a label's barcode is missing or destroyed, **Capture anyway** appears
   after 8 seconds.
 
   The burst grabs 12 frames from the camera stream plus 2 full-resolution stills. Turn on the
@@ -88,56 +81,6 @@ Results show the best guess in large digits grouped 4-4-4-4-4-2:
   digit.
 * **Copy**, **Share** and **Mark as confirmed** buttons. Confirmed numbers go into the local
   history, and their Mailer IDs and service codes help rank future labels.
-* **Check online** (optional, see below): verify candidates with USPS, or open them on USPS.com.
-
-## Online verification (optional)
-
-Recovery never needs the network. If you add your own free USPS developer credentials, the app
-can also check candidates against the official USPS Tracking API (developers.usps.com). It never
-scrapes usps.com.
-
-1. On developers.usps.com, create an app that includes the **Tracking** API. Copy its
-   **Consumer Key** and **Consumer Secret**.
-2. In Label Rescue, open **Settings**, turn on **USPS verification**, paste the key and secret,
-   and Save. They are stored with EncryptedSharedPreferences.
-3. After the next recovery, the app asks you to confirm or fix what it read from the label:
-   * destination ZIP and city
-   * origin ZIP and city
-   * mail class
-   * label date
-
-   These decide the match, so check them.
-4. Candidates are then looked up in rank order, best first. The search stops at the first
-   **confirmed** match.
-
-Each USPS record is compared with the label:
-
-| Result | Meaning | Effect on ranking |
-|---|---|---|
-| **Confirmed** | Tracking history exists and matches the label: the destination ZIP matches, or two of origin, cities, mail class, and the label date (within 4 days of the first scan). Nothing conflicts. | Moves to the top |
-| **Different package** | Real tracking history, but a detail conflicts (another ZIP, mail class, or a date more than 10 days off) | Ranked far down |
-| **Not found** | USPS has no record | Ranked down |
-| **Unknown** | Network error, rate limited, no credentials, the label has no scans yet, or nothing on the label to compare | No change |
-
-The evidence is shown under each candidate, for example "Destination 05641 matches, Origin 08081
-matches".
-
-Details:
-
-* **API version:** Tracking 3.2 (`v3r2`) is the current API. Tracking 3.0 is closed to new users
-  and retires on July 31, 2027. The app tries the 3.2 forms first and remembers the one that
-  works.
-* **Sign-in token:** the OAuth token is cached until it expires.
-* **Caching:** every answer is saved locally (Room), so a number is never looked up twice.
-  Settings has **Clear saved USPS results** to re-check, for example a label that had no scans
-  yet.
-* **Rate limits:** USPS doesn't publish its default quota. The app limits itself to a
-  configurable number of requests per hour (default 60). On 429 or server errors it backs off
-  exponentially and honors `Retry-After`.
-* **Not-found errors:** these follow the USPS Error Inventory. Codes 150002 and similar mean the
-  number was not found. 150001, 150003 and 150009 mean the label exists but has no scans yet.
-* **No credentials?** **Check top 10 on USPS.com** opens the official USPS tracking page in your
-  browser, with the candidates comma-separated in `tLabels`, so you can look them up yourself.
 
 ## How recovery works
 
@@ -222,7 +165,7 @@ ranking and never removes a candidate.
   * how each read aligned to digit positions
   * every barcode decode and partial-decoder measurement, and the layout candidates
   * the format vote and each source's probabilities per digit
-  * the ranked candidates and any online verification
+  * the ranked candidates
 
   **Hide names and addresses** (on by default) masks capitalized label words. Nothing is sent
   anywhere unless you share it.
@@ -283,53 +226,22 @@ allowed once:
 
 After 8 seconds, **Capture anyway** appears.
 
-## Getting your own API keys (optional)
-
-Both are free and only needed for the online checks. Recovery works fully offline.
-
-**USPS** (Settings > USPS verification):
-
-1. Go to developers.usps.com and choose **Getting Started**.
-2. Sign in with a USPS Business account, or create one (the Customer Onboarding Portal walks you through it).
-3. Open **My Apps** (or **Apps**), choose **Add App**, give it a name, accept the terms, and include the Tracking API.
-4. Open the app and copy its **Consumer Key** and **Consumer Secret**.
-5. In Label Rescue: Settings > USPS verification. Paste them as the client ID and secret, turn it on, and tap Save.
-
-**UPS** (Settings > UPS → USPS lookup):
-
-1. Go to developer.ups.com and sign in with a ups.com account, or create one.
-2. Open **My Apps** and choose **Add App** (or **Create Application**).
-3. Pick the **Tracking** API. If it asks for a UPS account number, link your UPS account; you may need to open a free one on ups.com first.
-4. Save. The app page shows the **Client ID** and **Client Secret**.
-5. In Label Rescue: Settings > UPS → USPS lookup. Paste them, turn it on, and tap Save UPS settings.
-
 ## UPS packages delivered by USPS
 
 Some UPS services (Ground Saver and SurePost, service code YW in the 1Z number) hand the package
-to USPS for the last mile. Their label carries a UPS "1Z" number, and UPS knows the USPS number.
+to USPS for the last mile. Their labels carry both a UPS "1Z" number and the USPS number.
 
 * The app reads 1Z numbers offline from the UPS barcode, the MaxiCode (the round bullseye code)
   and the printed text, and checks UPS's check digit. One OCR lookalike swap (O/0, I/1, S/5, ...)
   is corrected only if exactly one swap makes the check digit valid.
-* With your own UPS keys (Settings > **UPS → USPS lookup**: developer.ups.com, an app with the
-  Tracking product), the app asks UPS's official Tracking API about the 1Z number after each scan.
-  Any `alternateTrackingNumber` that is a valid USPS number is taken.
-* That USPS number ranks first when the label's own evidence allows it, and the card says whether
-  it matches the damaged USPS barcode and digits. If USPS verification is set up, it is then
-  checked with USPS too.
-* Not every handoff has a USPS number at UPS yet (often only after USPS scans it); the card says so.
+* The results show the 1Z number it read, with Copy. The app doesn't look anything up: it has
+  no network access.
 
 ## Privacy
 
-All processing happens on the phone with bundled models. The app has no analytics and makes no
-network calls, with two optional exceptions. Each is off until you add your own credentials and
-turn it on:
-
-* USPS verification sends candidate tracking numbers to apis.usps.com.
-* The UPS lookup sends only the label's 1Z number to onlinetools.ups.com.
-
-History and any saved digit crops stay on the phone unless you export them. Nothing is uploaded
-automatically.
+Everything happens on the phone with bundled models. The app has no network access at all (the
+INTERNET permission is removed, also the one libraries ask for), no accounts and no analytics.
+History, training crops and reports stay on the phone unless you export or share them.
 
 ## Development
 

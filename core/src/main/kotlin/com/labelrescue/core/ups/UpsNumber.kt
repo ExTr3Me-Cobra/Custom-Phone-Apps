@@ -71,23 +71,7 @@ data class UpsNumber(val tracking: String, val source: String, val corrected: Bo
             return null
         }
 
-        /**
-         * UPS MaxiCode payload ("[)>RS01GS96..."): the tracking field may hold the whole 1Z number,
-         * or "1Z" + package number + check digit with the shipper in another field. Returns the
-         * numbers it can rebuild; a short form gives up to 10 (one per possible service code),
-         * which the online lookup tells apart.
-         */
-        fun fromMaxiCode(payload: String): List<UpsNumber> {
-            find(payload, "MaxiCode").takeIf { it.isNotEmpty() }?.let { return it }
-            val fields = payload.split('\u001D', '\u001E').map { it.trim() }
-            val short = fields.firstOrNull { Regex("1Z[A-Z0-9]{8}").matches(it) } ?: return emptyList()
-            val shipper = fields.firstOrNull { Regex("[A-Z0-9]{6}").matches(it) && it.any { c -> c in 'A'..'Z' } && it != short } ?: return emptyList()
-            val out = ArrayList<UpsNumber>()
-            for (s in 0..99) {
-                val t = "1Z" + shipper + "%02d".format(s) + short.substring(2)
-                if (t.length == 18 && isValid(t)) out += UpsNumber(t, "MaxiCode (rebuilt)", corrected = true)
-            }
-            return out
-        }
+        /** UPS MaxiCode payload ("[)>RS01GS96..."): the 1Z number, when the code carries it in full. */
+        fun fromMaxiCode(payload: String): List<UpsNumber> = find(payload, "MaxiCode")
     }
 }

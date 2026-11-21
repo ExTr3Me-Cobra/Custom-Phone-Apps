@@ -30,9 +30,6 @@ import com.labelrescue.app.data.HistoryFile
 import com.labelrescue.app.data.Settings
 import com.labelrescue.app.data.TrainingCrops
 import com.labelrescue.app.data.TrainingReportStore
-import com.labelrescue.app.verify.VerificationController
-import com.labelrescue.core.verify.LabelContext
-import com.labelrescue.core.verify.VerificationPrior
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -76,8 +73,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val id = scanId ?: return
         val out = photoOutput ?: return
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
-        val verification = photoVerify.state.value.results.mapValues { (_, v) -> v.verdict.status.label + (v.verdict.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") }
-        val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, verification)
+        val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed)
         val frame = _frames.value.getOrNull(out.privacyFrame)
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
@@ -110,8 +106,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             var res: TrainingCrops.SaveResult? = null
             val out = photoOutput
             if (source == "photo" && out != null && settings().saveTrainingCrops) {
-                val trusted = photoVerify.statuses()[tracking] == com.labelrescue.core.verify.VerifyStatus.CONFIRMED
-                res = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value, trusted) }.getOrNull() }
+                // Trusted only when the barcode itself proved the number (learn mode saves those).
+                res = withContext(Dispatchers.IO) { runCatching { crops.save(tracking, out, _frames.value, trusted = false) }.getOrNull() }
             }
             if (source == "photo") { scanConfirmed = tracking; writeReport() }
             _message.value = "Saved $tracking. Its Mailer ID and service code now help rank future labels." + (res?.let { r ->
@@ -135,13 +131,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteUntrustedCrops() {
         viewModelScope.launch { withContext(Dispatchers.IO) { crops.deleteUntrusted() }; loadCrops(); _message.value = "Untrusted crops deleted." }
-    }
-
-    /** USPS confirmed a number after its crops were saved: mark them trusted. */
-    private fun markCropsTrusted() {
-        val confirmed = photoVerify.statuses().filterValues { it == com.labelrescue.core.verify.VerifyStatus.CONFIRMED }.keys
-        if (confirmed.isEmpty()) return
-        viewModelScope.launch(Dispatchers.IO) { confirmed.forEach { runCatching { crops.markTrusted(it) } } }
     }
 
     fun exportTrainingCrops(uri: Uri) {
@@ -184,16 +173,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Settings and optional USPS verification ----
+    // ---- Settings ----
     private var settingsObj: Settings? = null
     private suspend fun settings(): Settings = settingsObj ?: withContext(Dispatchers.IO) { Settings(getApplication()) }.also { settingsObj = it }
 
     data class SettingsUi(
-        val verifyEnabled: Boolean = false, val clientId: String = "", val hasSecret: Boolean = false,
-        val autoVerify: Boolean = true, val requestsPerHour: Int = 60, val cached: Int = 0, val loaded: Boolean = false,
+        val loaded: Boolean = false,
         val saveCrops: Boolean = false, val cropCount: Int = 0, val models: String = "",
         val quickScan: Boolean = true,
-        val upsEnabled: Boolean = false, val upsClientId: String = "", val upsHasSecret: Boolean = false,
         val learnFromIntact: Boolean = false,
     )
     private val _settingsUi = MutableStateFlow(SettingsUi())
@@ -207,25 +194,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun settingsUiFrom(st: Settings) = withContext(Dispatchers.IO) {
         SettingsUi(
-            st.verifyEnabled, st.clientId, st.clientSecret.isNotBlank(), st.autoVerify, st.requestsPerHour, db.verification().count(), true,
-            st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
-            st.quickScan,
-            st.upsEnabled, st.upsClientId, st.upsClientSecret.isNotBlank(),
-            st.learnFromIntact,
+            true, st.saveTrainingCrops, crops.count(), OnDeviceModels.load(getApplication()).let { OnDeviceModels.status },
+            st.quickScan, st.learnFromIntact,
         )
-    }
-
-    fun saveUpsSettings(enabled: Boolean, clientId: String, secret: String?) {
-        viewModelScope.launch {
-            val st = settings()
-            withContext(Dispatchers.IO) {
-                st.upsEnabled = enabled
-                st.upsClientId = clientId
-                if (secret != null) st.upsClientSecret = secret
-            }
-            _settingsUi.value = settingsUiFrom(st)
-            _message.value = "UPS settings saved."
-        }
     }
 
     fun setLearnFromIntact(on: Boolean) {
@@ -240,36 +211,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { val st = settings(); withContext(Dispatchers.IO) { st.saveTrainingCrops = on }; _settingsUi.value = settingsUiFrom(st) }
     }
 
-    fun saveSettings(enabled: Boolean, clientId: String, secret: String?, autoVerify: Boolean, perHour: Int) {
-        viewModelScope.launch {
-            val st = settings()
-            withContext(Dispatchers.IO) {
-                st.verifyEnabled = enabled
-                st.clientId = clientId
-                if (secret != null) st.clientSecret = secret
-                st.autoVerify = autoVerify
-                st.requestsPerHour = perHour
-            }
-            _settingsUi.value = settingsUiFrom(st)
-            _message.value = "Settings saved."
-        }
-    }
-
-    fun clearVerificationCache() {
-        viewModelScope.launch {
-            val n = withContext(Dispatchers.IO) { db.verification().count().also { db.verification().clear() } }
-            _message.value = "Cleared $n cached USPS results."
-        }
-    }
-
-    // ---- Online verification (optional) ----
-    val manualVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { manual.rerank() }
-    val photoVerify: VerificationController = VerificationController(viewModelScope, db, ::settings) { photo.rerank(); markCropsTrusted() }
-    /** UPS → USPS lookups for 1Z numbers on the photographed label. */
-    val ups: com.labelrescue.app.verify.UpsController = com.labelrescue.app.verify.UpsController(viewModelScope, ::settings) { photo.rerank() }
-
-    private fun verificationPrior(c: VerificationController) = VerificationPrior(c.statuses())
-
     private fun prior(structure: StructurePrior = StructurePrior()): RankingPrior =
         CompositePrior(listOf(structure, HistoryPrior(historyStats.value)))
 
@@ -280,8 +221,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val manualError: StateFlow<String?> = _manualError
     val manual: ResultController = ResultController(
         viewModelScope,
-        prior = { CompositePrior(listOf(prior(), verificationPrior(manualVerify))) },
-        onRanked = { r -> manualVerify.onRanked(r.candidates.map { it.tracking }) },
+        prior = { prior() },
     )
 
     fun onManualText(t: String) {
@@ -294,7 +234,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val cur = manual.state.value
                 if (cur != null && cur.format == r.parsed.format && cur.baseSlots.map { it.toString() } == r.parsed.slots.map { it.toString() }) return
                 manual.set(r.parsed.format, r.parsed.slots)
-                manualVerify.reset(LabelContext())
             }
         }
     }
@@ -338,33 +277,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Detailed log of the last photo recovery (for development; copy/share from the results). */
     @Volatile private var currentLog: DiagnosticLog? = null
 
-    /** The last recovery's diagnostic log, plus verification results; [redact] hides names and addresses. */
+    /** The last recovery's diagnostic log; [redact] hides names and addresses. */
     fun diagnosticLog(redact: Boolean): String? {
         val log = currentLog ?: return null
-        val v = photoVerify.state.value
-        val extra = StringBuilder()
-        if (v.results.isNotEmpty() || v.status != null) {
-            extra.append("\n===== Online verification =====\n")
-            extra.append("context: ${v.context}\nstatus: ${v.status}\n")
-            for ((n, r) in v.results) extra.append("$n: ${r.verdict.status} ${r.verdict.summary}${if (r.fromCache) " (cached)" else ""}\n")
-        }
-        val text = log.text(redact) + extra
+        val text = log.text(redact)
         return if (redact) text.lines().joinToString("\n") { DiagnosticLog.redactLine(it) } else text
     }
     val photo: ResultController = ResultController(
         viewModelScope,
-        prior = {
-            CompositePrior(listOf(
-                photoOutput?.prior(historyStats.value) ?: prior(), verificationPrior(photoVerify),
-                com.labelrescue.core.verify.KnownNumberPrior(ups.linkedUsps()),
-            ))
-        },
+        prior = { photoOutput?.prior(historyStats.value) ?: prior() },
         exactEvidence = { photoOutput?.exactEvidence() },
         onRanked = { r ->
             currentLog?.candidates(r)
             lastRanked = r
             writeReport()
-            photoVerify.onRanked(r.candidates.map { it.tracking })
         },
     )
     private val _progress = MutableStateFlow<Progress?>(null)
@@ -380,7 +306,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun startRecovery(onResult: () -> Unit) {
         job?.cancel()
-        photo.clear(); _noResult.value = null; ups.clear()
+        photo.clear(); _noResult.value = null
         val frames = _frames.value
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
@@ -427,7 +353,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _progress.value = null
             }
             if (out == null) return@launch
-            ups.start(out.ups)
             val format = out.format
             if (format == null) {
                 _noResult.value = out
@@ -440,7 +365,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }.toMap()
             }
             photoOutput = out
-            photoVerify.reset(LabelContext.fromLabelText(out.labelText, out.zip ?: out.fullDecode?.zip))
             photo.set(format, out.slots) { copy(photo = PhotoEvidence(out, crops)) }
             onResult()
             // Learn mode: an intact label's barcode proved the number, so its located printed

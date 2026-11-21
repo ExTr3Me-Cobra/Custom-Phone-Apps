@@ -2,7 +2,6 @@ package com.labelrescue.app.ui
 
 import androidx.compose.ui.graphics.asImageBitmap
 import com.labelrescue.app.data.TrainingReportStore
-import com.labelrescue.app.verify.UpsController
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,15 +51,12 @@ fun PhotoResultsScreen(
     takeReport: () -> TrainingReportStore.Export? = { null },
     reportPhotos: Int = 0,
     reportPhoto: android.graphics.Bitmap? = null,
-    ups: UpsController.UiState = UpsController.UiState(),
-    onUseUspsNumber: (String) -> Unit = {},
-    onRetryUps: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state == null) {
             Text("No tracking number found.", style = MaterialTheme.typography.titleLarge)
             noResult?.notes?.forEach { Text(it) }
-            UpsCard(ups, null, onUseUspsNumber, onRetryUps)
+            noResult?.let { UpsNumberCard(it.ups) }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
             TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
@@ -68,7 +64,7 @@ fun PhotoResultsScreen(
             return@Column
         }
         state.photo?.output?.let { EvidenceSummary(it) }
-        UpsCard(ups, state, onUseUspsNumber, onRetryUps)
+        state.photo?.output?.let { UpsNumberCard(it.ups) }
         ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
         TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
         DiagnosticsCard(diagnosticLog)
@@ -163,65 +159,23 @@ private fun savePhotosToGallery(ctx: android.content.Context, photos: List<java.
 }
 
 /**
- * UPS numbers on the label and what UPS says about them: for packages UPS hands to USPS, the USPS
- * tracking number. Hidden when the label has no 1Z number.
+ * The UPS 1Z number on the label, read offline (barcode or printed text, check digit valid).
+ * Hidden when the label has none.
  */
 @Composable
-private fun UpsCard(ups: UpsController.UiState, state: ResultState?, onUse: (String) -> Unit, onRetry: () -> Unit) {
-    if (ups.items.isEmpty()) return
+private fun UpsNumberCard(ups: List<com.labelrescue.core.ups.UpsNumber>) {
+    val u = ups.firstOrNull { !it.corrected } ?: ups.firstOrNull() ?: return
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val ranked = state?.ranked?.candidates.orEmpty()
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("UPS number on the label", style = MaterialTheme.typography.titleMedium)
-            val shown = ups.items.filter { it.status !is UpsController.Status.Skipped }
-                .let { l -> if (l.any { it.status is UpsController.Status.Linked }) l.filter { it.status is UpsController.Status.Linked } else l }
-            for (item in shown.take(4)) {
-                val u = item.ups
-                Text(
-                    u.grouped + "  ·  " + u.source + (if (u.corrected) " (corrected)" else "") + (if (u.isUspsHandoff) " · Ground Saver / SurePost, delivered by USPS" else ""),
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium,
-                )
-                when (val s = item.status) {
-                    is UpsController.Status.Linked -> for (n in s.usps) {
-                        val rank = ranked.indexOfFirst { it.tracking == n }
-                        Text("USPS number from UPS:", style = MaterialTheme.typography.labelLarge)
-                        Text(com.labelrescue.core.usps.TrackingFormat.grouped(n), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            when {
-                                state == null -> "The damaged USPS barcode couldn't be read, so this can't be checked against the label."
-                                rank == 0 -> "Matches the label's evidence: it is the top candidate."
-                                rank > 0 -> "Fits the label's evidence (candidate ${rank + 1})."
-                                else -> "Doesn't fit what the damaged USPS barcode and digits show. Check the label before using it."
-                            } + (s.upsStatus?.let { " UPS status: $it." } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onUse(n) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Use this number") }
-                            OutlinedButton(onClick = {
-                                ctx.getSystemService(android.content.ClipboardManager::class.java)
-                                    .setPrimaryClip(android.content.ClipData.newPlainText("USPS tracking", n))
-                                android.widget.Toast.makeText(ctx, "Copied $n", android.widget.Toast.LENGTH_SHORT).show()
-                            }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Copy") }
-                        }
-                    }
-                    is UpsController.Status.NoLink -> Text("UPS knows this package but lists no USPS number for it" + (s.upsStatus?.let { " (status: $it)" } ?: "") + ". USPS may not have scanned it yet.", style = MaterialTheme.typography.bodySmall)
-                    is UpsController.Status.NotFound -> Text("UPS has no record of this number" + (s.message?.let { ": $it" } ?: "") + ".", style = MaterialTheme.typography.bodySmall)
-                    is UpsController.Status.Failed -> Text("Couldn't ask UPS: ${s.message}", style = MaterialTheme.typography.bodySmall)
-                    UpsController.Status.Looking -> Text("Asking UPS for the USPS number…", style = MaterialTheme.typography.bodySmall)
-                    UpsController.Status.Waiting -> Text(
-                        when {
-                            !ups.enabled || !ups.hasCredentials -> "Add your UPS API keys in Settings to look up the USPS number automatically."
-                            else -> "Waiting…"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    UpsController.Status.Skipped -> {}
-                }
-            }
-            if (!ups.running && ups.items.any { it.status is UpsController.Status.Failed }) {
-                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ask UPS again") }
-            }
+            Text(u.grouped, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Read from the " + u.source + (if (u.corrected) " (one character corrected)" else "") +
+                    (if (u.isUspsHandoff) ". UPS Ground Saver / SurePost: delivered by USPS." else "."),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = { copy(ctx, u.tracking) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Copy") }
         }
     }
 }

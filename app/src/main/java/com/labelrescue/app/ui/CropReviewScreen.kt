@@ -50,7 +50,7 @@ fun CropReviewScreen(
             Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Each picture is saved with the digit under it. Tap any picture that doesn't show that digit to delete it. " +
-                        "Green = from a number USPS confirmed (trusted).",
+                        "Green = from an intact label whose barcode proved the number (trusted).",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
