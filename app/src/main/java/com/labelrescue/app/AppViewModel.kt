@@ -91,11 +91,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val frame = _frames.value.getOrNull(out.privacyFrame)
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
-            // One photo per scan, with every text line that isn't label boilerplate whited out.
-            val blank = out.privacyBlank
-            if (frame != null && blank != null && !report.hasPhoto(id)) {
+            // One photo per scan, as taken (training data is not redacted, by the user's choice).
+            if (frame != null && !report.hasPhoto(id)) {
                 runCatching {
-                    val bmp = com.labelrescue.app.pipeline.Images.toBitmap(com.labelrescue.core.privacy.Redactor.apply(frame, blank))
+                    val bmp = com.labelrescue.app.pipeline.Images.toBitmap(frame)
                     val bytes = java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
                     report.putPhoto(id, bytes)
                     _reportPhoto.value = android.graphics.Bitmap.createScaledBitmap(bmp, 480, 480 * bmp.height / bmp.width, true)
@@ -116,7 +115,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val res = withContext(Dispatchers.IO) {
                 runCatching {
                     com.labelrescue.app.data.TrainingExport.write(
-                        getApplication(), report, crops, barcodeExamples, diagnosticLog(redact = true),
+                        getApplication(), report, crops, barcodeExamples, diagnosticLog(redact = false),
                         db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME, layout = barcodeLayouts.file,
                     )
                 }

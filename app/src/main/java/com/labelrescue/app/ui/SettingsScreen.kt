@@ -99,7 +99,7 @@ fun SettingsScreen(
         val ctx = androidx.compose.ui.platform.LocalContext.current
         Text(
             "Everything the app read and decided for the last scan: OCR reads, barcode measurements, per-digit evidence and the ranked candidates. " +
-                "It's in the export too (names and addresses hidden).",
+                "It's in the export too, not redacted.",
             style = MaterialTheme.typography.bodySmall,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {

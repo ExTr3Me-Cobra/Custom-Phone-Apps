@@ -15,7 +15,7 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Everything needed to improve the models, in one ZIP in the phone's Downloads folder:
- * - training_report.txt and report_photos/ (one entry and one redacted photo per scan)
+ * - training_report.txt and report_photos/ (one entry and one photo per scan, not redacted)
  * - training_crops/ (digit crops + labels.csv) for the digit classifier
  * - barcode_examples/ (damaged barcodes + barcodes.csv with their true numbers)
  * - diagnostic_log.txt (the last scan, names and addresses hidden)

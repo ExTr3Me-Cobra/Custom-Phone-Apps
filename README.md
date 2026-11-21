@@ -175,15 +175,12 @@ ranking and never removes a candidate.
 
   **Hide names and addresses** (on by default) masks capitalized label words. Nothing is sent
   anywhere unless you share it.
-* **Training report:** one short entry per scan, and one photo per scan with names and addresses
-  whited out. Every OCR'd text line is blanked unless it is only the tracking number or label
-  wording (service, "USPS TRACKING #", "Mailed from", dates, weights). Barcodes and 2D codes stay.
-  If OCR gives no line positions, no photo is kept. OCR can miss a faint line, so the results
-  card shows the photo before you export.
+* **Training report:** one short entry per scan, and one photo per scan as taken. Training data
+  is not redacted: the photos and the exported log show names and addresses. Keep the ZIP private.
 * **Export training data** (results card or Settings): one ZIP in **Downloads**,
   `LabelRescue-training-<date>.zip`, with everything needed to improve the models:
   `training_report.txt` + `report_photos/`, `training_crops/` (digit crops + `labels.csv`),
-  `barcode_examples/` (+ `barcodes.csv`), `diagnostic_log.txt` (last scan, names hidden) and
+  `barcode_examples/` (+ `barcodes.csv`), `diagnostic_log.txt` (last scan) and
   `confirmed_numbers.csv`. Nothing goes to the gallery or the clipboard. The report clears after;
   crops and barcode examples stay until you delete them.
 

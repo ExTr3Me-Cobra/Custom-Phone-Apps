@@ -130,7 +130,7 @@ fun PhotoResultsScreen(
 
 /**
  * The training report: a short entry per scan (what the app read, per digit) plus the photo with
- * names and addresses whited out, so it can be checked before export. One button exports
+ * nothing whited out (training data isn't redacted). One button exports
  * everything for training to Downloads (see Settings for the rest).
  */
 @Composable
@@ -139,13 +139,13 @@ private fun TrainingReportCard(count: Int, photoCount: Int, preview: android.gra
         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Training report · $count scan${if (count == 1) "" else "s"} · $photoCount photo${if (photoCount == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium)
             Text(
-                "One short entry per scan, and its photo with every line of text whited out except the tracking number and label wording. " +
+                "One short entry per scan, and its photo as taken (not redacted: it shows names and addresses). " +
                     "Check the photo below. Export saves everything for training as one ZIP in Downloads; the report then clears.",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (preview != null) {
                 androidx.compose.foundation.Image(
-                    preview.asImageBitmap(), "Latest report photo, names and addresses whited out",
+                    preview.asImageBitmap(), "Latest report photo",
                     Modifier.fillMaxWidth().heightIn(max = 420.dp),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 )
