@@ -151,6 +151,10 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         takeReport = vm::takeTrainingReport,
                         reportPhotos = reportPhotos,
                         reportPhoto = reportPhoto,
+                        onUseUspsNumber = { n ->
+                            // Same format as the label's reading: becomes the result. Otherwise it opens as a typed number.
+                            if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL }
+                        },
                     )
                 }
             }

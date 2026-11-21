@@ -2,6 +2,13 @@ package com.labelrescue.app.ui
 
 import androidx.compose.ui.graphics.asImageBitmap
 import com.labelrescue.app.data.TrainingReportStore
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,12 +58,14 @@ fun PhotoResultsScreen(
     takeReport: () -> TrainingReportStore.Export? = { null },
     reportPhotos: Int = 0,
     reportPhoto: android.graphics.Bitmap? = null,
+    /** A USPS number copied from ups.com, accepted by the user. */
+    onUseUspsNumber: (com.labelrescue.core.usps.ParsedNumber) -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state == null) {
             Text("No tracking number found.", style = MaterialTheme.typography.titleLarge)
             noResult?.notes?.forEach { Text(it) }
-            noResult?.let { UpsNumberCard(it.ups) }
+            noResult?.let { UpsNumberCard(it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber) }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
             TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
@@ -64,7 +73,11 @@ fun PhotoResultsScreen(
             return@Column
         }
         state.photo?.output?.let { EvidenceSummary(it) }
-        state.photo?.output?.let { UpsNumberCard(it.ups) }
+        state.photo?.output?.let { out ->
+            // How sure the USPS number is: a full decode is certain; otherwise the top candidate's share.
+            val uspsConf = if (out.fullDecode != null) 1.0 else state.ranked?.best?.confidence
+            UpsNumberCard(out.ups, uspsConf, state, onUseUspsNumber)
+        }
         ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
         TrainingReportCard(reportCount, reportPhotos, reportPhoto, takeReport)
         DiagnosticsCard(diagnosticLog)
@@ -158,25 +171,140 @@ private fun savePhotosToGallery(ctx: android.content.Context, photos: List<java.
     return n
 }
 
+/** Show "Find USPS tracking on UPS.com" when the UPS number is above this confidence ... */
+private const val UPS_MIN_CONFIDENCE = 0.89
+/** ... and the USPS number is below this one. */
+private const val USPS_MAX_CONFIDENCE = 0.76
+
+/** Close to UPS's brown and gold, not their exact trade dress. */
+private val UpsBrown = androidx.compose.ui.graphics.Color(0xFF3B2016)
+private val UpsGold = androidx.compose.ui.graphics.Color(0xFFFFB71B)
+
 /**
  * The UPS 1Z number on the label, read offline (barcode or printed text, check digit valid).
- * Hidden when the label has none.
+ * When it is clearly readable and the USPS number isn't, a button opens ups.com's tracking page
+ * for it in the browser (the app itself has no network access). Copy the USPS number there and
+ * come back: the app finds it on the clipboard, checks it against the label, and offers to use it.
  */
 @Composable
-private fun UpsNumberCard(ups: List<com.labelrescue.core.ups.UpsNumber>) {
+private fun UpsNumberCard(
+    ups: List<com.labelrescue.core.ups.UpsNumber>,
+    uspsConfidence: Double?,
+    state: ResultState?,
+    onUse: (com.labelrescue.core.usps.ParsedNumber) -> Unit,
+) {
     val u = ups.firstOrNull { !it.corrected } ?: ups.firstOrNull() ?: return
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    var launched by androidx.compose.runtime.saveable.rememberSaveable(u.tracking) { androidx.compose.runtime.mutableStateOf(false) }
+    var pasted by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf<com.labelrescue.core.usps.ParsedNumber?>(null) }
+    var noNumber by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf(false) }
+    var used by androidx.compose.runtime.remember(u.tracking) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val showButton = u.confidence > UPS_MIN_CONFIDENCE && uspsConfidence != null && uspsConfidence < USPS_MAX_CONFIDENCE
+
+    fun readClipboard() {
+        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+        val text = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
+        val n = com.labelrescue.core.usps.LabelFit.findUsps(text)
+        if (n != null && n.tracking != used) { pasted = n; noNumber = false } else if (n == null) noNumber = true
+    }
+    // Back from the browser: look for the copied USPS number. (Android only lets an app read the
+    // clipboard while it's in front, so this runs on return, shortly after the window has focus.)
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle, launched) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && launched) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ readClipboard() }, 400)
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("UPS number on the label", style = MaterialTheme.typography.titleMedium)
             Text(u.grouped, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
             Text(
                 "Read from the " + u.source + (if (u.corrected) " (one character corrected)" else "") +
+                    " · ${(u.confidence * 100).toInt()}% sure" +
                     (if (u.isUspsHandoff) ". UPS Ground Saver / SurePost: delivered by USPS." else "."),
                 style = MaterialTheme.typography.bodySmall,
             )
-            OutlinedButton(onClick = { copy(ctx, u.tracking) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Copy") }
+            if (showButton) {
+                FindOnUpsButton {
+                    launched = true; pasted = null; noNumber = false
+                    val url = "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking
+                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                }
+                Text(
+                    "Opens UPS's tracking page in your browser. Long-press the USPS tracking number there, tap Copy, then come back here.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            val p = pasted
+            if (p != null) {
+                val fit = state?.let { com.labelrescue.core.usps.LabelFit.check(p, it.format, it.baseSlots) }
+                Text("Copied from UPS.com:", style = MaterialTheme.typography.labelLarge)
+                Text(com.labelrescue.core.usps.TrackingFormat.grouped(p.tracking), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    when {
+                        fit == null -> "Valid USPS number (check digit OK). The label's own USPS number wasn't readable, so it can't be compared."
+                        !fit.sameFormat -> "Valid USPS number, but a different length than the label's (${p.tracking.length} vs ${state.format.trackingLength} digits). Check you copied the right number."
+                        fit.conflicts.isNotEmpty() -> "Doesn't match the label: ${fit.conflicts.size} digit(s) the label shows clearly are different (positions ${fit.conflicts.joinToString { (it + 1).toString() }}). Check you copied the right number."
+                        else -> "Fits the label: no clearly printed digit disagrees, check digit OK."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (fit != null && !fit.fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onUse(p); used = p.tracking; pasted = null }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Use this number") }
+                    OutlinedButton(onClick = { pasted = null }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Not this") }
+                }
+            } else if (launched) {
+                if (noNumber) Text("No USPS number on the clipboard yet.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = { readClipboard() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Paste USPS number") }
+            }
+            used?.let { Text("Using ${com.labelrescue.core.usps.TrackingFormat.grouped(it)} from UPS.com.", style = MaterialTheme.typography.bodySmall) }
+            OutlinedButton(onClick = { copy(ctx, u.tracking) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Copy UPS number") }
         }
+    }
+}
+
+/** "Find USPS tracking on UPS.com": brown with gold lettering, gently pulsing, with a sweeping shine. */
+@Composable
+private fun FindOnUpsButton(onClick: () -> Unit) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "ups")
+    val pulse by t.animateFloat(
+        1f, 1.035f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "pulse",
+    )
+    val shine by t.animateFloat(
+        -0.3f, 1.3f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "shine",
+    )
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth().heightIn(min = 60.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .background(UpsBrown)
+            .drawWithContent {
+                drawContent()
+                val x = size.width * shine
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(androidx.compose.ui.graphics.Color.Transparent, UpsGold.copy(alpha = 0.35f), androidx.compose.ui.graphics.Color.Transparent),
+                        start = androidx.compose.ui.geometry.Offset(x - 120f, 0f), end = androidx.compose.ui.geometry.Offset(x + 120f, size.height),
+                    ),
+                )
+            }
+            .border(2.dp, UpsGold.copy(alpha = 0.7f), androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Text("Find USPS tracking on UPS.com", color = UpsGold, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     }
 }
 

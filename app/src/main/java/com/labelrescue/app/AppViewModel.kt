@@ -117,6 +117,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * A USPS number from elsewhere (copied from ups.com) for the photographed label: set as every
+     * digit of the result when the formats match. False if they don't (the caller opens it as a
+     * typed number instead).
+     */
+    fun useUspsNumber(n: com.labelrescue.core.usps.ParsedNumber): Boolean {
+        val st = photo.state.value ?: return false
+        if (st.format.trackingFormat != n.format.trackingFormat) return false
+        val off = st.format.routingLength
+        photo.pickAll(n.tracking.withIndex().associate { (i, c) -> off + i to c })
+        currentLog?.line("USPS number pasted from ups.com: ${n.tracking}")
+        return true
+    }
+
     // ---- Training crop review ----
     private val _cropItems = MutableStateFlow<List<TrainingCrops.Item>>(emptyList())
     val cropItems: StateFlow<List<TrainingCrops.Item>> = _cropItems

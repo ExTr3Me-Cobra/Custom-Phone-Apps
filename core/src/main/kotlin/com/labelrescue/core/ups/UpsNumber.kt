@@ -8,6 +8,17 @@ package com.labelrescue.core.ups
 data class UpsNumber(val tracking: String, val source: String, val corrected: Boolean = false) {
     val shipper: String get() = tracking.substring(2, 8)
     val serviceCode: String get() = tracking.substring(8, 10)
+    /**
+     * How sure the read is, 0..1. A barcode or MaxiCode decode has the symbol's own checks: 0.99.
+     * Printed text that passes the check digit as read: 0.93 (the check digit catches about 9 in
+     * 10 misreads). Printed text that needed a lookalike correction: 0.80.
+     */
+    val confidence: Double get() = when {
+        source.contains("barcode", ignoreCase = true) || source.contains("MaxiCode") -> 0.99
+        corrected -> 0.80
+        else -> 0.93
+    }
+
     /** Services UPS hands to USPS for the last mile. */
     val isUspsHandoff: Boolean get() = serviceCode in USPS_HANDOFF_SERVICES
     /** As UPS prints it: 1Z 5R8 939 03 5756 712 7. */

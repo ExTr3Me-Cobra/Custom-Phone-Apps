@@ -234,8 +234,18 @@ to USPS for the last mile. Their labels carry both a UPS "1Z" number and the USP
 * The app reads 1Z numbers offline from the UPS barcode, the MaxiCode (the round bullseye code)
   and the printed text, and checks UPS's check digit. One OCR lookalike swap (O/0, I/1, S/5, ...)
   is corrected only if exactly one swap makes the check digit valid.
-* The results show the 1Z number it read, with Copy. The app doesn't look anything up: it has
-  no network access.
+* The results show the 1Z number it read, with its confidence and Copy. The app doesn't look
+  anything up: it has no network access.
+* **Find USPS tracking on UPS.com** appears when the UPS number is above 89% sure (a barcode or
+  MaxiCode read 99%, printed text passing the check digit 93%, printed text that needed a
+  lookalike correction 80%) and the USPS number is below 76% (a full decode is 100%, otherwise
+  the top candidate's confidence; no USPS reading at all counts as 0%). It opens UPS's normal
+  tracking page in your browser with the 1Z number filled in.
+* There, long-press the USPS tracking number, tap **Copy**, and come back. The app finds the
+  number on the clipboard (or tap **Paste USPS number**), checks its check digit, and compares it
+  with the label: a different length, or digits the label shows clearly (90%+) as something
+  else, are flagged in red as a probable wrong copy. **Use this number** sets it as the result
+  (or opens it as a typed number when the label's own number wasn't readable).
 
 ## Privacy
 

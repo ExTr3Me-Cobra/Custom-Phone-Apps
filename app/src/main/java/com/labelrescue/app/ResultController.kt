@@ -43,6 +43,13 @@ class ResultController(
         rerank()
     }
 
+    /** Sets many positions at once (e.g. a whole number pasted from elsewhere), re-ranking once. */
+    fun pickAll(picks: Map<Int, Char>) {
+        val s = _state.value ?: return
+        _state.value = s.copy(overrides = s.overrides + picks, selected = 0)
+        rerank()
+    }
+
     fun unpick(position: Int) {
         val s = _state.value ?: return
         _state.value = s.copy(overrides = s.overrides - position, selected = 0)
