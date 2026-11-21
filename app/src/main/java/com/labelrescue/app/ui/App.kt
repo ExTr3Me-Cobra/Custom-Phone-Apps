@@ -137,6 +137,16 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()
                     val none by vm.noResult.collectAsStateWithLifecycle()
+                    val stickerUps by vm.stickerUps.collectAsStateWithLifecycle()
+                    val stickerAsked by vm.stickerAsked.collectAsStateWithLifecycle()
+                    val stickerBusy by vm.stickerBusy.collectAsStateWithLifecycle()
+                    var stickerUri by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+                    val takeSticker = androidx.activity.compose.rememberLauncherForActivityResult(
+                        androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
+                    ) { ok ->
+                        val u = stickerUri
+                        if (ok && u != null) vm.readUpsSticker(android.net.Uri.parse(u))
+                    }
                     PhotoResultsScreen(
                         st, none,
                         ResultActions(
@@ -153,6 +163,16 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onUseUspsNumber = { n ->
                             // Same format as the label's reading: becomes the result. Otherwise it opens as a typed number.
                             if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL }
+                        },
+                        stickerUps = stickerUps,
+                        stickerAsked = stickerAsked,
+                        stickerBusy = stickerBusy,
+                        onStickerNo = vm::stickerAnswered,
+                        onStickerPhoto = {
+                            vm.stickerAnswered()
+                            val u = vm.stickerPhotoUri()
+                            stickerUri = u.toString()
+                            runCatching { takeSticker.launch(u) }.onFailure { vm.showMessage("No camera app to take the sticker photo.") }
                         },
                     )
                 }

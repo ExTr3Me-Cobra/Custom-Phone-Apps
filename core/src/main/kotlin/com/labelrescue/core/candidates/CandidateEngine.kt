@@ -104,6 +104,56 @@ class CandidateEngine(
         return RankResult(format, candidates, main.validCount, main.combinations)
     }
 
+    /**
+     * Per-position probabilities over check-digit-valid numbers only (forward-backward over the
+     * check-digit states). A digit that reads cleanly but sits in a number whose check digit fails
+     * comes out less sure, as does every position the check digit could be fixed at. Null if no
+     * valid number fits.
+     */
+    fun marginals(format: TrackingFormat, slots: List<SlotDist>): List<SlotDist>? {
+        require(slots.size == format.length)
+        val model = CheckModel(format)
+        val n = slots.size
+        val states = model.stateCount
+        // alpha[pos][s]: mass of prefixes 0 until pos ending in state s (scaled per layer).
+        val alpha = Array(n + 1) { DoubleArray(states) }
+        alpha[0][model.initial] = 1.0
+        for (pos in 0 until n) {
+            val sd = slots[pos]
+            for (st in 0 until states) {
+                val a = alpha[pos][st]; if (a == 0.0) continue
+                for (k in sd.alphabet.indices) {
+                    val pk = sd.probs[k]; if (pk == 0.0) continue
+                    val ns = model.step(st, pos, sd.alphabet[k]); if (ns < 0) continue
+                    alpha[pos + 1][ns] += a * pk
+                }
+            }
+            val sum = alpha[pos + 1].sum(); if (sum <= 0) return null
+            for (st in 0 until states) alpha[pos + 1][st] /= sum
+        }
+        if (alpha[n][model.accept] <= 0) return null
+        val beta = Array(n + 1) { DoubleArray(states) }
+        beta[n][model.accept] = 1.0
+        val out = arrayOfNulls<SlotDist>(n)
+        for (pos in n - 1 downTo 0) {
+            val sd = slots[pos]
+            val m = DoubleArray(sd.alphabet.length)
+            for (st in 0 until states) {
+                val a = alpha[pos][st]
+                for (k in sd.alphabet.indices) {
+                    val pk = sd.probs[k]; if (pk == 0.0) continue
+                    val ns = model.step(st, pos, sd.alphabet[k]); if (ns < 0) continue
+                    val b = beta[pos + 1][ns]; if (b == 0.0) continue
+                    beta[pos][st] += pk * b
+                    m[k] += a * pk * b
+                }
+            }
+            val sum = beta[pos].sum(); if (sum > 0) for (st in 0 until states) beta[pos][st] /= sum
+            out[pos] = SlotDist(sd.alphabet, m)
+        }
+        return out.map { it!! }
+    }
+
     fun evidenceScore(number: String, slots: List<SlotDist>): Double =
         number.indices.sumOf { ln(max(slots[it].p(number[it]), 1e-300)) }
 

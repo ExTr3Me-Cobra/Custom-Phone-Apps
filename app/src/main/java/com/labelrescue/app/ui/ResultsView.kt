@@ -93,8 +93,11 @@ enum class DigitState { CERTAIN, LIKELY, GUESSED, PICKED }
 fun digitState(state: ResultState, position: Int, c: Char): DigitState {
     if (position in state.overrides) return DigitState.PICKED
     val slot = state.baseSlots[position]
-    if (slot.isCertain) return DigitState.CERTAIN
-    return if (slot.p(c) >= 0.6) DigitState.LIKELY else DigitState.GUESSED
+    // Prefer the whole-result probability: a digit that reads cleanly can still be in doubt when
+    // the number as a whole is unlikely (check digit, barcode or prior disagree).
+    val p = state.marginal(position, c) ?: slot.p(c)
+    if (p >= SlotDist.CERTAIN) return DigitState.CERTAIN
+    return if (p >= 0.6) DigitState.LIKELY else DigitState.GUESSED
 }
 
 @Composable

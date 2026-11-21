@@ -5,7 +5,13 @@ package com.labelrescue.core.ups
  * Check digit: over the 15 characters after "1Z", letters count as (code - 3) mod 10 (A=2 ... I=0,
  * J=1 ...), every second character counts twice, and the check digit tops the sum up to a multiple of 10.
  */
-data class UpsNumber(val tracking: String, val source: String, val corrected: Boolean = false) {
+data class UpsNumber(
+    val tracking: String,
+    val source: String,
+    val corrected: Boolean = false,
+    /** Set when the confidence was measured (e.g. several sticker reads agreeing). */
+    val measuredConfidence: Double? = null,
+) {
     val shipper: String get() = tracking.substring(2, 8)
     val serviceCode: String get() = tracking.substring(8, 10)
     /**
@@ -13,7 +19,7 @@ data class UpsNumber(val tracking: String, val source: String, val corrected: Bo
      * Printed text that passes the check digit as read: 0.93 (the check digit catches about 9 in
      * 10 misreads). Printed text that needed a lookalike correction: 0.80.
      */
-    val confidence: Double get() = when {
+    val confidence: Double get() = measuredConfidence ?: when {
         source.contains("barcode", ignoreCase = true) || source.contains("MaxiCode") -> 0.99
         corrected -> 0.80
         else -> 0.93

@@ -52,6 +52,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** One-off messages (toasts). */
     val message: StateFlow<String?> = _message
     fun messageShown() { _message.value = null }
+    fun showMessage(m: String) { _message.value = m }
 
     private val crops by lazy { TrainingCrops(app) }
     private val barcodeExamples by lazy { com.labelrescue.app.data.BarcodeExamples(app) }
@@ -349,6 +350,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun startRecovery(onResult: () -> Unit) {
         job?.cancel()
         photo.clear(); _noResult.value = null
+        _stickerUps.value = null; _stickerAsked.value = false
         val frames = _frames.value
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
@@ -448,6 +450,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
+
+    // ---- UPS routing sticker (when both the UPS and the USPS number are unsure) ----
+    private val _stickerUps = MutableStateFlow<com.labelrescue.core.ups.UpsNumber?>(null)
+    /** The 1Z number read from a photo of the UPS sticker, for the current scan. */
+    val stickerUps: StateFlow<com.labelrescue.core.ups.UpsNumber?> = _stickerUps
+    private val _stickerAsked = MutableStateFlow(false)
+    /** The sticker question was answered for the current scan (don't ask again). */
+    val stickerAsked: StateFlow<Boolean> = _stickerAsked
+    private val _stickerBusy = MutableStateFlow(false)
+    val stickerBusy: StateFlow<Boolean> = _stickerBusy
+
+    fun stickerAnswered() { _stickerAsked.value = true }
+
+    /** Where the camera app saves the sticker photo (a content URI to the app's cache). */
+    fun stickerPhotoUri(): Uri {
+        val app = getApplication<Application>()
+        val f = java.io.File(java.io.File(app.cacheDir, "sticker").apply { mkdirs() }, "sticker.jpg")
+        return androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", f)
+    }
+
+    /** Reads the 1Z number off the sticker photo; it then fills the UPS card with its confidence. */
+    fun readUpsSticker(uri: Uri) {
+        viewModelScope.launch {
+            _stickerBusy.value = true
+            val r = withContext(Dispatchers.Default) {
+                runCatching {
+                    val img = Images.fromUri(getApplication(), uri) ?: return@runCatching null
+                    MlKitText().use { com.labelrescue.core.ups.UpsSticker.read(it, img) }
+                }.getOrNull()
+            }
+            _stickerBusy.value = false
+            if (r == null) {
+                _stickerAsked.value = false
+                _message.value = "Couldn't read a UPS number on that photo. Take it closer, straight on, with the 1Z number sharp."
+            } else {
+                _stickerUps.value = r.number
+                currentLog?.line("UPS sticker: ${r.number.tracking}, ${r.agreeing} of ${r.reads} reads agree, ${(r.number.confidence * 100).toInt()}%")
+                _message.value = "UPS sticker read: ${r.number.grouped} (${(r.number.confidence * 100).toInt()}% sure)."
+            }
+            runCatching { java.io.File(java.io.File(getApplication<Application>().cacheDir, "sticker"), "sticker.jpg").delete() }
+        }
+    }
 
     private val _liveLog = MutableStateFlow<List<String>>(emptyList())
     /** The latest diagnostic lines while a scan is processed (redacted). */

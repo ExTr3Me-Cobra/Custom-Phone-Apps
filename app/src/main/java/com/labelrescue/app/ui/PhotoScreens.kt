@@ -83,12 +83,34 @@ fun PhotoResultsScreen(
     reportPhoto: android.graphics.Bitmap? = null,
     /** A USPS number copied from ups.com, accepted by the user. */
     onUseUspsNumber: (com.labelrescue.core.usps.ParsedNumber) -> Unit = {},
+    /** The 1Z number read from a photo of the UPS sticker, if one was taken. */
+    stickerUps: com.labelrescue.core.ups.UpsNumber? = null,
+    /** The sticker question was already answered for this scan. */
+    stickerAsked: Boolean = true,
+    stickerBusy: Boolean = false,
+    onStickerNo: () -> Unit = {},
+    onStickerPhoto: () -> Unit = {},
 ) {
+    // Both numbers unsure: ask for the UPS sticker, which has the 1Z number printed large.
+    val out = state?.photo?.output ?: noResult
+    val uspsConfNow = when {
+        state == null -> 0.0
+        state.ranking -> null
+        out?.fullDecode != null -> 1.0
+        else -> state.ranked?.best?.confidence ?: 0.0
+    }
+    val upsBest = out?.ups?.maxOfOrNull { it.confidence }
+    if (!stickerAsked && stickerUps == null && !stickerBusy && upsBest != null && upsBest < STICKER_BELOW &&
+        uspsConfNow != null && uspsConfNow < STICKER_BELOW
+    ) {
+        UpsStickerDialog(onNo = onStickerNo, onYes = onStickerPhoto)
+    }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state == null) {
             Text("No tracking number found.", style = MaterialTheme.typography.titleLarge)
             noResult?.notes?.forEach { Text(it) }
-            noResult?.let { UpsNumberCard(it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber) }
+            if (stickerBusy) StickerBusyCard()
+            noResult?.let { UpsNumberCard(listOfNotNull(stickerUps) + it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber) }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
             TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
@@ -98,7 +120,8 @@ fun PhotoResultsScreen(
         state.photo?.output?.let { out ->
             // How sure the USPS number is: a full decode is certain; otherwise the top candidate's share.
             val uspsConf = if (out.fullDecode != null) 1.0 else state.ranked?.best?.confidence
-            UpsNumberCard(out.ups, uspsConf, state, onUseUspsNumber)
+            if (stickerBusy) StickerBusyCard()
+            UpsNumberCard(listOfNotNull(stickerUps) + out.ups, uspsConf, state, onUseUspsNumber)
         }
         ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
         TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
@@ -128,6 +151,51 @@ private fun TrainingReportCard(count: Int, photoCount: Int, preview: android.gra
                 )
             }
             Button(onClick = onExport, enabled = count > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Export training data") }
+        }
+    }
+}
+
+/** Ask for the UPS sticker when both the UPS and the USPS number are below this. */
+private const val STICKER_BELOW = 0.96
+
+/** Large popup: "Is there a sticker like this?" with the example sticker. */
+@Composable
+private fun UpsStickerDialog(onNo: () -> Unit, onYes: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onNo,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        title = { Text("Is there a sticker like this on the package?", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.foundation.Image(
+                    androidx.compose.ui.res.painterResource(com.labelrescue.app.R.drawable.ups_sticker_example),
+                    "Example UPS sticker with the 1Z tracking number",
+                    Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                )
+                Text(
+                    "Neither number on the label is clear enough. Most UPS packages carry this small sticker with the UPS " +
+                        "tracking number (1Z…) printed on it. If you see one, take a photo of just the sticker.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onYes, modifier = Modifier.heightIn(min = 56.dp)) { Text("Yes, take a photo", fontSize = 18.sp) }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onNo, modifier = Modifier.heightIn(min = 56.dp)) { Text("No", fontSize = 18.sp) }
+        },
+    )
+}
+
+@Composable
+private fun StickerBusyCard() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Reading the UPS sticker…", style = MaterialTheme.typography.titleMedium)
+            LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
 }
