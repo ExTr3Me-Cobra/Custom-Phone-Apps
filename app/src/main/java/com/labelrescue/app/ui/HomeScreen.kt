@@ -132,7 +132,7 @@ private fun ScanButton(onClick: () -> Unit) {
         Modifier.fillMaxWidth(0.85f).heightIn(min = 84.dp)
             .graphicsLayer { scaleX = pulse; scaleY = pulse }
             .clip(shape)
-            .background(androidx.compose.ui.graphics.Color(0xFF333366))
+            .background(androidx.compose.ui.graphics.Color(0xFF004B87))
             .drawWithContent {
                 drawContent()
                 val x = size.width * shine
@@ -143,7 +143,7 @@ private fun ScanButton(onClick: () -> Unit) {
                     ),
                 )
             }
-            .border(2.dp, androidx.compose.ui.graphics.Color(0xFFE2232A), shape)
+            .border(2.dp, androidx.compose.ui.graphics.Color(0xFFE71921), shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
