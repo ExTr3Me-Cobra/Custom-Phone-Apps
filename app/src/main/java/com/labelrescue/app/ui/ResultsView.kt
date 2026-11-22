@@ -117,6 +117,8 @@ fun ResultsPanel(
     state: ResultState,
     actions: ResultActions,
     crops: Map<Int, Bitmap> = emptyMap(),
+    /** User mode: the number (digits can still be picked), USPS.com and the candidates. */
+    simple: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val cand = state.current
@@ -152,13 +154,13 @@ fun ResultsPanel(
                 Spacer(Modifier.height(8.dp))
                 val pct = (cand.confidence * 100)
                 Text(
-                    "${formatPct(pct)} likely" + (ranked?.let { r ->
+                    "${formatPct(pct)} likely" + if (simple) "" else (ranked?.let { r ->
                         "  ·  " + if (r.totalValid <= 1.0) "only valid number" else "${formatCount(r.totalValid)} valid numbers"
                     } ?: ""),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                ImpbParser.parse(cand.tracking)?.let { p ->
+                if (!simple) ImpbParser.parse(cand.tracking)?.let { p ->
                     val parts = listOfNotNull(
                         p.channel?.let { "Channel $it" },
                         p.serviceType?.let { "Service $it" },
@@ -167,14 +169,14 @@ fun ResultsPanel(
                     )
                     Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                 }
-                if (cand.guessed.isNotEmpty()) {
-                    Text("Tap a colored digit to check it or pick a different one.", style = MaterialTheme.typography.bodySmall)
+                if (cand.guessed.isNotEmpty() || simple) {
+                    Text(if (simple) "Tap any digit to change it if you can read it better." else "Tap a colored digit to check it or pick a different one.", style = MaterialTheme.typography.bodySmall)
                 }
-                Legend()
+                if (!simple) Legend()
             }
         }
 
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!simple) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = { copy(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
                 Icon(AppIcons.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Copy")
             }
@@ -190,7 +192,7 @@ fun ResultsPanel(
 
         // Uncertain digits with zoomed crops.
         val uncertain = cand.guessed.filter { it >= format.routingLength }.sorted()
-        if (uncertain.isNotEmpty()) {
+        if (uncertain.isNotEmpty() && !simple) {
             Text("Uncertain digits", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (pos in uncertain) {
@@ -203,11 +205,11 @@ fun ResultsPanel(
         ranked?.takeIf { it.candidates.isNotEmpty() }?.let { r ->
             var launched by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             CheckOnUspsButton(r.candidates.size) { launched = true; openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
-            actions.onUseNumber?.let { use -> PasteNumberPanel(state, listenAfterReturn = launched, onUse = use) }
+            if (!simple) actions.onUseNumber?.let { use -> PasteNumberPanel(state, listenAfterReturn = launched, onUse = use) }
         }
         ranked?.let { r ->
             Text(
-                "Top candidates" + if (r.complete) " (all ${r.candidates.size})" else " (${r.candidates.size} of ${formatCount(r.totalValid)})",
+                if (simple) "Likely numbers, most likely first" else "Top candidates" + if (r.complete) " (all ${r.candidates.size})" else " (${r.candidates.size} of ${formatCount(r.totalValid)})",
                 style = MaterialTheme.typography.titleMedium,
             )
             for ((i, c) in r.candidates.take(50).withIndex()) {

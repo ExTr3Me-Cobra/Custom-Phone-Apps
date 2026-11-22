@@ -38,7 +38,15 @@ enum class Screen(val title: String) {
 @Composable
 fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+    val dev by vm.devMode.collectAsStateWithLifecycle()
     fun back() {
+        // User mode: scan → reading → result, and back to the start (the scan is forgotten).
+        if (!dev) {
+            if (screen == Screen.PROCESSING) vm.cancelRecovery()
+            if (screen == Screen.RESULTS || screen == Screen.PROCESSING) vm.endScan()
+            screen = Screen.HOME
+            return
+        }
         screen = when (screen) {
             Screen.CROP -> Screen.HOME
             Screen.PROCESSING -> { vm.cancelRecovery(); Screen.CROP }
@@ -72,7 +80,10 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             when (screen) {
-                Screen.HOME -> HomeScreen(
+                Screen.HOME -> if (!dev) UserHomeScreen(
+                    onScan = { vm.clearFrames(); screen = Screen.CAMERA },
+                    onDeveloperMode = { vm.setDevMode(true) },
+                ) else HomeScreen(
                     onScan = { vm.clearFrames(); screen = Screen.CAMERA },
                     onImport = { vm.clearFrames(); pickPhotos() },
                     onManual = { screen = Screen.MANUAL },
@@ -91,7 +102,11 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         ),
                     )
                 }
-                Screen.CAMERA -> CameraScreen(onFrame = vm::addFrame, onBurstDone = { screen = Screen.CROP })
+                Screen.CAMERA -> CameraScreen(onFrame = vm::addFrame, onBurstDone = {
+                    // User mode skips the crop screen: straight to reading.
+                    if (dev) screen = Screen.CROP
+                    else { screen = Screen.PROCESSING; vm.startRecovery { screen = Screen.RESULTS } }
+                })
                 Screen.CROP -> {
                     val preview by vm.preview.collectAsStateWithLifecycle()
                     val frames by vm.frames.collectAsStateWithLifecycle()
@@ -125,6 +140,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         vm::exportTrainingData, vm::diagnosticLog, vm::clearTrainingCrops,
                         onQuickScan = vm::setQuickScan,
                         onLearnFromIntact = vm::setLearnFromIntact,
+                        onLeaveDevMode = { vm.setDevMode(false); screen = Screen.HOME },
                     )
                 }
                 Screen.RESULTS -> {
@@ -157,6 +173,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                             // Same format as the label's reading: becomes the result. Otherwise it opens as a typed number.
                             if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL }
                         },
+                        simple = !dev,
                         stickerUps = stickerUps,
                         stickerAsked = stickerAsked,
                         stickerBusy = stickerBusy,

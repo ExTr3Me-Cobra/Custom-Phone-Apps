@@ -36,8 +36,18 @@ fun SettingsScreen(
     onClearCrops: () -> Unit = {},
     onQuickScan: (Boolean) -> Unit = {},
     onLearnFromIntact: (Boolean) -> Unit = {},
+    onLeaveDevMode: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Developer mode", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "On: training data, learn mode, logs, exports and every detail. User mode shows only the scan and its result, and keeps nothing of a scan. " +
+                "To come back, tap the bottom-left corner of the start screen 20 times.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        androidx.compose.material3.OutlinedButton(onClick = onLeaveDevMode, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Turn off developer mode")
+        }
         Text("Privacy", style = MaterialTheme.typography.titleLarge)
         Text(
             "Everything runs on this phone with bundled models. The app has no network access, no accounts and no analytics: nothing you scan leaves the phone unless you share it.",

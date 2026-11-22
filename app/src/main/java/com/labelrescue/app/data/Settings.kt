@@ -51,6 +51,11 @@ class Settings(ctx: Context) {
         get() = prefs.getBoolean("quick_scan", true)
         set(v) = prefs.edit().putBoolean("quick_scan", v).apply()
 
+    /** Developer mode: training, logs, exports and every detail. Off: the simple user mode, which stores nothing. */
+    var devMode: Boolean
+        get() = prefs.getBoolean("dev_mode", false)
+        set(v) = prefs.edit().putBoolean("dev_mode", v).apply()
+
     private companion object {
         const val FILE = "secure_settings"
     }

@@ -61,6 +61,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Keep a damaged-barcode example when collecting training data is on (either setting). */
     private fun keepBarcodeExample(tracking: String, out: RecoveryOutput?, truthFrom: String) {
         out ?: return
+        if (!_devMode.value) return // user mode keeps nothing
         val frames = _frames.value
         viewModelScope.launch(Dispatchers.IO) {
             val st = settings()
@@ -84,6 +85,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var lastRanked: com.labelrescue.core.candidates.RankResult? = null
 
     private fun writeReport() {
+        if (!_devMode.value) return // user mode keeps nothing
         val id = scanId ?: return
         val out = photoOutput ?: return
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
@@ -196,6 +198,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             _message.value = r.fold({ "Imported $it numbers." }, { "Couldn't import: ${it.message}" })
         }
+    }
+
+    // ---- Developer / user mode ----
+    private val _devMode = MutableStateFlow(false)
+    /**
+     * Developer mode: everything (training data, learn mode, logs, exports, details). User mode,
+     * the default, shows only the scan and its result, and nothing of a scan is kept or learned.
+     */
+    val devMode: StateFlow<Boolean> = _devMode
+    init { viewModelScope.launch { _devMode.value = settings().devMode } }
+
+    fun setDevMode(on: Boolean) {
+        viewModelScope.launch {
+            val st = settings(); withContext(Dispatchers.IO) { st.devMode = on }
+            _devMode.value = on
+            _message.value = if (on) "Developer mode on" else "Developer mode off"
+        }
+    }
+
+    /** User mode: forget the scan (photos, reading, log) once its result is left. */
+    fun endScan() {
+        if (_devMode.value) return
+        clearFrames(); photo.clear(); photoOutput = null; currentLog = null; _noResult.value = null
+        _stickerUps.value = null; _stickerAsked.value = false; _liveLog.value = emptyList()
+        runCatching { java.io.File(getApplication<Application>().cacheDir, "sticker").deleteRecursively() }
     }
 
     // ---- Settings ----
@@ -372,7 +399,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             val models = OnDeviceModels.load(app)
                             val paddle = OnDeviceModels.paddle(app)
                             val quick = settings().quickScan
-                            val learn = settings().learnFromIntact
+                            // User mode learns nothing from a scan.
+                            val learn = _devMode.value && settings().learnFromIntact
                             val layout = runCatching { barcodeLayouts.load() }.getOrNull()?.takeIf { it.size > 0 }
                             log.line("learned barcode positions: ${layout?.size ?: 0}")
                             log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
@@ -425,12 +453,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (fd != null && !out.barcodeRead) keepBarcodeExample(fd.tracking, out, "2d-code")
             // Learn mode: where this intact label's barcodes sat, to look there first on damaged ones.
             var layoutNote = ""
-            if (fd != null && out.layoutSamples.isNotEmpty()) {
+            if (fd != null && out.layoutSamples.isNotEmpty() && _devMode.value) {
                 val n = withContext(Dispatchers.IO) { runCatching { barcodeLayouts.add(out.layoutSamples) }.getOrNull() }
                 if (n != null) layoutNote = " Barcode position learned ($n known)."
             }
             if (fd != null && out.locations.isEmpty() && layoutNote.isNotEmpty()) _message.value = "Learn mode:$layoutNote"
-            if (fd != null && out.locations.isNotEmpty() && settings().learnFromIntact) {
+            if (fd != null && out.locations.isNotEmpty() && _devMode.value && settings().learnFromIntact) {
                 val same = withContext(Dispatchers.IO) { this@AppViewModel.crops.labelsFromSameShipper(fd.tracking) }
                 if (same >= LEARN_LABELS_PER_SHIPPER) {
                     // Enough of this shipper's printer and font: more would only crowd out other fonts.

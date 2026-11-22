@@ -16,7 +16,17 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,4 +70,87 @@ private fun BigButton(label: String, icon: ImageVector, modifier: Modifier = Mod
     }
     if (primary) Button(onClick = onClick, modifier = modifier.heightIn(min = 72.dp)) { content() }
     else FilledTonalButton(onClick = onClick, modifier = modifier.heightIn(min = 64.dp)) { content() }
+}
+
+/**
+ * User mode's start screen: the logo at the top, one animated Scan button, nothing else. Twenty
+ * taps in the bottom-left corner (none more than 2 s apart) switch developer mode on.
+ */
+@Composable
+fun UserHomeScreen(onScan: () -> Unit, onDeveloperMode: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var lastTap by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            androidx.compose.foundation.Image(
+                androidx.compose.ui.res.painterResource(com.labelrescue.app.R.drawable.home_logo),
+                "Label Rescue",
+                Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 440.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            )
+            Spacer(Modifier.size(36.dp))
+            ScanButton(onScan)
+        }
+        // The hidden corner (no ripple, nothing shown until the last few taps).
+        androidx.compose.foundation.layout.Box(
+            Modifier.align(Alignment.BottomStart).size(96.dp)
+                .clickable(interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {
+                    val now = System.currentTimeMillis()
+                    taps = if (now - lastTap > 2000) 1 else taps + 1
+                    lastTap = now
+                    when {
+                        taps >= DEV_TAPS -> { taps = 0; onDeveloperMode() }
+                        taps >= DEV_TAPS - 5 -> android.widget.Toast.makeText(ctx, "${DEV_TAPS - taps} more", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+        )
+    }
+}
+
+private const val DEV_TAPS = 20
+
+/** The big Scan button: postal blue with a red edge, gently pulsing, a shine sweeping across. */
+@Composable
+private fun ScanButton(onClick: () -> Unit) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "scan")
+    val pulse by t.animateFloat(
+        1f, 1.05f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1000), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "pulse",
+    )
+    val shine by t.animateFloat(
+        -0.3f, 1.3f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(2200, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "shine",
+    )
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth(0.85f).heightIn(min = 84.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(shape)
+            .background(androidx.compose.ui.graphics.Color(0xFF333366))
+            .drawWithContent {
+                drawContent()
+                val x = size.width * shine
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(androidx.compose.ui.graphics.Color.Transparent, androidx.compose.ui.graphics.Color(0x6680B4FF), androidx.compose.ui.graphics.Color.Transparent),
+                        start = androidx.compose.ui.geometry.Offset(x - 140f, 0f), end = androidx.compose.ui.geometry.Offset(x + 140f, size.height),
+                    ),
+                )
+            }
+            .border(2.dp, androidx.compose.ui.graphics.Color(0xFFE2232A), shape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(AppIcons.CameraAlt, null, Modifier.size(34.dp), tint = androidx.compose.ui.graphics.Color.White)
+            Spacer(Modifier.width(14.dp))
+            Text("SCAN", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+        }
+    }
 }

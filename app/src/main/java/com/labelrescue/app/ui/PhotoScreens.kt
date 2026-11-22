@@ -90,6 +90,8 @@ fun PhotoResultsScreen(
     stickerBusy: Boolean = false,
     onStickerNo: () -> Unit = {},
     onStickerPhoto: () -> Unit = {},
+    /** User mode: the number, USPS.com, the candidates, UPS when needed, and digit picking. Nothing else. */
+    simple: Boolean = false,
 ) {
     // Both numbers unsure: ask for the UPS sticker, which has the 1Z number printed large.
     val out = state?.photo?.output ?: noResult
@@ -108,9 +110,13 @@ fun PhotoResultsScreen(
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state == null) {
             Text("No tracking number found.", style = MaterialTheme.typography.titleLarge)
-            noResult?.notes?.forEach { Text(it) }
+            if (!simple) noResult?.notes?.forEach { Text(it) }
             if (stickerBusy) StickerBusyCard()
-            noResult?.let { UpsNumberCard(listOfNotNull(stickerUps) + it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber) }
+            noResult?.let { UpsNumberCard(listOfNotNull(stickerUps) + it.ups, uspsConfidence = 0.0, state = null, onUse = onUseUspsNumber, simple = simple) }
+            if (simple) {
+                Text("Try again with the label filling the corner marks, in good light.", style = MaterialTheme.typography.bodyLarge)
+                return@Column
+            }
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
             TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
@@ -121,10 +127,10 @@ fun PhotoResultsScreen(
             // How sure the USPS number is: a full decode is certain; otherwise the top candidate's share.
             val uspsConf = if (out.fullDecode != null) 1.0 else state.ranked?.best?.confidence
             if (stickerBusy) StickerBusyCard()
-            UpsNumberCard(listOfNotNull(stickerUps) + out.ups, uspsConf, state, onUseUspsNumber)
+            UpsNumberCard(listOfNotNull(stickerUps) + out.ups, uspsConf, state, onUseUspsNumber, simple = simple)
         }
-        ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty())
-        TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
+        ResultsPanel(state, actions, crops = state.photo?.crops.orEmpty(), simple = simple)
+        if (!simple) TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
     }
 }
 
@@ -221,6 +227,8 @@ private fun UpsNumberCard(
     uspsConfidence: Double?,
     state: ResultState?,
     onUse: (com.labelrescue.core.usps.ParsedNumber) -> Unit,
+    /** User mode: only the "Find on UPS.com" button (and pasting what's copied there), when it applies. */
+    simple: Boolean = false,
 ) {
     // Only numbers read as-is (barcode, MaxiCode, or printed text passing the check digit): a
     // number that needed a correction is too likely to be made up to show at all.
@@ -228,6 +236,18 @@ private fun UpsNumberCard(
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var launched by androidx.compose.runtime.saveable.rememberSaveable(u.tracking) { androidx.compose.runtime.mutableStateOf(false) }
     val showButton = u.confidence > UPS_MIN_CONFIDENCE && uspsConfidence != null && uspsConfidence < USPS_MAX_CONFIDENCE
+    if (simple) {
+        if (!showButton) return
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FindOnUpsButton {
+                launched = true
+                openWeb(ctx, "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking)
+            }
+            Text("Long-press the USPS tracking number there, tap Copy, then press back.", style = MaterialTheme.typography.bodySmall)
+            PasteNumberPanel(state, listenAfterReturn = launched, onUse = onUse)
+        }
+        return
+    }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
