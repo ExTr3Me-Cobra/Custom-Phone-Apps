@@ -12,13 +12,20 @@ data class ParsedNumber(
     val channel: String?,
     /** 3-digit service type code (IMpb). */
     val serviceType: String?,
-    /** Mailer ID: 9 digits if it starts with 9, otherwise 6. */
+    /**
+     * Mailer ID (Publication 199): 9 digits with channel 92 (always starting with 9), 6 with 93; with
+     * 94 (PC Postage, online, meters) it follows a 2-digit source ID and is 9 digits if it starts with 9.
+     */
     val mailerId: String?,
     val serial: String,
     val checkDigit: Char,
     val checkValid: Boolean,
     /** Things that look wrong but don't fail the check digit (e.g. unknown channel). */
     val warnings: List<String>,
+    /** Channel 94 only: the 2-digit source ID (PC Postage vendor, meter, USPS online system). */
+    val sourceId: String? = null,
+    /** Where [mailerId] starts in [tracking]. */
+    val mailerIdStart: Int = 5,
 ) {
     val isImpb: Boolean get() = channel != null
 }
@@ -76,6 +83,8 @@ object ImpbParser {
         var stc: String? = null
         var mid: String?
         val serial: String
+        var sourceId: String? = null
+        var midStart = 5
         if (format.trackingFormat == TrackingFormat.IMPB_20) {
             // Legacy 20-digit: 2-digit service code, 9-digit mailer ID, 8-digit serial, check digit.
             stc = t.substring(0, 2)
@@ -85,12 +94,21 @@ object ImpbParser {
             channel = t.substring(0, 2)
             if (channel !in CHANNELS) warnings += "Channel $channel is not 92, 93, 94 or 95"
             stc = t.substring(2, 5)
-            val midLen = if (t[5] == '9') 9 else 6
-            mid = t.substring(5, 5 + midLen)
-            serial = t.substring(5 + midLen, t.length - 1)
+            if (stc != null && !ServiceTypeCodes.isValid(stc)) warnings += "Service type code $stc is not on USPS's list"
+            // 94: a 2-digit source ID comes before the Mailer ID.
+            if (channel == "94") { sourceId = t.substring(5, 7); midStart = 7 }
+            val midLen = when (channel) {
+                "92" -> 9
+                "93" -> 6
+                else -> if (t[midStart] == '9') 9 else 6
+            }
+            if (channel == "92" && t[5] != '9') warnings += "Channel 92 needs a nine-digit Mailer ID starting with 9"
+            if (channel == "93" && t[5] == '9') warnings += "Channel 93 needs a six-digit Mailer ID (not starting with 9)"
+            mid = t.substring(midStart, midStart + midLen)
+            serial = t.substring(midStart + midLen, t.length - 1)
         }
         if (zip != null && raw.substring(0, 3) != "420") warnings += "Routing prefix is not 420"
-        return ParsedNumber(raw, format, zip, t, channel, stc, mid, serial, check, valid, warnings)
+        return ParsedNumber(raw, format, zip, t, channel, stc, mid, serial, check, valid, warnings, sourceId, midStart)
     }
 
     private fun parseS10(s: String): ParsedNumber? {

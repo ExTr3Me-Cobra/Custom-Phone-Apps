@@ -2,6 +2,7 @@ package com.labelrescue.core.candidates
 
 import com.labelrescue.core.usps.ImpbParser
 import com.labelrescue.core.usps.ServiceHints
+import com.labelrescue.core.usps.ServiceTypeCodes
 import com.labelrescue.core.usps.TrackingFormat
 import kotlin.math.ln
 
@@ -43,8 +44,14 @@ class StructurePrior(
         val t = number.substring(format.routingLength)
         val tf = format.trackingFormat
         if (tf == TrackingFormat.IMPB_22 || tf == TrackingFormat.IMPB_26) {
-            if (t.substring(0, 2) !in ImpbParser.CHANNELS) lp += ln(0.02)
+            val channel = t.substring(0, 2)
+            if (channel !in ImpbParser.CHANNELS) lp += ln(0.02)
             val stc = t.substring(2, 5)
+            // Publication 199: only listed service type codes are valid (346 of 1000), a channel-92
+            // Mailer ID has nine digits starting with 9, a channel-93 one six (so not starting with 9).
+            if (!ServiceTypeCodes.isValid(stc)) lp += ln(0.08)
+            if (channel == "92" && t[5] != '9') lp += ln(0.03)
+            if (channel == "93" && t[5] == '9') lp += ln(0.1)
             if (hints.isNotEmpty()) {
                 when {
                     hints.any { stc in it.serviceTypeCodes } -> lp += ln(8.0)
@@ -76,22 +83,25 @@ data class HistoryStats(
     val mailerIds: Map<String, Int>,
     val serviceTypes: Map<String, Int>,
     val channels: Map<String, Int>,
+    /** Where each Mailer ID sits in the tracking number (5, or 7 after a channel-94 source ID). */
+    val mailerIdStarts: Map<String, Int> = emptyMap(),
 ) {
     companion object {
         val EMPTY = HistoryStats(0, emptyMap(), emptyMap(), emptyMap())
 
         fun from(confirmed: Iterable<String>): HistoryStats {
             val mids = HashMap<String, Int>(); val stcs = HashMap<String, Int>(); val ch = HashMap<String, Int>()
+            val starts = HashMap<String, Int>()
             var n = 0
             for (num in confirmed) {
                 val p = ImpbParser.parse(num) ?: continue
                 if (!p.isImpb) continue
                 n++
-                p.mailerId?.let { mids.merge(it, 1, Int::plus) }
+                p.mailerId?.let { mids.merge(it, 1, Int::plus); starts[it] = p.mailerIdStart }
                 p.serviceType?.let { stcs.merge(it, 1, Int::plus) }
                 p.channel?.let { ch.merge(it, 1, Int::plus) }
             }
-            return HistoryStats(n, mids, stcs, ch)
+            return HistoryStats(n, mids, stcs, ch, starts)
         }
     }
 }
@@ -124,7 +134,8 @@ class HistoryPrior(private val stats: HistoryStats, private val maxSuggestions: 
         val off = format.routingLength
         val out = mutableListOf<Map<Int, Char>>()
         for ((mid, _) in stats.mailerIds.entries.sortedByDescending { it.value }.take(maxSuggestions)) {
-            out += mid.withIndex().associate { (i, c) -> off + 5 + i to c }
+            val start = stats.mailerIdStarts[mid] ?: 5
+            out += mid.withIndex().associate { (i, c) -> off + start + i to c }
         }
         for ((stc, _) in stats.serviceTypes.entries.sortedByDescending { it.value }.take(maxSuggestions)) {
             out += stc.withIndex().associate { (i, c) -> off + 2 + i to c }

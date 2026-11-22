@@ -1,0 +1,41 @@
+package com.labelrescue.core.usps
+
+/**
+ * The IMpb Service Type Codes (positions 3-5 of a 22/26-digit tracking number) that USPS lists as
+ * valid, with their class of mail. Source: USPS PostalPro, "Service Type Codes for Intelligent
+ * Mail Package Barcode (IMpb)", Appendix I to Publication 199, effective 06/24/2026 (retired codes
+ * left out). 346 of the 1000 possible values: a number whose STC isn't listed is very
+ * unlikely (the list does change, so this is a prior, not a filter).
+ */
+object ServiceTypeCodes {
+    /** STC → class of mail (FC = First-Class / Ground Advantage, PM = Priority Mail, EX = Priority Mail Express, PS = Parcel Select, BB/BS/BL = Bound Printed Matter / Media / Library, …). */
+    val CLASS: Map<String, String> = (
+        "001:FC 019:PM 020:FC 021:FC 022:FC 026:PM 027:PM 028:PM 029:PM 031:PM 032:PM 033:PM 035:PM 037:PM " +
+        "039:PM 043:FC 046:PM 049:PM 052:PM 053:PM 055:PM 058:PM 061:PM 063:PM 065:PM 070:PM 071:FC 072:PM " +
+        "073:FC 075:PM 076:PS 078:PM 079:PM 080:PM 081:PM 083:PM 088:PM 089:PM 090:EX 091:EX 092:EX 093:EX " +
+        "100:PM 101:PM 102:PM 105:PM 106:PM 107:PM 108:PM 109:FC 111:PM 112:PM 113:PM 114:PM 115:PM 116:PM " +
+        "120:PM 121:PM 123:PM 139:BB 140:BB 141:BB 147:FC 148:FC 149:FC 152:FC 153:FC 154:FC 157:FC 158:FC " +
+        "159:FC 160:FC 161:FC 164:FC 166:FC 167:FC 168:FC 169:FC 172:FC 173:FC 174:FC 175:FC 176:FC 177:FC " +
+        "179:FC 180:FC 181:FC 183:FC 184:FC 185:FC 186:FC 187:FC 189:FC 190:FC 191:FC 192:FC 193:FC 194:FC " +
+        "195:FC 196:FC 203:FC 204:FC 206:FC 209:FC 211:FC 212:FC 213:FC 214:FC 215:FC 217:FC 218:FC 219:PM " +
+        "220:FC 223:FC 248:SA 249:S2 250:S2 254:S2 255:SA 256:SA 258:S2 259:SA 265:SA 269:SA 286:SA 323:PM " +
+        "329:FC 344:FC 345:FC 346:FC 347:FC 348:FC 349:FC 352:FC 353:FC 354:FC 355:FC 356:FC 358:FC 360:FC " +
+        "361:FC 362:FC 363:FC 365:FC 367:FC 368:FC 370:FC 372:FC 373:FC 375:FC 376:FC 383:FC 385:FC 386:FC " +
+        "387:FC 388:FC 394:FC 395:PS 397:FC 399:FC 406:FC 419:BB 420:BB 422:BB 423:BB 424:BB 425:BB 426:BB " +
+        "431:BB 447:BB 453:FC 454:BB 455:BB 462:FC 463:FC 464:FC 467:FC 468:FC 473:FC 483:PS 490:BS 491:BS " +
+        "493:BS 494:BS 497:BS 501:FC 502:BS 515:PM 517:PM 518:BS 520:BS 522:FC 529:FC 531:FC 533:FC 551:BL " +
+        "552:BL 554:BL 555:BL 556:BL 558:BL 560:FC 562:FC 563:BL 564:FC 575:BL 579:BL 582:FC 583:FC 587:FC " +
+        "589:FC 590:FC 592:FC 594:FC 595:FC 596:PM 597:FC 598:FC 599:PM 600:FC 601:FC 602:PM 603:FC 612:PS " +
+        "613:PS 615:PS 616:PS 619:PS 621:FC 624:PS 628:PS 629:FC 637:PS 640:PS 646:PS 655:EX 656:EX 657:EX " +
+        "658:EX 659:PM 660:PM 661:PM 662:PM 665:EX 667:EX 668:EX 670:FC 681:PM 682:PM 683:PM 684:PM 687:PM " +
+        "688:PM 689:PM 690:PM 691:PS 692:PS 696:PS 697:PS 698:PS 699:PS 701:EX 702:SA 703:S2 704:S2 711:EX " +
+        "712:EX 713:EX 714:EX 715:EX 716:EX 717:EX 718:EX 719:EX 720:EX 721:EX 723:EX 724:EX 725:EX 726:EX " +
+        "727:EX 729:EX 730:EX 731:EX 732:EX 750:N/A 755:N/A 756:N/A 757:N/A 760:EX 761:EX 762:EX 763:EX " +
+        "764:EX 772:PM 773:PM 774:PM 775:PM 776:PM 777:PM 796:EX 797:EX 798:EX 817:EX 837:EX 838:EX 839:EX " +
+        "861:FC 893:PM 895:PS 896:PM 905:SA 906:SA 907:FC 909:FC 910:PM 911:PM 915:PM 916:PM 917:EX 918:EX " +
+        "919:EX 920:EX 921:EX 922:EX 928:FC 929:FC 930:FC 931:FC 932:FC 933:FC 936:FC 937:FC 939:FC 941:PS " +
+        "942:PS 959:BB 965:BS 967:FC 968:FC 970:FC 974:FC 975:FC 976:BL 977:BS 978:BB "
+    ).split(' ').filter { it.isNotBlank() }.associate { it.substringBefore(':') to it.substringAfter(':') }
+
+    fun isValid(stc: String): Boolean = stc in CLASS
+}

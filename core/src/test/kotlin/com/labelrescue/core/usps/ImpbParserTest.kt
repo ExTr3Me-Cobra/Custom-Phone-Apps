@@ -21,11 +21,31 @@ class ImpbParserTest {
     }
 
     @Test fun parse22WithSixDigitMid() {
-        val n = withCheck("940010123450000000001")
+        // Channel 93: commercial mailer with a six-digit Mailer ID, 10-digit serial (Publication 199).
+        val n = withCheck("930010123450000000001")
         val p = ImpbParser.parse(n)!!
-        assertEquals("94", p.channel); assertEquals("001", p.serviceType)
+        assertEquals("93", p.channel); assertEquals("001", p.serviceType)
         assertEquals("012345", p.mailerId); assertEquals("0000000001", p.serial)
         assertTrue(p.checkValid)
+    }
+
+    @Test fun channel94HasASourceIdBeforeTheMailerId() {
+        // PC Postage / online: STC, 2-digit source ID, then the Mailer ID (9 digits from a 9, else 6).
+        val six = ImpbParser.parse(withCheck("940011012345600000001"))!!
+        assertEquals("10", six.sourceId); assertEquals("123456", six.mailerId); assertEquals(7, six.mailerIdStart)
+        assertEquals("00000001", six.serial)
+        val nine = ImpbParser.parse(withCheck("940011090123456700001"))!!
+        assertEquals("901234567", nine.mailerId); assertEquals("00001", nine.serial)
+    }
+
+    @Test fun channel92MailerIdStartsWith9AndTheServiceCodeIsChecked() {
+        // A real label: 92, STC 612 (on USPS's list), MID 909888642, 11-digit serial.
+        val p = ImpbParser.parse("92612909888642571048257340")!!
+        assertEquals("909888642", p.mailerId); assertEquals("57104825734", p.serial)
+        assertTrue(p.warnings.toString(), p.warnings.isEmpty())
+        val bad = ImpbParser.parse(withCheck("920001234567890123456"))!!
+        assertTrue(bad.warnings.any { "Mailer ID" in it })
+        assertTrue(bad.warnings.any { "not on USPS's list" in it })
     }
 
     @Test fun parse26() {

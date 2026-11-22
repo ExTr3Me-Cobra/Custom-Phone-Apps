@@ -39,7 +39,9 @@ data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolea
         val NONE = LabelZones(null, null)
 
         private val UPS_LINE = Regex("TRACK\\w*\\s*#?\\s*:?\\s*[1IL]\\s?[Z2]\\s?[0-9A-Z]")
-        private val USPS_TRACKING = Regex("USPS\\s*TRACK|TRACKING\\s*#?\\s*$|USPS\\s*TRAC")
+        // Banner text (Publication 199, 4.5): "USPS TRACKING #" or "USPS SIGNATURE TRACKING #", or
+        // spelled out "... TRACKING NUMBER" on printers without "#".
+        private val USPS_TRACKING = Regex("USPS\\s*TRACK|SIGNATURE\\s*TRACK|TRACKING\\s*(#|NUMBER)?\\s*$|USPS\\s*TRAC")
 
         /** The anchor lines, from OCR lines with boxes in frame coordinates. */
         fun anchors(lines: List<Pair<OcrLine, IntRect?>>, numberLines: List<IntRect>): Anchors {
