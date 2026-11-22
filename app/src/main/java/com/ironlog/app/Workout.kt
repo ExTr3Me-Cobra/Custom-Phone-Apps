@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -184,6 +185,34 @@ object Workouts {
         }
     }
 
+    /** Moves exercise [from] to position [to]; running stopwatches move with their sets. */
+    fun move(from: Int, to: Int) {
+        val w = Store.active.value ?: return
+        if (from == to || from !in w.items.indices || to !in w.items.indices) return
+        fun newIndex(i: Int) = when {
+            i == from -> to
+            from < to && i in (from + 1)..to -> i - 1
+            from > to && i in to until from -> i + 1
+            else -> i
+        }
+        val keys = timers.keys.filter { it.startsWith("${w.id}:") }
+        val moved = keys.mapNotNull { k ->
+            val p = k.split(":"); val i = p.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+            val nk = "${p[0]}:${newIndex(i)}:${p[2]}"
+            arrayOf(k, nk, timers[k], timerTargets[k], k in chimed)
+        }
+        moved.forEach { m -> val k = m[0] as String; timers.remove(k); timerTargets.remove(k); chimed.remove(k) }
+        moved.forEach { m ->
+            val nk = m[1] as String
+            (m[2] as Long?)?.let { timers[nk] = it }
+            (m[3] as Int?)?.let { timerTargets[nk] = it }
+            if (m[4] as Boolean) chimed += nk
+        }
+        update { ww -> ww.copy(items = ww.items.toMutableList().also { it.add(to, it.removeAt(from)) }) }
+        // The boxes are keyed by position: redraw them with their new exercises.
+        refresh++
+    }
+
     /** Checks every running stopwatch: passing last time's hold plays the level-up chime, once per set. */
     fun checkTimers(c: Context, now: Long) {
         for ((k, started) in timers) {
@@ -257,6 +286,35 @@ fun ActiveWorkoutScreen() {
     var confirmDiscard by remember { mutableStateOf(false) }
     var editDuration by remember { mutableStateOf(false) }
 
+    // Hold an exercise's header for 2 seconds, then drag: every exercise shrinks to its name while you move it.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val rowH = with(density) { 56.dp.toPx() }
+    var dragFrom by remember { mutableStateOf<Int?>(null) }
+    var dragY by remember { mutableStateOf(0f) }   // finger, in the list's coordinates
+    var listTop by remember { mutableStateOf(0f) } // where the short list starts
+    var released by remember { mutableStateOf(0L) }
+    fun dragTo(): Int = ((dragY - listTop) / rowH).toInt().coerceIn(0, (Store.active.value?.items?.lastIndex ?: 0).coerceAtLeast(0))
+    fun dragModifier(i: Int) = Modifier.pointerInput(i, w.items.size) {
+        detectDragAfterHold(
+            2000,
+            onDragStart = { o ->
+                val top = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == i }?.offset ?: return@detectDragAfterHold
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                dragY = top + o.y
+                listTop = (dragY - rowH * i - rowH / 2).coerceAtLeast(0f)
+                dragFrom = i
+            },
+            onDrag = { d -> dragY += d },
+            onDragEnd = {
+                dragFrom?.let { from -> Workouts.move(from, dragTo()) }
+                dragFrom = null; released = System.currentTimeMillis()
+            },
+            onDragCancel = { dragFrom = null; released = System.currentTimeMillis() },
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         // Top bar: calculator, reference weights, Discard, Finish (the phone's back button leaves the workout running).
         var bigMap by remember { mutableStateOf(false) }
@@ -298,12 +356,13 @@ fun ActiveWorkoutScreen() {
         }
         androidx.compose.material3.HorizontalDivider(color = Card2)
         // Lots of room at the bottom so the last sets can scroll up above the keyboard.
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 400.dp)) {
+      Box(Modifier.weight(1f)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 400.dp)) {
             items(w.items.size) { i ->
                 val item = w.items[i]
                 val ex = Store.exercise(item.exerciseId)
                 var menu by remember { mutableStateOf(false) }
-                ExerciseHeader(ex) {
+                ExerciseHeader(ex, dragModifier(i), noClick = { dragFrom != null || System.currentTimeMillis() - released < 400 }) {
                     Box {
                         Text("•••", color = Sub, fontSize = 18.sp, modifier = Modifier.clickable { menu = true }.padding(8.dp))
                         DropdownMenu(menu, { menu = false }) {
@@ -326,7 +385,7 @@ fun ActiveWorkoutScreen() {
                     }
                 }
                 // Notes (kept with the routine, so they're there next time).
-                var note by remember(w.id, i) { mutableStateOf(item.note) }
+                var note by remember(w.id, i, Workouts.refresh) { mutableStateOf(item.note) }
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp).typing()) {
                     if (note.isEmpty()) Text("Add notes here...", color = Sub, fontSize = 17.sp)
                     androidx.compose.foundation.text.BasicTextField(
@@ -396,6 +455,30 @@ fun ActiveWorkoutScreen() {
                 GreyButton("Discard Workout", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), Red) { confirmDiscard = true }
             }
         }
+        // While moving: every exercise as a short row with just its name; the held one follows your finger.
+        dragFrom?.let { from ->
+            val to = dragTo()
+            val order = w.items.indices.toMutableList().also { if (from in it.indices) it.add(to, it.removeAt(from)) }
+            Box(Modifier.matchParentSize().background(Bg)) {
+                order.forEachIndexed { pos, idx ->
+                    val held = idx == from
+                    val y = if (held) dragY - rowH / 2 else listTop + pos * rowH
+                    Row(
+                        Modifier.offset { androidx.compose.ui.unit.IntOffset(0, y.toInt()) }.fillMaxWidth().height(56.dp)
+                            .padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp))
+                            .background(if (held) Blue.copy(alpha = 0.35f) else Card).padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("≡", color = Sub, fontSize = 20.sp)
+                        HSpacer(12)
+                        Text(Store.exercise(w.items[idx].exerciseId)?.name ?: "Missing exercise", fontSize = 16.sp,
+                            fontWeight = if (held) FontWeight.Bold else FontWeight.Normal, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+      }
         RestBar()
     }
     restFor?.let { i ->
@@ -847,3 +930,31 @@ fun FeelPanel(w: Workout) {
 }
 
 private val FEELS = listOf("Not rated", "Felt awful", "Felt bad", "Felt okay", "Felt good", "Felt great")
+
+/**
+ * Hold still for [holdMs], then drag. Moving or lifting before then lets the touch through (scrolling, tapping).
+ * [onDrag] gets the vertical movement.
+ */
+suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDragAfterHold(
+    holdMs: Long, onDragStart: (androidx.compose.ui.geometry.Offset) -> Unit, onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit, onDragCancel: () -> Unit,
+) = androidx.compose.foundation.gestures.awaitEachGesture {
+    val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+    val slop = viewConfiguration.touchSlop
+    // True when the finger lifted or moved away first; null when the hold time ran out (a hold).
+    val gaveUp = withTimeoutOrNull(holdMs) {
+        var stop = false
+        while (!stop) {
+            val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+            stop = c == null || !c.pressed || c.isConsumed || (c.position - down.position).getDistance() > slop
+        }
+        true
+    }
+    if (gaveUp != null) return@awaitEachGesture
+    onDragStart(down.position)
+    val ok = androidx.compose.foundation.gestures.drag(down.id) { c ->
+        val d = c.position - c.previousPosition
+        c.consume(); onDrag(d.y)
+    }
+    if (ok) onDragEnd() else onDragCancel()
+}
