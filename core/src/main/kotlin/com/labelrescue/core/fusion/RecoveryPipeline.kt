@@ -4,7 +4,9 @@ import com.labelrescue.core.privacy.Redactor
 import com.labelrescue.core.ups.UpsNumber
 
 import com.labelrescue.core.barcode.BarcodeDecoder
+import com.labelrescue.core.barcode.BarcodeBounds
 import com.labelrescue.core.barcode.BarcodeLocator
+import com.labelrescue.core.image.DeadLines
 import com.labelrescue.core.barcode.BarcodeRead
 import com.labelrescue.core.barcode.Code128Partial
 import com.labelrescue.core.barcode.PartialResult
@@ -667,25 +669,16 @@ class RecoveryPipeline(
         log?.line("f$fi barcode regions: " + chosenRegions.joinToString { "${it.first}${if (it.second) " vertical" else ""}" } +
             (if (detected.isNotEmpty()) "; detector: " + detected.joinToString { "${it.kind}@${it.box}" } else ""))
         var droppedUps = 0
-        for ((rect, vertical) in chosenRegions) {
-            check()
-            val (img, outer) = regionImage(frame, rect, vertical)
-            val whole = rect.width == frame.width && rect.height == frame.height
-            if (zones.inUps(rect)) {
-                // The UPS barcode: read it whole (for the UPS number) but don't measure it as USPS.
-                full(frame.crop(rect), "frame ${fi + 1} UPS area")
-                log?.line("f$fi $rect is the UPS barcode area: not read as the USPS number")
-                continue
-            }
+        fun read(img: GrayImage, outer: Affine, rect: IntRect, whole: Boolean, tag: String) {
             val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, rotations = if (lite) emptyList() else listOf(-3.0, 3.0), restore = if (whole || lite) null else restorer))
                 .filter { !whole || it.name == "gray" || it.name == "clahe" }
                 .filter { !lite || it.name in LITE_VARIANTS }
             for (v in vs) {
                 check()
                 w.variants++
-                full(v.image, "frame ${fi + 1} ${v.name}")
+                full(v.image, "frame ${fi + 1} $tag${v.name}")
                 val ms = partialDecoder.measure(v.image)
-                log?.measurements(fi, "$rect ${v.name}", ms)
+                log?.measurements(fi, "$rect $tag${v.name}", ms)
                 for (ev in ms) {
                     val t = v.toFrame.then(outer)
                     if (zones.ups != null) {
@@ -696,6 +689,38 @@ class RecoveryPipeline(
                 }
                 w.measurements++
             }
+        }
+        // First the barcodes' own extent, quiet zones cleaned: located areas often reach the box's
+        // or label's edges, and the damaged-barcode decoder anchors on where the bars start and
+        // stop (a real label with dead print-head lines read fully only from such a crop).
+        val bars = ArrayList<BarcodeBounds.Bounds>()
+        for ((rect, vertical) in chosenRegions) {
+            if (vertical || zones.inUps(rect)) continue
+            val b = BarcodeBounds.find(frame, rect) ?: continue
+            // Only where the area is much bigger than the barcode (a whole label, box edges): an area
+            // already tight around it gives the same reading, and a second one only double-counts.
+            if (rect.width < b.rect.width * 1.2 && rect.height < b.rect.height * 1.5) continue
+            if (zones.inUps(b.rect) || bars.any { o -> val i = o.rect.intersect(b.rect); !i.isEmpty && i.width.toLong() * i.height > 0.8 * b.rect.width.toLong() * b.rect.height }) continue
+            bars += b
+            if (bars.size >= 2) break
+        }
+        for (b in bars) {
+            check()
+            val dead = DeadLines.find(frame, IntRect(b.barsLeft, b.rect.top, b.barsRight, b.rect.bottom))
+            log?.line("f$fi barcode bars ${b.barsLeft}..${b.barsRight} in ${b.rect}" + if (dead.lines.isNotEmpty()) "; ${dead.lines.size} dead print-head columns" else "")
+            read(BarcodeBounds.cleanCrop(frame, b), Affine.translate(b.rect.left.toDouble(), b.rect.top.toDouble()), b.rect, false, "bars ")
+        }
+        for ((rect, vertical) in chosenRegions) {
+            check()
+            val (img, outer) = regionImage(frame, rect, vertical)
+            val whole = rect.width == frame.width && rect.height == frame.height
+            if (zones.inUps(rect)) {
+                // The UPS barcode: read it whole (for the UPS number) but don't measure it as USPS.
+                full(frame.crop(rect), "frame ${fi + 1} UPS area")
+                log?.line("f$fi $rect is the UPS barcode area: not read as the USPS number")
+                continue
+            }
+            read(img, outer, rect, whole, "")
         }
 
         if (droppedUps > 0) log?.line("f$fi left out $droppedUps barcode readings in the UPS barcode area")
