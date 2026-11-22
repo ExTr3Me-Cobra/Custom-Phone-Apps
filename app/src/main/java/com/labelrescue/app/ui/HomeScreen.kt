@@ -83,21 +83,21 @@ fun UserHomeScreen(onScan: () -> Unit, onDeveloperMode: () -> Unit) {
     var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var lastTap by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        // The Scan button sits exactly in the middle of the screen; the logo takes all the room
-        // above it, as big as fits (its whole width or the height above the button, whichever
-        // runs out first).
-        val buttonHalf = 42.dp
-        val gap = 20.dp
-        val logoHeight = (maxHeight / 2 - buttonHalf - gap).coerceAtLeast(0.dp)
-        androidx.compose.foundation.Image(
-            androidx.compose.ui.res.painterResource(com.labelrescue.app.R.drawable.home_logo),
-            "Label Rescue",
-            Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 8.dp, end = 8.dp)
-                .fillMaxWidth().height(logoHeight - 8.dp),
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-        )
-        androidx.compose.foundation.layout.Box(Modifier.align(Alignment.Center).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            ScanButton(onScan)
+        // The logo as big as the screen's width allows (at most 62% of the height, for short
+        // screens), at the top; the Scan button exactly halfway between the logo's bottom and
+        // the bottom of the screen.
+        val logo = androidx.compose.ui.res.painterResource(com.labelrescue.app.R.drawable.home_logo)
+        val ratio = logo.intrinsicSize.width / logo.intrinsicSize.height
+        val logoWidth = minOf(maxWidth - 16.dp, maxHeight * 0.62f * ratio)
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.foundation.Image(
+                logo, "Label Rescue",
+                Modifier.padding(top = 8.dp).width(logoWidth).height(logoWidth / ratio),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            )
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ScanButton(onScan)
+            }
         }
         // The hidden corner (no ripple, nothing shown until the last few taps).
         androidx.compose.foundation.layout.Box(
