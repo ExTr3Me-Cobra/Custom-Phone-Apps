@@ -40,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -938,8 +941,8 @@ private val FEELS = listOf("Not rated", "Felt awful", "Felt bad", "Felt okay", "
 suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDragAfterHold(
     holdMs: Long, onDragStart: (androidx.compose.ui.geometry.Offset) -> Unit, onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit, onDragCancel: () -> Unit,
-) = androidx.compose.foundation.gestures.awaitEachGesture {
-    val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+) = awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
     val slop = viewConfiguration.touchSlop
     // True when the finger lifted or moved away first; null when the hold time ran out (a hold).
     val gaveUp = withTimeoutOrNull(holdMs) {
@@ -952,7 +955,7 @@ suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDragAfterH
     }
     if (gaveUp != null) return@awaitEachGesture
     onDragStart(down.position)
-    val ok = androidx.compose.foundation.gestures.drag(down.id) { c ->
+    val ok = drag(down.id) { c ->
         val d = c.position - c.previousPosition
         c.consume(); onDrag(d.y)
     }
