@@ -94,13 +94,13 @@ jobs:
           ./gradlew --stacktrace :app:assembleDebug
           rm -f "$RUNNER_TEMP/app.keystore"
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/LabelRescue-debug.apk
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs out/LabelRescue-debug.apk | grep -i "SHA-256" >> "$GITHUB_STEP_SUMMARY" || true
+          cp app/build/outputs/apk/debug/app-debug.apk out/LabelRescue.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs out/LabelRescue.apk | grep -i "SHA-256" >> "$GITHUB_STEP_SUMMARY" || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: LabelRescue-debug-apk
-          path: out/LabelRescue-debug.apk
+          path: out/LabelRescue.apk
           if-no-files-found: error
 
   # A direct download link (Releases page), like the repo's other apps. Not for pull requests.
@@ -126,8 +126,8 @@ jobs:
           make_latest: false
           body: |
             Debug build of `${{ github.ref_name }}` at ${{ github.sha }}. On your phone, tap
-            **LabelRescue-debug.apk** below to download it, then open it to install.
-          files: out/LabelRescue-debug.apk
+            **LabelRescue.apk** below to download it, then open it to install.
+          files: out/LabelRescue.apk
 
   # The minified release APK + AAB (for a store, someday) only when started by hand: the
   # downloadable debug APK above is signed with the same key and is what gets installed.

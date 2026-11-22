@@ -9,7 +9,7 @@ first, then speed.
 Every push builds a debug APK. It is published two ways.
 
 **Releases (simplest on a phone).** Open this repository's **Releases** page and pick the newest
-**Label Rescue (build N)** pre-release. Tap **LabelRescue-debug.apk** to download it, then open
+**Label Rescue (build N)** pre-release. Tap **LabelRescue.apk** to download it, then open
 it to install.
 
 **Actions artifact.**
@@ -18,7 +18,7 @@ it to install.
 2. Open the newest **Build** run with a green check mark (on the branch you want).
 3. Scroll down to **Artifacts** and download **LabelRescue-debug-apk**. GitHub downloads it as a
    `.zip` file. You need to be signed in to GitHub to download artifacts.
-4. Unzip it to get `LabelRescue-debug.apk`. On a phone, the Files app can unzip it; on a computer,
+4. Unzip it to get `LabelRescue.apk`. On a phone, the Files app can unzip it; on a computer,
    unzip it and copy the APK to the phone.
 5. Open the APK on the phone. If Android says installing unknown apps is blocked, tap
    **Settings** in that message and allow your browser or Files app to install apps. On Samsung
