@@ -121,14 +121,16 @@ class CaptureGuide(
         val sharp = Filters.sharpness(crop)
         recentSharpness.addLast(sharp)
         while (recentSharpness.size > 30) recentSharpness.removeFirst()
-        val peak = recentSharpness.max()
+        // A typical sharp frame, not the single sharpest (one lucky frame made every other one
+        // count as out of focus, so the check flickered with hand shake).
+        val peak = recentSharpness.sorted().let { it[((it.size - 1) * 0.8).toInt()] }
 
         // On a 4×6 label the main barcode spans roughly 45-95% of the label's width.
         val widthFrac = r.width.toDouble() / g.width
         // A label found clearly smaller than the marks: closer gives a sharper read.
         val tooFar = widthFrac < (if (landscape) MIN_BARCODE_WIDTH_LANDSCAPE else MIN_BARCODE_WIDTH) || paperSmall
         val aligned = !tooFar && !paperTooBig && !paperOff && abs(tilt) <= maxTiltDegrees
-        val focused = sharp >= minSharpness && sharp >= 0.8 * peak
+        val focused = sharp >= minSharpness && sharp >= 0.75 * peak
 
         val (issue, msg) = when {
             tooFar -> Issue.TOO_SMALL to "Move closer: line the label's corners up with the 4 marks"

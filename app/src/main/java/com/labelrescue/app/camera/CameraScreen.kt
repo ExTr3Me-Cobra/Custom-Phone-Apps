@@ -86,6 +86,8 @@ const val STILLS = 2
 
 /** After this long without a good alignment, offer "Capture anyway" (e.g. barcode torn away). */
 private const val OVERRIDE_AFTER_MS = 8000L
+/** How long the Burst button stays on after the label was last lined up and sharp. */
+private const val READY_HOLD_MS = 2000L
 
 /**
  * Live camera with four corner marks for the label's corners. A burst is allowed once the label
@@ -204,6 +206,13 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
 
     // Track how long we've been not-ready, to offer an override.
     val ready = status?.ready == true
+    // The Burst button stays usable while the label is lined up, and for a moment after the last
+    // "ready": the focus check flickers with hand shake, and a burst keeps the sharpest frames anyway.
+    var lastReadyAt by remember { mutableStateOf(0L) }
+    var nowTick by remember { mutableStateOf(0L) }
+    LaunchedEffect(ready) { if (ready) lastReadyAt = SystemClock.elapsedRealtime() }
+    LaunchedEffect(Unit) { while (true) { nowTick = SystemClock.elapsedRealtime(); delay(250) } }
+    val canBurst = ready || status?.aligned == true || (lastReadyAt > 0 && nowTick - lastReadyAt < READY_HOLD_MS)
     LaunchedEffect(ready) { if (!ready) notReadySince = SystemClock.elapsedRealtime() }
     LaunchedEffect(Unit) {
         while (true) {
@@ -289,21 +298,21 @@ fun CameraScreen(onFrame: (GrayImage) -> Unit, onBurstDone: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Button(
                     onClick = { startBurst() },
-                    enabled = !burstRunning && ready,
+                    enabled = !burstRunning && canBurst,
                     modifier = Modifier.weight(1f).heightIn(min = 64.dp),
                 ) {
                     Icon(AppIcons.CameraAlt, null); Spacer(Modifier.width(8.dp))
                     Text(
                         when {
                             burstRunning -> "Capturing $collected…"
-                            ready -> "Burst capture"
+                            canBurst -> "Burst capture"
                             else -> "Line up the label"
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
             }
-            if (!burstRunning && !ready && overrideOk) {
+            if (!burstRunning && !canBurst && overrideOk) {
                 TextButton(onClick = { startBurst() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text("Capture anyway (barcode missing or badly damaged)", color = Color.White)
                 }

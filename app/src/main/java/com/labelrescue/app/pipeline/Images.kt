@@ -105,12 +105,25 @@ object Images {
     }
 
     /** Zoomed crop around [box] for showing a digit, scaled to about [targetHeight] px tall. */
+    /**
+     * The digit for a person to look at: centered on the actual character (the OCR box snapped to
+     * the glyph, as for the digit model), a little of each neighbor kept for context but faded,
+     * so it's clear which digit is meant.
+     */
     fun zoomCrop(img: GrayImage, box: IntRect, targetHeight: Int = 180): Bitmap? {
-        // Boxes are tight around the character: show some context around it.
-        val pad = (max(box.width, box.height) * 0.7).toInt() + 4
-        val r = box.inflate(pad, pad).intersect(IntRect(0, 0, img.width, img.height))
+        val g = com.labelrescue.core.ml.CharCrop.refine(img, box)
+        val h = max(g.height, box.height)
+        val halfW = (h * 0.75).roundToInt(); val halfH = (h * 0.8).roundToInt()
+        val cx = (g.left + g.right) / 2; val cy = (g.top + g.bottom) / 2
+        val r = IntRect(cx - halfW, cy - halfH, cx + halfW, cy + halfH).intersect(IntRect(0, 0, img.width, img.height))
         if (r.isEmpty) return null
         val crop = img.crop(r)
+        // Fade everything left and right of the digit (its neighbors) towards white.
+        val keepL = g.left - r.left - 2; val keepR = g.right - r.left + 2
+        for (y in 0 until crop.height) for (x in 0 until crop.width) {
+            if (x in keepL..keepR) continue
+            crop[x, y] = 255 - (255 - crop[x, y]) * 3 / 10
+        }
         val f = targetHeight.toDouble() / crop.height
         val scaled = if (f > 1.2 || f < 0.8) crop.scaled((crop.width * f).roundToInt().coerceAtLeast(1), targetHeight) else crop
         return toBitmap(scaled)
