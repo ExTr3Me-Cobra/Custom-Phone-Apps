@@ -40,7 +40,9 @@ object ImpbParser {
         if (s.length == 13 && s[0].isLetter()) return parseS10(s)
         if (s.any { it !in '0'..'9' }) return null
         return when (s.length) {
-            20 -> parseTracking(s, TrackingFormat.IMPB_20, null, s)
+            // "00" + 18 digits is a GS1 SSCC (shipping container code, e.g. UPS Mail Innovations'
+            // Package ID), with the same check digit: never a legacy USPS number.
+            20 -> if (s.startsWith("00")) null else parseTracking(s, TrackingFormat.IMPB_20, null, s)
             22 -> parseTracking(s, TrackingFormat.IMPB_22, null, s)
             26 -> parseTracking(s, TrackingFormat.IMPB_26, null, s)
             30 -> if (s.startsWith("420")) parseTracking(s, TrackingFormat.ROUTED_30, s.substring(3, 8), s.substring(8)) else null

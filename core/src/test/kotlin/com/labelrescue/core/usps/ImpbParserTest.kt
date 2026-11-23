@@ -133,4 +133,12 @@ class ServiceHintsFuzzyTest {
         org.junit.Assert.assertEquals("9300120787713680351566", first("42005641\u001D9300120787713680351566").tracking)
         org.junit.Assert.assertEquals("9300120787713680351566", first("]C142005641\u001D9300120787713680351566").tracking)
     }
+
+    @Test fun ssccIsNotAUspsNumber() {
+        // A real UPS Mail Innovations label: its 2D code holds the SSCC (00)007869300239206384,
+        // which passes the same check digit; the label's USPS number is 9241 9902 7120 1557 3045 3761 56.
+        assertEquals(null, ImpbParser.parse("00007869300239206384"))
+        assertTrue(ImpbParser.extractFromPayload("]d2" + "00007869300239206384").none { it.tracking == "00007869300239206384" })
+        assertTrue(ImpbParser.parse("9241990271201557304537615" + "6")!!.checkValid)
+    }
 }
