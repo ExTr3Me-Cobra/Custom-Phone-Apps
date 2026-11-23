@@ -1,5 +1,6 @@
 # Real damaged labels, cropped to the barcode and printed number (no names or addresses).
-# file | true tracking number (confirmed by the user / a reprint) | number-line box in pixels (l,t,r,b)
+# file | true tracking number (confirmed by the user / a reprint) | number-line box in pixels (l,t,r,b) [| hard]
+# "hard": not solved yet (reported, not counted as a failure).
 ground-advantage-faded.png | 9234690275976500211709 | 0,540,1320,700
 parcel-select-streaks.png | 9361289684070561859481 | 400,440,1450,540
 ups-ground-saver-1z.png | 1Z2K1W60YW90101353 | 40,70,1250,170
@@ -21,3 +22,5 @@ batch1-13.png | 9400136208122654935325 | 0,207,770,273
 batch1-14.png | 9300189698000773881319 | 0,187,690,248
 batch1-15.png | 9200190426365138592036 | 0,177,780,238
 dead-printhead-lines.png | 9434650106151175671291 | 250,320,840,375
+hazmat-dead-bands.png | 9339589684070651096378 | 280,250,850,325 | hard
+faded-right-half.png | 9361289684070651666425 | 280,240,740,290

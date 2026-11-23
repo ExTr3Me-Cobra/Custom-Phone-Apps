@@ -33,7 +33,10 @@ class RealCasesTest {
         val report = StringBuilder()
         var failures = 0
         for (line in File(dir, "cases.txt").readLines().filter { it.isNotBlank() && !it.startsWith("#") }) {
-            val (file, truth, box) = line.split("|").map { it.trim() }
+            val parts = line.split("|").map { it.trim() }
+            val (file, truth, box) = parts
+            // A 4th column "hard": a label not solved yet, reported but not counted as a failure.
+            val hard = parts.getOrNull(3) == "hard"
             val img = load(File(dir, file))
             val (l, t, r, b) = box.split(",").map { it.trim().toFloat() }
             val log = DiagnosticLog()
@@ -50,9 +53,9 @@ class RealCasesTest {
             val ranked = if (f != null) CandidateEngine().rank(f, out.slots, out.prior(HistoryStats.EMPTY), out.exactEvidence()) else null
             val rank = ranked?.candidates?.indexOfFirst { it.tracking == truth }?.takeIf { it >= 0 }?.plus(1)
             val top = ranked?.candidates?.take(3)?.joinToString { "${it.tracking} ${"%.0f".format(it.confidence * 100)}%" }
-            report.append("$file: truth rank ${rank ?: "not listed"} of ${ranked?.candidates?.size ?: 0}; top: $top\n")
+            report.append("$file: truth rank ${rank ?: "not listed"} of ${ranked?.candidates?.size ?: 0}; top: $top${if (hard) " (known hard, not counted)" else ""}\n")
             File("build/real-$file.log").writeText(log.text())
-            if (rank == null || rank > 10) failures++
+            if (!hard && (rank == null || rank > 10)) failures++
         }
         File("build/real-cases.txt").writeText(report.toString())
         println(report)
