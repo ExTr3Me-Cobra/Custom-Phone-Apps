@@ -39,6 +39,18 @@ enum class Screen(val title: String) {
 fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var barcodeNumber by rememberSaveable { mutableStateOf<String?>(null) }
+    /**
+     * A number copied from USPS.com or ups.com and accepted. Developer mode: it becomes the result
+     * (or opens as a typed number if its length differs). User mode: USPS confirmed it, so it goes
+     * straight to the barcode screen (the results show it too, for Back).
+     */
+    fun useCopied(n: com.labelrescue.core.usps.ParsedNumber) {
+        val fits = vm.useUspsNumber(n)
+        when {
+            !vm.devMode.value -> { barcodeNumber = n.tracking; screen = Screen.BARCODE }
+            !fits -> { vm.onManualText(n.tracking); screen = Screen.MANUAL }
+        }
+    }
     val dev by vm.devMode.collectAsStateWithLifecycle()
     fun back() {
         if (screen == Screen.BARCODE) { screen = Screen.RESULTS; return }
@@ -174,7 +186,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                             vm.photo::pick, vm.photo::unpick, vm.photo::select,
                             // User mode: "This is correct" shows the number as barcodes (nothing is saved).
                             onConfirm = { if (dev) vm.confirm(it, "photo") else { barcodeNumber = it; screen = Screen.BARCODE } },
-                            onUseNumber = { n -> if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL } },
+                            onUseNumber = { n -> useCopied(n) },
                         ),
                         onManual = { screen = Screen.MANUAL },
                         onRetry = { screen = Screen.CROP },
@@ -182,10 +194,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onExportTraining = vm::exportTrainingData,
                         reportPhotos = reportPhotos,
                         reportPhoto = reportPhoto,
-                        onUseUspsNumber = { n ->
-                            // Same format as the label's reading: becomes the result. Otherwise it opens as a typed number.
-                            if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL }
-                        },
+                        onUseUspsNumber = { n -> useCopied(n) },
                         simple = !dev,
                         stickerUps = stickerUps,
                         stickerAsked = stickerAsked,

@@ -211,6 +211,7 @@ fun ResultsPanel(
             var launched by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             CheckOnUspsButton(r.candidates.size) { launched = true; openWeb(ctx, uspsComUrl(r.candidates.map { it.tracking })) }
             if (!simple) actions.onUseNumber?.let { use -> PasteNumberPanel(state, listenAfterReturn = launched, onUse = use) }
+            else actions.onUseNumber?.let { use -> ClipboardPopup(state, listenAfterReturn = launched, onUse = use) }
         }
         ranked?.let { r ->
             Text(
@@ -525,6 +526,63 @@ fun PasteNumberPanel(state: ResultState?, listenAfterReturn: Boolean, onUse: (co
         if (empty) Text("No USPS tracking number on the clipboard. Long-press the number on the website and tap Copy first.", style = MaterialTheme.typography.bodySmall)
     }
     used?.let { Text("Using ${TrackingFormat.grouped(it)}.", style = MaterialTheme.typography.bodySmall) }
+}
+
+/**
+ * User mode: on coming back from USPS.com (or ups.com) with a USPS number on the clipboard, a big
+ * popup offers it: the number, how it fits the label, and one large Use button.
+ */
+@Composable
+fun ClipboardPopup(state: ResultState?, listenAfterReturn: Boolean, onUse: (com.labelrescue.core.usps.ParsedNumber) -> Unit) {
+    val ctx = LocalContext.current
+    var offered by remember { mutableStateOf<com.labelrescue.core.usps.ParsedNumber?>(null) }
+    var declined by remember { mutableStateOf<String?>(null) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle, listenAfterReturn) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            // Shortly after the window has focus: Android only lets the app in front read the clipboard.
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && listenAfterReturn) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    clipboardUsps(ctx)?.takeIf { it.tracking != declined }?.let { offered = it }
+                }, 400)
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+    val p = offered ?: return
+    val fit = state?.let { com.labelrescue.core.usps.LabelFit.check(p, it.format, it.baseSlots) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { declined = p.tracking; offered = null },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        title = { Text("Use the number you copied?", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(TrackingFormat.grouped(p.tracking), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        fit == null -> "A valid USPS tracking number."
+                        !fit.sameFormat -> "A valid USPS number, but a different length than this label's. Check you copied the right one."
+                        fit.conflicts.isNotEmpty() -> "Some digits the label shows clearly are different. Check you copied the right number."
+                        else -> "It fits this label."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (fit != null && !fit.fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { offered = null; declined = p.tracking; onUse(p) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = PostalBlue, contentColor = Color.White),
+            ) { Icon(AppIcons.Check, null); Spacer(Modifier.width(8.dp)); Text("USE THIS NUMBER", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { declined = p.tracking; offered = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Not this one") }
+        },
+    )
 }
 
 /** A pasted USPS number, how it fits the label, and Use / Not this. */

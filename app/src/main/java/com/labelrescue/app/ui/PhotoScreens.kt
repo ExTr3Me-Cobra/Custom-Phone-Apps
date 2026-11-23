@@ -244,7 +244,7 @@ private fun UpsNumberCard(
                 openWeb(ctx, "https://www.ups.com/track?loc=en_US&tracknum=" + u.tracking)
             }
             Text("Long-press the USPS tracking number there, tap Copy, then press back.", style = MaterialTheme.typography.bodySmall)
-            PasteNumberPanel(state, listenAfterReturn = launched, onUse = onUse)
+            ClipboardPopup(state, listenAfterReturn = launched, onUse = onUse)
         }
         return
     }
