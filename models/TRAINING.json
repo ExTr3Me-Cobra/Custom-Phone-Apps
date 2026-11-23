@@ -1,25 +1,25 @@
 {
   "digit_classifier": {
-    "mean_p_true": 0.9862,
+    "mean_p_true": 0.9912,
     "params": 167354,
     "tflite_bytes": 674568,
-    "val_accuracy": 0.989,
-    "val_loss": 0.0349
+    "val_accuracy": 0.9923,
+    "val_loss": 0.0244
   },
   "region_detector": {
     "params": 92788,
     "tflite_bytes": 376860,
     "val_iou": {
-      "barcode": 0.956,
-      "service_banner": 0.88,
-      "tracking_text": 0.858,
-      "zip": 0.766
+      "barcode": 0.954,
+      "service_banner": 0.871,
+      "tracking_text": 0.849,
+      "zip": 0.786
     }
   },
   "restore": {
-    "identity_mae": 0.09721,
+    "identity_mae": 0.09811,
     "params": 4945,
     "tflite_bytes": 22784,
-    "val_mae": 0.03556
+    "val_mae": 0.03589
   }
 }
