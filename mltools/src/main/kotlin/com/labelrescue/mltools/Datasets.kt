@@ -254,6 +254,18 @@ fun main(args: Array<String>) {
     val jobs = ArrayList<Thread>()
     fun job(f: () -> Unit) { jobs += Thread(f).apply { start() } }
     if (want("digits")) {
+        // Real crops with the damage seen on real labels (the test labels' crops left out).
+        val real = File("../training/real_crops")
+        if (File(real, "labels.csv").exists()) job {
+            val test = File("../training/real_damaged_test/labels.csv").takeIf { it.exists() }?.readLines()?.drop(1)?.map { it.split(",")[2] }?.toSet().orEmpty()
+            val samples = RealDamage.labeled(real, test, (15 * scale).toInt().coerceAtLeast(2), Random(7))
+            // Which label each one came from, so training can leave out the ones it holds out.
+            File(out, "digits_realdmg.tracking.txt").writeText(samples.joinToString("\n") { it.third })
+            DatasetWriter(File(out, "digits_realdmg.lrd"), mapOf("kind" to "digits", "h" to CharCrop.SIZE, "w" to CharCrop.SIZE, "c" to 1, "label" to listOf(1))).use { w ->
+                for ((x, y, _) in samples) w.add(x, byteArrayOf(y.toByte()))
+                println("digits_realdmg.lrd: ${w.count} (real crops, real-world damage)")
+            }
+        }
         job { digits("digits_train.lrd", (60000 * scale).toInt(), 1) }
         job { digits("digits_val.lrd", (6000 * scale).toInt(), 2) }
     }

@@ -16,6 +16,8 @@ if [ "$EP_SCALE" = "0" ]; then EPOCHS_ARGS=(--epochs 3); fi
 # Real crops from the app, re-cut and verified (./gradlew :mltools:curateCrops; training/real_crops).
 EXTRA_ARGS=()
 if [ -f training/real_crops/labels.csv ]; then EXTRA_ARGS=(--extra training/real_crops); fi
+# Real damaged digits (test only): a new digit model must read at least as many as the current one.
+if [ -f training/real_damaged_test/labels.csv ]; then EXTRA_ARGS+=(--damaged-test training/real_damaged_test); fi
 "$PY" training/train_digits.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}" "${EXTRA_ARGS[@]}"
 "$PY" training/train_restore.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"
 "$PY" training/train_regions.py --data "$DATA" --out "$OUT" "${EPOCHS_ARGS[@]}"

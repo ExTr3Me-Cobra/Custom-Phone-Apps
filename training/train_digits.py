@@ -91,6 +91,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--extra", help="folder of real crops exported from the app (labels.csv + PNGs)")
+    ap.add_argument("--damaged-test", help="folder of real damaged digits (labels.csv + PNGs): test only, never trained on")
     ap.add_argument("--force", action="store_true", help="replace the model even if it's worse on the held-out real crops")
     ap.add_argument("--export-only", action="store_true", help="re-export the saved Keras model without training")
     a = ap.parse_args()
@@ -101,8 +102,18 @@ def main():
     yt = yt[:, 0].astype(np.int32); yv = yv[:, 0].astype(np.int32)
     real_test = None
     weights = None
+    damaged_test = None
+    test_labels = set()
+    if a.damaged_test and os.path.exists(os.path.join(a.damaged_test, "labels.csv")):
+        xd, yd, _, ld = load_extra(a.damaged_test)
+        damaged_test = (xd, yd, None)
+        test_labels = set(ld)
+        print(f"real damaged test digits: {len(yd)} from {len(test_labels)} labels (never trained on)")
     if a.extra:
         xe, ye, te, le = load_extra(a.extra)
+        # The damaged test's labels stay out of training entirely.
+        keep = np.array([l not in test_labels for l in le])
+        xe, ye, te, le = xe[keep], ye[keep], te[keep], [l for l, k in zip(le, keep) if k]
         hold = split_by_label(le)
         sw = shipper_weights(le)
         real_test = (xe[hold], ye[hold], sw[hold])
@@ -115,6 +126,17 @@ def main():
         weights = np.concatenate([np.ones(len(yt) - int(tr.sum()), np.float32), w_real])
         print(f"real crops: {len(ye)} ({int(te.sum())} trusted) from {len({shipper(l) for l in le})} shippers, "
               f"{int(tr.sum())} for training, {int(hold.sum())} held out (whole labels)")
+        # Real crops with real-world damage (from :mltools:datasets), minus held-out and test labels.
+        dmg = os.path.join(a.data, "digits_realdmg.lrd")
+        if os.path.exists(dmg):
+            _, xr, yr = common.load_lrd(dmg)
+            tracks = open(os.path.join(a.data, "digits_realdmg.tracking.txt")).read().split("\n")
+            held = {l for l, h in zip(le, hold) if h}
+            ok = np.array([t not in held and t not in test_labels for t in tracks[:len(yr)]])
+            xr = xr[ok].astype(np.float32) / 255; yr = yr[ok][:, 0].astype(np.int32)
+            xt = np.concatenate([xt, xr]); yt = np.concatenate([yt, yr])
+            weights = np.concatenate([weights, np.full(len(yr), 0.5, np.float32)])
+            print(f"real crops with real-world damage: {len(yr)} for training (weight 0.5 each)")
     m = build()
     m.compile(optimizer=keras.optimizers.Adam(2e-3), loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     if a.export_only:
@@ -128,20 +150,31 @@ def main():
     p = m.predict(xv, verbose=0)
     true_p = float(np.mean(p[np.arange(len(yv)), yv]))
     os.makedirs(a.out, exist_ok=True)
-    # On the held-out real crops, the new model must not be worse than the current one.
+    # The new model must not be worse than the current one: on the held-out real crops (clean),
+    # and on the real damaged digits (never trained on).
     old_path = os.path.join(a.out, "digit_classifier.tflite")
-    if real_test is not None and len(real_test[1]) > 0:
+    if (real_test is not None and len(real_test[1]) > 0) or damaged_test is not None:
         tmp = os.path.join(a.out, "digit_classifier.candidate.tflite")
         common.export_tflite(m, tmp, (32, 32, 1))
-        new_acc = tflite_accuracy(tmp, *real_test)
-        old_acc = tflite_accuracy(old_path, *real_test)
+        reject = None
+        if real_test is not None and len(real_test[1]) > 0:
+            new_acc = tflite_accuracy(tmp, *real_test)
+            old_acc = tflite_accuracy(old_path, *real_test)
+            print(f"held-out real crops: new model {new_acc:.3f}, current model {old_acc if old_acc is None else round(old_acc, 3)}")
+            # The curated real crops were checked with the current model (a crop is kept only where it
+            # reads as its label), so it scores near 100% on them by construction: a new model may
+            # trail it by up to 2 points.
+            if old_acc is not None and new_acc < old_acc - 0.02:
+                reject = "worse on your clean real crops"
+        if damaged_test is not None:
+            new_d = tflite_accuracy(tmp, *damaged_test)
+            old_d = tflite_accuracy(old_path, *damaged_test)
+            print(f"real damaged digits: new model {new_d:.3f}, current model {old_d if old_d is None else round(old_d, 3)}")
+            if old_d is not None and new_d < old_d:
+                reject = reject or "reads fewer real damaged digits"
         os.remove(tmp)
-        print(f"held-out real crops: new model {new_acc:.3f}, current model {old_acc if old_acc is None else round(old_acc, 3)}")
-        # The curated real crops were checked with the current model (training/real_crops: a crop is
-        # kept only where it reads as its label), so it scores near 100% on them by construction: a
-        # new model may trail it by up to 2 points (the recovery benchmark still has to pass).
-        if old_acc is not None and new_acc < old_acc - 0.02 and not a.force:
-            print("New model is worse on your real labels; keeping the current model (use --force to override).")
+        if reject and not a.force:
+            print(f"New model {reject}; keeping the current model (use --force to override).")
             return
     if not a.export_only:
         common.save_keras(m, a.out, "digit_classifier")

@@ -32,4 +32,13 @@ class CharCropTest {
         val blank = GrayImage.filled(100, 60, 235)
         assertEquals(IntRect(40, 10, 52, 40), CharCrop.refine(blank, IntRect(40, 10, 52, 40)))
     }
+
+    @Test fun deadLineThroughADigitDoesNotSplitIt() {
+        // One glyph 18 wide, 30 tall, with a 3 px dead column through it; neighbours 6 px away.
+        val im = GrayImage.filled(200, 80, 235)
+        for (k in 0 until 3) for (y in 20 until 50) for (x in 40 + k * 24 until 58 + k * 24) im[x, y] = 30
+        for (y in 0 until 80) for (x in 71 until 74) im[x, y] = 232
+        assertEquals(IntRect(64, 20, 82, 50), CharCrop.refine(im, IntRect(64, 20, 82, 50)))
+        assertEquals(IntRect(64, 20, 82, 50), CharCrop.refine(im, IntRect(60, 20, 72, 50)))
+    }
 }

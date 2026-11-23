@@ -111,6 +111,26 @@ object CharCrop {
             }
             x = end + 1
         }
+        return joinSplit(out, h)
+    }
+
+    /**
+     * A dead print-head line through a digit splits it into two runs that look like two narrow
+     * characters. Rejoin neighbours across a thin gap (up to 0.13 heights) when the pieces are
+     * narrower than a digit and together no wider than one (0.78 heights); two whole digits side
+     * by side stay apart.
+     */
+    private fun joinSplit(glyphs: List<IntRect>, h: Int): List<IntRect> {
+        if (glyphs.size < 2) return glyphs
+        val out = ArrayList<IntRect>()
+        var cur = glyphs[0]
+        for (g in glyphs.drop(1)) {
+            val gap = g.left - cur.right
+            val joined = IntRect(cur.left, minOf(cur.top, g.top), g.right, maxOf(cur.bottom, g.bottom))
+            val narrowPiece = cur.width < 0.42 * h || g.width < 0.42 * h
+            if (gap <= 0.13 * h && narrowPiece && joined.width <= 0.78 * h) cur = joined else { out += cur; cur = g }
+        }
+        out += cur
         return out
     }
 
