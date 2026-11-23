@@ -176,6 +176,11 @@ fun ResultsPanel(
             }
         }
 
+        if (simple) actions.onConfirm?.let { confirm ->
+            Button(onClick = { confirm(cand.tracking) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                Icon(AppIcons.Check, null); Spacer(Modifier.width(8.dp)); Text("This is correct", style = MaterialTheme.typography.titleMedium)
+            }
+        }
         if (!simple) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = { copy(ctx, cand.tracking) }, modifier = Modifier.heightIn(min = 52.dp)) {
                 Icon(AppIcons.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Copy")

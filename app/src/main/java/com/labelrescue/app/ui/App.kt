@@ -31,15 +31,17 @@ import com.labelrescue.app.camera.CropScreen
 
 enum class Screen(val title: String) {
     HOME("Label Rescue"), MANUAL("Type digits"), CAMERA("Scan label"), CROP("Crop (optional)"), PROCESSING("Recovering"), RESULTS("Results"),
-    HISTORY("Confirmed history"), SETTINGS("Settings")
+    HISTORY("Confirmed history"), SETTINGS("Settings"), BARCODE("Barcode")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+    var barcodeNumber by rememberSaveable { mutableStateOf<String?>(null) }
     val dev by vm.devMode.collectAsStateWithLifecycle()
     fun back() {
+        if (screen == Screen.BARCODE) { screen = Screen.RESULTS; return }
         // User mode: scan → reading → result, and back to the start (the scan is forgotten).
         if (!dev) {
             if (screen == Screen.PROCESSING) vm.cancelRecovery()
@@ -72,7 +74,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
 
     Scaffold(
         topBar = {
-            if (screen != Screen.HOME && screen != Screen.CAMERA) TopAppBar(
+            if (screen != Screen.HOME && screen != Screen.CAMERA && screen != Screen.BARCODE) TopAppBar(
                 title = { Text(screen.title) },
                 navigationIcon = { IconButton(onClick = { back() }) { Icon(AppIcons.ArrowBack, "Back") } },
             )
@@ -143,6 +145,16 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onLeaveDevMode = { vm.setDevMode(false); screen = Screen.HOME },
                     )
                 }
+                Screen.BARCODE -> {
+                    val t = barcodeNumber
+                    // The ZIP only when the barcode itself proved it (a guessed ZIP would mis-sort the package).
+                    val full = vm.photo.state.collectAsStateWithLifecycle().value?.photo?.output?.fullDecode
+                    if (t != null) BarcodeScreen(
+                        t, full?.zip?.takeIf { full.tracking == t },
+                        onBack = { screen = Screen.RESULTS },
+                        onDone = { vm.endScan(); screen = Screen.HOME },
+                    )
+                }
                 Screen.RESULTS -> {
                     val st by vm.photo.state.collectAsStateWithLifecycle()
                     val none by vm.noResult.collectAsStateWithLifecycle()
@@ -160,7 +172,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         st, none,
                         ResultActions(
                             vm.photo::pick, vm.photo::unpick, vm.photo::select,
-                            onConfirm = { vm.confirm(it, "photo") },
+                            // User mode: "This is correct" shows the number as barcodes (nothing is saved).
+                            onConfirm = { if (dev) vm.confirm(it, "photo") else { barcodeNumber = it; screen = Screen.BARCODE } },
                             onUseNumber = { n -> if (!vm.useUspsNumber(n)) { vm.onManualText(n.tracking); screen = Screen.MANUAL } },
                         ),
                         onManual = { screen = Screen.MANUAL },
