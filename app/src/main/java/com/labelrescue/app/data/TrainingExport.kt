@@ -25,7 +25,13 @@ import java.util.zip.ZipOutputStream
  * barcode examples stay (they're the growing data set; re-exporting just includes them again).
  */
 object TrainingExport {
-    class Result(val name: String, val where: String, val entries: Int)
+    class Result(val name: String, val where: String, val entries: Int, val parts: Int = 1)
+
+    /** Each file stays under the 30 MB upload limit, with room to spare. */
+    const val PART_LIMIT = 27L * 1024 * 1024
+
+    /** One file to put in the export, and how much it matters (lower goes first). */
+    private class Entry(val path: String, val priority: Int, val size: Long, val bytes: ByteArray? = null, val file: File? = null)
 
     fun write(
         ctx: Context,
@@ -39,33 +45,73 @@ object TrainingExport {
         layout: File? = null,
         scanCrops: ScanCrops? = null,
     ): Result {
-        val name = "LabelRescue-training-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".zip"
-        var entries = 0
-        fun zipTo(os: OutputStream) = ZipOutputStream(os).use { zip ->
-            fun put(path: String, bytes: ByteArray) { zip.putNextEntry(ZipEntry(path)); zip.write(bytes); zip.closeEntry(); entries++ }
-            fun putFile(path: String, f: File) { zip.putNextEntry(ZipEntry(path)); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry(); entries++ }
-            val reportText = report.text()
-            val photos = report.photos()
-            val cropFiles = crops.dir.listFiles().orEmpty().sortedBy { it.name }
-            val barcodeFiles = barcodes.files().sortedBy { it.name }
-            put(
-                "README.txt",
-                ("Label Rescue $appVersion training export, ${Date()}\n" +
-                    "training report: ${report.count()} scans, ${photos.size} photos\n" +
-                    "digit crops: ${crops.count()} · barcode examples: ${barcodes.count()} · confirmed numbers: ${confirmed.size}\n").toByteArray(),
-            )
-            if (reportText.isNotBlank()) put("training_report.txt", reportText.toByteArray())
-            for (f in photos) putFile("report_photos/${f.name}", f)
-            for (f in cropFiles) putFile("training_crops/${f.name}", f)
-            for (f in barcodeFiles) putFile("barcode_examples/${f.name}", f)
-            for (f in scanCrops?.files().orEmpty().sortedBy { it.name }) putFile("scan_crops/${f.name}", f)
-            layout?.takeIf { it.exists() && it.length() > 0 }?.let { putFile("barcode_layout.txt", it) }
-            diagnosticLog?.takeIf { it.isNotBlank() }?.let { put("diagnostic_log.txt", it.toByteArray()) }
-            if (confirmed.isNotEmpty()) {
-                put("confirmed_numbers.csv", ("tracking,confirmed_at,source\n" + confirmed.joinToString("") { "${it.tracking},${it.confirmedAt},${it.source}\n" }).toByteArray())
-            }
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        // Digit crops and barcode examples are a growing set: only files not exported before go
+        // (their label lists go in full, they're small). Clearing the crops starts over.
+        val sentList = File(ctx.filesDir, "exported_files.txt")
+        val sent = if (sentList.exists()) sentList.readLines().toHashSet() else HashSet()
+        val entries = ArrayList<Entry>()
+        fun text(path: String, t: String) { val b = t.toByteArray(); entries += Entry(path, 0, b.size.toLong(), bytes = b) }
+        fun file(path: String, f: File, priority: Int) { if (f.exists()) entries += Entry(path, priority, f.length(), file = f) }
+        val photos = report.photos()
+        val reportText = report.text()
+        val newCrops = crops.dir.listFiles().orEmpty().filter { it.extension == "png" && "training_crops/${it.name}" !in sent }
+        val newBarcodes = barcodes.files().filter { it.extension == "png" && "barcode_examples/${it.name}" !in sent }
+        text(
+            "README.txt",
+            "Label Rescue $appVersion training export, ${Date()}\n" +
+                "training report: ${report.count()} scans, ${photos.size} photos\n" +
+                "digit crops: ${crops.count()} (${newCrops.size} new in this export) · barcode examples: ${barcodes.count()} (${newBarcodes.size} new) · confirmed numbers: ${confirmed.size}\n" +
+                "Only files not exported before are included; label lists are complete.\n",
+        )
+        if (reportText.isNotBlank()) text("training_report.txt", reportText)
+        diagnosticLog?.takeIf { it.isNotBlank() }?.let { text("diagnostic_log.txt", it) }
+        if (confirmed.isNotEmpty()) text("confirmed_numbers.csv", "tracking,confirmed_at,source\n" + confirmed.joinToString("") { "${it.tracking},${it.confirmedAt},${it.source}\n" })
+        layout?.takeIf { it.exists() && it.length() > 0 }?.let { file("barcode_layout.txt", it, 0) }
+        crops.dir.listFiles().orEmpty().filter { it.extension == "csv" }.forEach { file("training_crops/${it.name}", it, 0) }
+        barcodes.files().filter { it.extension == "csv" }.forEach { file("barcode_examples/${it.name}", it, 0) }
+        scanCrops?.files()?.filter { it.extension == "csv" }?.forEach { file("scan_crops/${it.name}", it, 0) }
+        // By value: the codes of every scan (small, read or not), then photos of damaged labels
+        // (full resolution), then new digit crops and barcode examples, then the rest.
+        scanCrops?.files()?.filter { it.extension == "png" }?.forEach { file("scan_crops/${it.name}", it, 1) }
+        for (f in photos) file("report_photos/${f.name}", f, if (f.length() > 600_000) 2 else 4)
+        newBarcodes.forEach { file("barcode_examples/${it.name}", it, 3) }
+        newCrops.forEach { file("training_crops/${it.name}", it, 3) }
+
+        // Into parts under the limit, most valuable first; the small text files go in part 1.
+        val ordered = entries.sortedWith(compareBy({ it.priority }, { it.path }))
+        val parts = ArrayList<MutableList<Entry>>()
+        var cur = ArrayList<Entry>(); var size = 0L
+        for (e in ordered) {
+            if (cur.isNotEmpty() && size + e.size + 4096 > PART_LIMIT) { parts += cur; cur = ArrayList(); size = 0 }
+            cur += e; size += e.size + 200
         }
-        val where: String
+        if (cur.isNotEmpty()) parts += cur
+        var where = ""; var count = 0
+        val names = ArrayList<String>()
+        for ((i, part) in parts.withIndex()) {
+            val name = "LabelRescue-training-$stamp" + (if (parts.size > 1) "-part${i + 1}of${parts.size}" else "") + ".zip"
+            where = save(ctx, name) { os ->
+                ZipOutputStream(os).use { zip ->
+                    for (e in part) {
+                        zip.putNextEntry(ZipEntry(e.path))
+                        if (e.bytes != null) zip.write(e.bytes) else e.file!!.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry(); count++
+                    }
+                }
+            }
+            names += name
+        }
+        // Remember what went out, so the next export only sends what's new.
+        sentList.appendText(ordered.filter { it.priority == 3 }.joinToString("") { it.path + "\n" })
+        report.clear()
+        return Result(names.first(), where, count, parts.size)
+    }
+
+    /** Forgets what was exported (after the crops are deleted, so new ones aren't skipped). */
+    fun forgetSent(ctx: Context) { File(ctx.filesDir, "exported_files.txt").delete() }
+
+    private fun save(ctx: Context, name: String, write: (OutputStream) -> Unit): String {
         if (Build.VERSION.SDK_INT >= 29) {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, name)
@@ -75,20 +121,17 @@ object TrainingExport {
             }
             val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("Couldn't create the file in Downloads")
             try {
-                ctx.contentResolver.openOutputStream(uri)!!.use { zipTo(it) }
+                ctx.contentResolver.openOutputStream(uri)!!.use { write(it) }
                 values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
                 ctx.contentResolver.update(uri, values, null, null)
             } catch (e: Exception) {
                 ctx.contentResolver.delete(uri, null, null); throw e
             }
-            where = "Downloads"
-        } else {
-            // Android 9 and older: the app's own folder (no storage permission needed).
-            val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: ctx.filesDir
-            File(dir, name).outputStream().use { zipTo(it) }
-            where = dir.absolutePath
+            return "Downloads"
         }
-        report.clear()
-        return Result(name, where, entries)
+        // Android 9 and older: the app's own folder (no storage permission needed).
+        val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: ctx.filesDir
+        File(dir, name).outputStream().use { write(it) }
+        return dir.absolutePath
     }
 }

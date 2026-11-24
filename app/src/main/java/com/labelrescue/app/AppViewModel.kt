@@ -93,17 +93,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, scanPasted)
         // The burst's full-resolution photo when there is one: preview-sized frames are too small
         // to show a damaged 2D code's modules, and those are worth learning from.
-        val frame = _frames.value.maxByOrNull { it.width.toLong() * it.height } ?: _frames.value.getOrNull(out.privacyFrame)
+        val full = _frames.value.maxByOrNull { it.width.toLong() * it.height } ?: _frames.value.getOrNull(out.privacyFrame)
+        // The whole label at full resolution only when it wasn't read cleanly (the damaged ones are
+        // what's worth studying); a clean read keeps a preview-sized photo. Crops are always full size.
+        val damaged = out.fullDecode == null
+        val frame = full
+        val photoFrame = if (damaged) full else (_frames.value.getOrNull(out.privacyFrame) ?: full)
         val truth = scanConfirmed ?: scanPasted ?: out.fullDecode?.tracking
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
             // Full-resolution crops of the barcodes, number lines and 2D codes, readable or not.
             if (frame != null) runCatching { if (!scanCrops.has(id)) scanCrops.save(id, frame, truth) else if (truth != null) scanCrops.setTruth(id, truth) }
             // One photo per scan, as taken (training data is not redacted, by the user's choice).
-            if (frame != null && !report.hasPhoto(id)) {
+            if (photoFrame != null && !report.hasPhoto(id)) {
                 runCatching {
-                    val bmp = com.labelrescue.app.pipeline.Images.toBitmap(frame)
-                    val bytes = java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
+                    val bmp = com.labelrescue.app.pipeline.Images.toBitmap(photoFrame)
+                    // Quality 85: about a third smaller than 92, no difference to reading the label.
+                    val bytes = java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
                     report.putPhoto(id, bytes)
                     _reportPhoto.value = android.graphics.Bitmap.createScaledBitmap(bmp, 480, 480 * bmp.height / bmp.width, true)
                 }
@@ -133,7 +139,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // Full-resolution scan crops are big: sent once, then cleared (like the report photos).
                 withContext(Dispatchers.IO) { runCatching { scanCrops.clear() } }
                 _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
-                _message.value = "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file: it deletes itself in 10 minutes."
+                _message.value = (if (r.parts > 1) "Saved ${r.parts} files (${r.name} and the next parts) to ${r.where}, each under 30 MB. Send them all" else "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file") + ": exports delete themselves in 10 minutes."
             }.onFailure { _message.value = "Couldn't save the export: ${it.message}" }
             loadSettings()
         }
@@ -177,7 +183,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Training crop review ----
 
     fun clearTrainingCrops() {
-        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear(); scanCrops.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear(); scanCrops.clear(); com.labelrescue.app.data.TrainingExport.forgetSent(getApplication()) }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
     }
 
     fun deleteConfirmed(id: Long) { viewModelScope.launch { db.confirmed().delete(id) } }
