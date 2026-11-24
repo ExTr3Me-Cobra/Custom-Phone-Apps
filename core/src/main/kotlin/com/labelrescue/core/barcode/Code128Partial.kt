@@ -118,6 +118,8 @@ class PartialResult(
  */
 class Code128Partial(private val maxLines: Int = 32) {
     companion object {
+        /** Judge bar darkness against nearby ink and paper (see localDark); a switch for comparison runs. */
+        @JvmStatic var LOCAL_CONTRAST = System.getenv("LR_GLOBAL_CONTRAST") == null
         /** Bar width offsets (modules) tried when matching templates. */
         val BAR_BIAS = doubleArrayOf(-0.6, -0.3, 0.0, 0.3, 0.6)
     }
@@ -155,7 +157,12 @@ class Code128Partial(private val maxLines: Int = 32) {
         return DoubleArray(n) { i -> 0.25 * raw[max(0, i - 1)] + 0.5 * raw[i] + 0.25 * raw[min(n - 1, i + 1)] }
     }
 
-    private class Line(val y: Int, val dark: DoubleArray, val edges: DoubleArray, val edgeDarkAfter: BooleanArray)
+    /** [masked]: columns under a dead print-head line, where the print says nothing (null: none). */
+    private class Line(val y: Int, val dark: DoubleArray, val edges: DoubleArray, val edgeDarkAfter: BooleanArray, val masked: BooleanArray? = null) {
+        fun isMasked(x: Double): Boolean { val m = masked ?: return false; val i = x.toInt(); return i in m.indices && m[i] }
+        /** True if an edge at [x] is next to a masked column: a dead line's own edge, not a bar's. */
+        fun edgeAtMask(x: Double): Boolean { val m = masked ?: return false; val i = x.roundToInt(); for (k in i - 2..i + 1) if (k in m.indices && m[k]) return true; return false }
+    }
 
     private class Anchor(val y: Int, val x: Double, val module: Double)
 
@@ -169,6 +176,15 @@ class Code128Partial(private val maxLines: Int = 32) {
      */
     fun measure(img: GrayImage): List<SymbolEvidence> =
         closings(img).flatMap { measure(img, it) }
+
+    /**
+     * As [measure], with columns known to be dead print-head lines ([dead] (x, y) in [img]'s
+     * pixels) treated as unknown: they're left out of the template match instead of read as white
+     * (which reads as extra spaces), and edges they make aren't taken for bar edges. A symbol with
+     * a few of its modules hidden still narrows to a few patterns; the checksums do the rest.
+     */
+    fun measure(img: GrayImage, dead: (Int, Int) -> Boolean): List<SymbolEvidence> =
+        closings(img).flatMap { measure(img, it, dead) }
 
     /**
      * Gap-closing sizes to try: none, plus hairline sizes that stay well under half a module
@@ -189,10 +205,10 @@ class Code128Partial(private val maxLines: Int = 32) {
         return (0..rMax).toList()
     }
 
-    fun measure(img: GrayImage, close: Int): List<SymbolEvidence> {
+    fun measure(img: GrayImage, close: Int, dead: ((Int, Int) -> Boolean)? = null): List<SymbolEvidence> {
         val o = listOf(false, true).map { rev ->
             // Gap-closing passes also average a taller band, so dotted (faded) bars read as bars.
-            val lines = scanlines(img, rev, close, band = if (close > 0) 4 else 1)
+            val lines = scanlines(img, rev, close, band = if (close > 0) 4 else 1, dead = dead)
             val starts = ArrayList<Anchor>(); val stops = ArrayList<Anchor>() // stop x = right end of the stop pattern
             for (ln in lines) { findStart(ln)?.let { starts += it }; findStop(ln)?.let { stops += it } }
             Oriented(rev, lines, starts, stops)
@@ -256,7 +272,7 @@ class Code128Partial(private val maxLines: Int = 32) {
      * darkness): thermal labels with dead printhead dots have hairline white streaks through
      * every bar, which would otherwise split each bar in two.
      */
-    private fun scanlines(img: GrayImage, reversed: Boolean, close: Int = 0, band: Int = 1): List<Line> {
+    private fun scanlines(img: GrayImage, reversed: Boolean, close: Int = 0, band: Int = 1, dead: ((Int, Int) -> Boolean)? = null): List<Line> {
         val h = img.height; val w = img.width
         if (w < 40 || h < 4) return emptyList()
         val count = min(maxLines, max(1, h / 3))
@@ -274,8 +290,9 @@ class Code128Partial(private val maxLines: Int = 32) {
             val sorted = prof.sortedArray()
             val lo = sorted[(w * 0.03).toInt()]; val hi = sorted[min(w - 1, (w * 0.97).toInt())]
             if (hi - lo < 30) continue
-            var dark = DoubleArray(w) { ((hi - prof[it]) / (hi - lo)).coerceIn(0.0, 1.0) }
+            var dark = if (LOCAL_CONTRAST && unevenContrast(prof)) localDark(prof, lo, hi) else DoubleArray(w) { ((hi - prof[it]) / (hi - lo)).coerceIn(0.0, 1.0) }
             if (close > 0) dark = erode(dilate(dark, close), close)
+            val masked = dead?.let { d -> BooleanArray(w) { x -> d(if (reversed) w - 1 - x else x, y) } }?.takeIf { m -> m.any { it } }
             // Sub-pixel edges where darkness crosses 0.5.
             val edges = ArrayList<Double>(); val after = ArrayList<Boolean>()
             for (x in 1 until w) {
@@ -285,9 +302,48 @@ class Code128Partial(private val maxLines: Int = 32) {
                     after += b >= 0.5
                 }
             }
-            out += Line(y, dark, edges.toDoubleArray(), after.toBooleanArray())
+            out += Line(y, dark, edges.toDoubleArray(), after.toBooleanArray(), masked)
         }
         return out
+    }
+
+    /**
+     * True if one side of the line is much fainter than the other (a label faded on one side):
+     * the contrast in the outer thirds differs by more than a third. Evenly printed lines keep the
+     * line's own levels, which read cleaner there.
+     */
+    private fun unevenContrast(prof: DoubleArray): Boolean {
+        val w = prof.size; val third = w / 3
+        if (third < 20) return false
+        fun range(a: Int, b: Int): Double { val v = prof.copyOfRange(a, b).sortedArray(); return v[(v.size * 0.95).toInt().coerceAtMost(v.size - 1)] - v[(v.size * 0.05).toInt()] }
+        val l = range(0, third); val r = range(w - third, w)
+        return min(l, r) < 0.65 * max(l, r)
+    }
+
+    /**
+     * Darkness judged against the ink and paper nearby rather than the whole line: on a label
+     * faded on one side, the faint half's bars are lighter than the global midpoint and vanish.
+     * Ink and paper levels are the darkest and lightest values within about two symbols, smoothed.
+     * Where there's too little contrast nearby (a quiet zone, blank paper) the line's own levels
+     * are used, so noise in blank areas isn't stretched into bars.
+     */
+    private fun localDark(prof: DoubleArray, lo: Double, hi: Double): DoubleArray {
+        val w = prof.size
+        val r = max(8, w / 16)
+        val mn = DoubleArray(w); val mx = DoubleArray(w)
+        for (x in 0 until w) {
+            var a = 255.0; var b = 0.0
+            for (k in max(0, x - r)..min(w - 1, x + r)) { val v = prof[k]; if (v < a) a = v; if (v > b) b = v }
+            mn[x] = a; mx[x] = b
+        }
+        val sr = max(2, r / 2)
+        fun smooth(v: DoubleArray) = DoubleArray(w) { x -> var s = 0.0; var n = 0; for (k in max(0, x - sr)..min(w - 1, x + sr)) { s += v[k]; n++ }; s / n }
+        val l = smooth(mn); val h = smooth(mx)
+        val minRange = max(30.0, 0.3 * (hi - lo))
+        return DoubleArray(w) { x ->
+            val (a, b) = if (h[x] - l[x] >= minRange) l[x] to h[x] else lo to hi
+            ((b - prof[x]) / (b - a)).coerceIn(0.0, 1.0)
+        }
     }
 
     private fun dilate(a: DoubleArray, r: Int) = DoubleArray(a.size) { i ->
@@ -343,6 +399,7 @@ class Code128Partial(private val maxLines: Int = 32) {
         for (i in ln.edges.indices) {
             if (!ln.edgeDarkAfter[i]) continue
             val w = widths(ln, i, 6) ?: break
+            if ((0..6).any { ln.edgeAtMask(ln.edges[i + it]) }) continue
             val total = w.sum()
             val quiet = if (i == 0) ln.edges[0] else ln.edges[i] - ln.edges[i - 1]
             if (quiet < 2.5 * total / 11) continue
@@ -358,6 +415,7 @@ class Code128Partial(private val maxLines: Int = 32) {
         for (i in ln.edges.indices) {
             if (!ln.edgeDarkAfter[i]) continue
             val w = widths(ln, i, 7) ?: break
+            if ((0..7).any { ln.edgeAtMask(ln.edges[i + it]) }) continue
             val total = w.sum()
             val end = ln.edges[i + 7]
             val quiet = if (i + 8 < ln.edges.size) ln.edges[i + 8] - end else ln.dark.size - end
@@ -461,7 +519,7 @@ class Code128Partial(private val maxLines: Int = 32) {
         while (lo < hi) { val mid = (lo + hi) / 2; if (ln.edges[mid] < x - tol) lo = mid + 1 else hi = mid }
         var i = lo
         while (i < ln.edges.size && ln.edges[i] <= x + tol) {
-            if (ln.edgeDarkAfter[i]) {
+            if (ln.edgeDarkAfter[i] && !ln.edgeAtMask(ln.edges[i])) {
                 val d = abs(ln.edges[i] - x)
                 if (d < bestD) { bestD = d; best = ln.edges[i] }
             }
@@ -495,20 +553,26 @@ class Code128Partial(private val maxLines: Int = 32) {
         val step = module / samplesPerModule
         val shifts = doubleArrayOf(-0.35 * module, 0.0, 0.35 * module)
         val samples = Array(shifts.size) { si -> DoubleArray(ns) { m -> sampleDark(ln, xs + shifts[si] + (m + 0.5) * step) } }
-        val center = samples[1]
-        val range = center.max() - center.min()
+        // Samples under a dead print-head line say nothing: left out of every measure below.
+        val hidden = Array(shifts.size) { si -> BooleanArray(ns) { m -> ln.isMasked(xs + shifts[si] + (m + 0.5) * step) } }
+        val center = samples[1]; val cHidden = hidden[1]
+        val seen = (0 until ns).count { !cHidden[it] }
+        // Too much of the symbol hidden to tell patterns apart.
+        if (seen < 0.55 * ns) return null
+        val visible = (0 until ns).filter { !cHidden[it] }.map { center[it] }
+        val range = visible.max() - visible.min()
         if (range < 0.45) return null
         // Every symbol's bars cover 4-8 of its 11 modules: a slot that is nearly blank (lost
         // print) or nearly solid (smear) is unreadable, whatever template happens to fit.
         if (!isStop) {
-            val ink = center.average()
+            val ink = visible.average()
             if (ink < 0.12 || ink > 0.9) return null
         }
         // Code 128 never has a space wider than 4 modules. A wider light run is a band of lost
         // print (dead printhead elements, scuffs): any template "fitting" it is a guess.
         run {
             var run = 0; var longest = 0
-            for (v in center) { if (v < 0.3) { run++; if (run > longest) longest = run } else run = 0 }
+            for (m in 0 until ns) { if (!cHidden[m] && center[m] < 0.3) { run++; if (run > longest) longest = run } else run = 0 }
             if (longest > 4.6 * samplesPerModule) return null
         }
 
@@ -520,11 +584,12 @@ class Code128Partial(private val maxLines: Int = 32) {
         fun score(v: Int) {
             val t = templates[v]
             var b = Double.MAX_VALUE
-            for (s in samples) {
+            for ((si, s) in samples.withIndex()) {
                 val limit = if (bestSse == Double.MAX_VALUE) Double.MAX_VALUE else minOf(b, bestSse + margin)
+                val hd = hidden[si]
                 var e = 0.0
                 var m = 0
-                while (m < ns) { val d = s[m] - t[m]; e += d * d; if (e > limit) break; m++ }
+                while (m < ns) { if (!hd[m]) { val d = s[m] - t[m]; e += d * d; if (e > limit) break }; m++ }
                 if (e < b) b = e
             }
             if (v < 106) sse[v] = b
@@ -545,17 +610,18 @@ class Code128Partial(private val maxLines: Int = 32) {
             for (v in top) for (bi in BAR_BIAS.indices) {
                 if (BAR_BIAS[bi] == 0.0) continue
                 val t = biasTemplates[bi][v]
-                for (smp in samples) {
+                for ((si, smp) in samples.withIndex()) {
                     var e = 0.0; var m = 0
-                    val limit = sse[v]
-                    while (m < ns) { val d = smp[m] - t[m]; e += d * d; if (e > limit) break; m++ }
+                    val limit = sse[v]; val hd = hidden[si]
+                    while (m < ns) { if (!hd[m]) { val d = smp[m] - t[m]; e += d * d; if (e > limit) break }; m++ }
                     if (e < sse[v]) sse[v] = e
                 }
                 if (sse[v] < bestSse) bestSse = sse[v]
             }
         }
-        val perSample = bestSse / ns
-        val q = ((0.16 - perSample) / 0.11).coerceIn(0.0, 1.0)
+        val perSample = bestSse / seen
+        // Fewer samples seen, less this line's reading counts.
+        val q = ((0.16 - perSample) / 0.11).coerceIn(0.0, 1.0) * seen / ns
         if (isStop) return DoubleArray(106) { 1.0 / 106 } to q
         if (q <= 0) return null
 
@@ -593,6 +659,7 @@ class Code128Partial(private val maxLines: Int = 32) {
         if (i + 6 >= ln.edges.size) return null
         val last = ln.edges[i + 6]
         if (abs(last - end) > 0.8 * module) return null
+        if ((0..6).any { ln.edgeAtMask(ln.edges[i + it]) }) return null
         return DoubleArray(6) { ln.edges[i + it + 1] - ln.edges[i + it] }
     }
 

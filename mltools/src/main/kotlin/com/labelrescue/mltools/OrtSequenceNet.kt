@@ -10,7 +10,7 @@ import java.nio.FloatBuffer
 /** The original PaddleOCR ONNX model on the JVM (for development tests; the app uses LiteRT). */
 class OrtSequenceNet(model: ByteArray) : SequenceNet, AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
-    private val session: OrtSession = env.createSession(model, OrtSession.SessionOptions())
+    private val session: OrtSession = env.createSession(model, OrtSession.SessionOptions().apply { setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR) })
     private val inputName = session.inputNames.first()
 
     override fun run(nhwc: FloatArray): Array<FloatArray> {

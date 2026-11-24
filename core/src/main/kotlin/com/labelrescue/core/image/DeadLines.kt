@@ -27,6 +27,12 @@ object DeadLines {
 
     data class Found(val lines: List<Line>, val bands: Int)
 
+    /** True if frame pixel ([x], [y]) is under one of [lines], with [blur] pixels either side. */
+    fun covers(lines: List<Line>, x: Int, y: Int, blur: Double = 1.5): Boolean {
+        for (ln in lines) { val c = ln.xAt(y); if (abs(x - c) <= ln.width / 2.0 + blur) return true }
+        return false
+    }
+
     /** Dead columns crossing the barcode at [bar], found in the ruled lines above and below it. */
     fun find(img: GrayImage, bar: IntRect): Found {
         val r = bar.intersect(IntRect(0, 0, img.width, img.height))
@@ -38,8 +44,11 @@ object DeadLines {
         // The band nearest the barcode on each side.
         val top = bands(img, above, t).maxByOrNull { it.first }
         val bottom = bands(img, below, t).minByOrNull { it.first }
-        val gTop = top?.let { gaps(img, r.left, r.right, it, t) }.orEmpty()
-        val gBot = bottom?.let { gaps(img, r.left, r.right, it, t) }.orEmpty()
+        // Wide gaps (several dead elements side by side) only count when the same gap is in both
+        // ruled lines; a single line can have real breaks.
+        val wide = max(8, r.width / 12)
+        val gTop = top?.let { gaps(img, r.left, r.right, it, t, wide) }.orEmpty()
+        val gBot = bottom?.let { gaps(img, r.left, r.right, it, t, wide) }.orEmpty()
         val lines = ArrayList<Line>()
         if (top != null && bottom != null && gTop.isNotEmpty() && gBot.isNotEmpty()) {
             val yT = (top.first + top.second) / 2; val yB = (bottom.first + bottom.second) / 2
@@ -52,7 +61,9 @@ object DeadLines {
                 val shift = shifts.sorted()[shifts.size / 2]
                 for (a in gTop) {
                     val b = gBot.minByOrNull { abs(it.first - (a.first + shift)) } ?: continue
-                    if (abs(b.first - (a.first + shift)) > 2.5) continue
+                    if (abs(b.first - (a.first + shift)) > 2.5 + 0.25 * min(a.second, b.second)) continue
+                    // Wide gaps must have about the same width in both lines.
+                    if (max(a.second, b.second) > 8 && max(a.second, b.second) > 1.6 * min(a.second, b.second) + 2) continue
                     lines += Line(a.first, yT, (b.first - a.first) / dy, max(a.second, b.second))
                 }
                 return Found(lines, 2)
@@ -60,7 +71,7 @@ object DeadLines {
         }
         val one = top ?: bottom ?: return Found(emptyList(), 0)
         val g = if (top != null) gTop else gBot
-        for (a in g) lines += Line(a.first, (one.first + one.second) / 2, 0.0, a.second)
+        for (a in g) if (a.second <= 8) lines += Line(a.first, (one.first + one.second) / 2, 0.0, a.second)
         return Found(lines, 1)
     }
 
@@ -113,7 +124,7 @@ object DeadLines {
     }
 
     /** Light gaps across a ruled line: (center x, width), each with ink on both sides. */
-    private fun gaps(img: GrayImage, left: Int, right: Int, band: Pair<Int, Int>, t: Int): List<Pair<Double, Int>> {
+    private fun gaps(img: GrayImage, left: Int, right: Int, band: Pair<Int, Int>, t: Int, maxW: Int = 8): List<Pair<Double, Int>> {
         val (y0, y1) = band
         // The band's middle rows (its edges are blurred).
         val a = if (y1 - y0 >= 4) y0 + 1 else y0; val b = if (y1 - y0 >= 4) y1 - 1 else y1
@@ -128,7 +139,7 @@ object DeadLines {
             var j = i; while (j + 1 < light.size && light[j + 1]) j++
             val w = j - i + 1
             // Ink on both sides (not the band's end), and thin: a dead line is a dot or a few wide.
-            if (i > 0 && j < light.size - 1 && w <= 8) out += (left + (i + j) / 2.0) to w
+            if (i > 0 && j < light.size - 1 && w <= maxW) out += (left + (i + j) / 2.0) to w
             i = j + 1
         }
         return out

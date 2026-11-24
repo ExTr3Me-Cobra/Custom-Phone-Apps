@@ -1,6 +1,8 @@
 """Fetches the official PaddleOCR PP-OCRv5 mobile recognizer (ONNX, Apache-2.0) and converts it to
 a fixed-shape float32 LiteRT model for the app: input [1, 48, 640, 3] (NHWC, values in -1..1),
-output [1, 80, 18385] CTC probabilities. Also writes the character dictionary.
+output [1, 80, 18385] CTC probabilities. Also writes the character dictionary, and fetches the
+PP-OCRv5 mobile text detector to build/ppocr/det.onnx (desktop only: the phone-like test uses it
+to stand in for ML Kit's whole-page OCR).
 
     pip install onnx onnx2tf onnx_graphsurgeon onnxsim sng4onnx onnxruntime pyyaml tensorflow-cpu
     python training/convert_ppocr.py
@@ -13,6 +15,7 @@ import urllib.request
 import numpy as np
 
 REPO = "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx/resolve/main"
+DET = "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/main/inference.onnx"
 WORK = os.path.join("build", "ppocr")
 OUT = os.path.join("models", "ppocr")
 
@@ -24,6 +27,9 @@ def main():
         p = os.path.join(WORK, name)
         if not os.path.exists(p):
             urllib.request.urlretrieve(f"{REPO}/{name}", p)
+    det = os.path.join(WORK, "det.onnx")
+    if not os.path.exists(det):
+        urllib.request.urlretrieve(DET, det)
     import yaml
     chars = yaml.safe_load(open(os.path.join(WORK, "inference.yml")))["PostProcess"]["character_dict"]
     with open(os.path.join(OUT, "dict.txt"), "w", encoding="utf-8") as f:

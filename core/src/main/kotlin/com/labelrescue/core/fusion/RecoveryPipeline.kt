@@ -9,6 +9,7 @@ import com.labelrescue.core.barcode.BarcodeLocator
 import com.labelrescue.core.image.DeadLines
 import com.labelrescue.core.barcode.BarcodeRead
 import com.labelrescue.core.barcode.Code128Partial
+import com.labelrescue.core.barcode.DataMatrixRescue
 import com.labelrescue.core.barcode.PartialResult
 import com.labelrescue.core.barcode.SymbolEvidence
 import com.labelrescue.core.candidates.SlotDist
@@ -25,6 +26,8 @@ import com.labelrescue.core.ocr.TextRecognizer
 import com.labelrescue.core.usps.ImpbParser
 import com.labelrescue.core.usps.ParsedNumber
 import java.util.concurrent.ExecutionException
+import kotlin.math.abs
+import kotlin.math.max
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -66,6 +69,20 @@ class RecoveryPipeline(
     )
 
     companion object {
+        /**
+         * Read dead print-head columns as unknown in the barcode. Off: on the real labels it gained
+         * nothing over the gap-closing passes (and a mask wider than the line itself cost the one
+         * label it fired on its answer). Kept for comparison runs (LR_DEAD_MASK=1).
+         */
+        @JvmStatic var DEAD_MASK = System.getenv("LR_DEAD_MASK") != null
+        /** Pixels of blur masked either side of a dead line in the barcode. */
+        @JvmStatic var MASK_BLUR = System.getenv("LR_MASK_BLUR")?.toDouble() ?: 0.0
+        /** Discount printed digits a dead print-head line crosses (a switch for comparison runs). */
+        @JvmStatic var DEAD_DIGITS = System.getenv("LR_NO_DEAD_DIGITS") == null
+        /** Printed 1/7 reads need the digit model's agreement (a switch for comparison runs). */
+        @JvmStatic var STROKE_CHECK = System.getenv("LR_NO_STROKE") == null
+        /** Re-read DataMatrix codes ZXing couldn't, with damaged codewords as erasures (a switch for comparison runs). */
+        @JvmStatic var DATAMATRIX_RESCUE = System.getenv("LR_NO_DM_RESCUE") == null
         /** Frames processed before the first checkpoint. */
         const val MIN_FRAMES = 4
         /** A scan projected to take longer than this (a slow phone) switches to the lighter mode. */
@@ -105,6 +122,12 @@ class RecoveryPipeline(
         val observations: MutableList<Observation> = ArrayList(),
         val evidence: MutableList<LocatedEvidence> = ArrayList(),
         var labelText: String = "",
+        /** Dead print-head columns found at the barcode (frame coordinates), for the printed digits too. */
+        var deadLines: List<DeadLines.Line> = emptyList(),
+        /** The barcode's bars (left, right) where [deadLines] were found: lines are compared across frames relative to them. */
+        var deadBars: Pair<Int, Int>? = null,
+        /** True once dead columns were looked for (found at the barcode or from the number line). */
+        @Volatile var deadChecked: Boolean = false,
         var variants: Int = 0,
         var ocrReads: Int = 0,
         var barcodeDecodes: Int = 0,
@@ -399,6 +422,13 @@ class RecoveryPipeline(
         }
         val out = combine(results, work, stats, t0, log, notes)
         val ranked = if (out.format != null) rankQuick(out) else null
+        // A dead print-head line through a printed digit makes every read of it wrong the same
+        // way: agreement isn't enough there. The digit model (trained on dead lines) must agree.
+        val unconfirmed = out.deadCrossed.filter { i -> out.perSource[Source.DIGIT_MODEL]?.getOrNull(i)?.let { it.best != number[i] || it.bestP < 0.6 } ?: true }
+        if (unconfirmed.isNotEmpty()) {
+            log?.line("quick read: $number, but dead print-head lines cross digits ${unconfirmed.joinToString { "${it + 1}" }} and the digit model doesn't confirm them: reading everything")
+            return null
+        }
         if (ranked?.best?.tracking != number || out.format != format) {
             log?.line("quick read: $number, but the ranking says ${ranked?.best?.tracking} ${((ranked?.best?.confidence ?: 0.0) * 100).toInt()}%: reading everything")
             return null
@@ -458,10 +488,15 @@ class RecoveryPipeline(
         }
         var ocrObs = observations.filter { it.source == Source.OCR }
         var ocr2Obs = observations.filter { it.source == Source.OCR2 }
-        var ocr = Fusion.consensus(ocrObs, format)
-        var ocr2 = if (ocr2Obs.any { it.format == format }) Fusion.consensus(ocr2Obs, format) else emptyList()
+        // Printed digits a dead print-head line runs through: every read of them is wrong the same
+        // way, so agreement there proves nothing (see [crossedDigits]).
+        val crossed = crossedDigits(results, work, ocrObs, format)
+        if (crossed.isNotEmpty()) log?.line("dead print-head lines cross printed digits at positions ${crossed.sorted().joinToString { "${it + 1}" }}: their reads count for less")
+        fun clearSet(obs: List<Observation>) = Fusion.unanimous(obs, format) - crossed
+        var ocr = soften(Fusion.consensus(ocrObs, format), crossed)
+        var ocr2 = if (ocr2Obs.any { it.format == format }) soften(Fusion.consensus(ocr2Obs, format), crossed) else emptyList()
         var digitModel: List<SlotDist?> = emptyList()
-        var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
+        var slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, clearSet(ocrObs + ocr2Obs))
         // Re-align every OCR read against the fused evidence (twice): reads that dropped a digit
         // stop shifting the rest, and the consensus sharpens.
         val pages = results.flatMap { it.pages }
@@ -479,9 +514,9 @@ class RecoveryPipeline(
             }
             ocrObs = again.filter { it.source == Source.OCR }
             ocr2Obs = again.filter { it.source == Source.OCR2 }
-            ocr = Fusion.consensus(ocrObs, format)
-            ocr2 = if (ocr2Obs.isNotEmpty()) Fusion.consensus(ocr2Obs, format) else emptyList()
-            slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
+            ocr = soften(Fusion.consensus(ocrObs, format), crossed)
+            ocr2 = if (ocr2Obs.isNotEmpty()) soften(Fusion.consensus(ocr2Obs, format), crossed) else emptyList()
+            slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, clearSet(ocrObs + ocr2Obs))
             finalReads = again.map { "${it.source}/${it.variant}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } }
             log?.line("re-alignment pass $pass: " + finalReads.joinToString(" | "))
         }
@@ -502,7 +537,20 @@ class RecoveryPipeline(
             }
             if (modelObs.isNotEmpty()) {
                 digitModel = Fusion.consensus(modelObs, format)
-                slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, Fusion.unanimous(ocrObs + ocr2Obs, format))
+                // A faded or half-erased 6, 8 or 9 leaves a vertical stroke that OCR reads as "1" (or
+                // "7"), the same way in every read, so their agreement proves nothing. Where the digit
+                // model (trained on damaged digits) doesn't see that stroke digit too, the OCR read
+                // counts for less and the barcode and check digit decide.
+                val strokes = if (!STROKE_CHECK) emptySet() else ocr.indices.filter { i ->
+                    val o = ocr[i] ?: return@filter false
+                    val m = digitModel.getOrNull(i) ?: return@filter false
+                    (o.best == '1' || o.best == '7') && m.best != o.best && i !in crossed
+                }.toSet()
+                if (strokes.isNotEmpty()) {
+                    log?.line("printed 1/7 the digit model doesn't confirm at positions ${strokes.sorted().joinToString { "${it + 1}" }}: OCR counts for less there")
+                    ocr = soften(ocr, strokes); ocr2 = soften(ocr2, strokes)
+                }
+                slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, clearSet(ocrObs + ocr2Obs) - strokes)
                 log?.line("digit model: " + modelObs.joinToString(" | ") { "f${it.frame}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
             }
         }
@@ -526,6 +574,72 @@ class RecoveryPipeline(
         val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[pf].width, work[pf].height) }
         log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame ${pf + 1}" } ?: "no safe photo (no OCR line positions)"))
         return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy, pf)
+            .also { it.deadCrossed = crossed }
+    }
+
+    /**
+     * Positions of the printed number crossed by a dead print-head line, in any frame. The lines
+     * come from the barcode stage (the ruled lines around the barcode) or, if that didn't run
+     * (the quick read), from the barcode just above the number line. A dead column runs the whole
+     * label, so it's extended down through the number.
+     */
+    private fun crossedDigits(results: List<FrameWork>, work: List<GrayImage>, ocrObs: List<Observation>, format: TrackingFormat): Set<Int> {
+        val out = HashSet<Int>()
+        if (!DEAD_DIGITS) return out
+        for (w in results) {
+            val frame = work.getOrNull(w.frame) ?: continue
+            val obs = ocrObs.filter { it.frame == w.frame && it.format == format }
+            if (obs.isEmpty()) continue
+            if (!w.deadChecked) {
+                synchronized(w) {
+                    if (!w.deadChecked) {
+                        if (w.deadLines.isEmpty()) {
+                            val line = obs.maxBy { o -> o.boxes.count { it != null } }.boxes.filterNotNull().filter { !it.isEmpty }.reduceOrNull { a, b -> a.union(b) }
+                            if (line != null) deadLinesAbove(frame, line)?.let { (lines, bars) -> w.deadLines = lines; w.deadBars = bars }
+                        }
+                        w.deadChecked = true
+                    }
+                }
+            }
+            // A dead element is on the label, so it's in every photo at the same place on the barcode;
+            // a gap one photo shows alone is noise (blur, a crop edge).
+            val dead = confirmed(w, results)
+            if (dead.isEmpty()) continue
+            for (o in obs) for ((i, b) in o.boxes.withIndex()) {
+                if (b == null || b.isEmpty) continue
+                val cy = (b.top + b.bottom) / 2
+                val inset = b.width * 0.12
+                if (dead.any { ln -> val x = ln.xAt(cy); x + ln.width / 2.0 >= b.left + inset && x - ln.width / 2.0 <= b.right - inset }) out += i
+            }
+        }
+        return out
+    }
+
+    /** Dead columns from the barcode above a number line [line] (frame coordinates), with the bars' extent. */
+    private fun deadLinesAbove(frame: GrayImage, line: IntRect): Pair<List<DeadLines.Line>, Pair<Int, Int>>? {
+        val lw = line.width
+        val area = IntRect(line.left - lw / 6, line.top - (lw * 0.45).toInt(), line.right + lw / 6, line.top).intersect(IntRect(0, 0, frame.width, frame.height))
+        if (area.isEmpty) return null
+        val b = BarcodeBounds.find(frame, area) ?: return null
+        return DeadLines.find(frame, IntRect(b.barsLeft, b.rect.top, b.barsRight, b.rect.bottom)).lines to (b.barsLeft to b.barsRight)
+    }
+
+    /** [w]'s dead lines that another frame also shows, at the same place relative to the bars. */
+    private fun confirmed(w: FrameWork, results: List<FrameWork>): List<DeadLines.Line> {
+        val bars = w.deadBars ?: return emptyList()
+        fun rel(ln: DeadLines.Line, b: Pair<Int, Int>) = (ln.x0 - b.first) / (b.second - b.first).coerceAtLeast(1)
+        val others = results.filter { it !== w && it.deadBars != null && it.deadLines.isNotEmpty() }
+        val tol = max(0.004, 2.5 / (bars.second - bars.first).coerceAtLeast(1))
+        return w.deadLines.filter { ln -> others.any { o -> o.deadLines.any { abs(rel(it, o.deadBars!!) - rel(ln, bars)) <= tol } } }
+    }
+
+    /**
+     * Flattens OCR distributions at [crossed] positions (square root of each probability): the read
+     * stays the favourite, but no longer outweighs the barcode or the digit model.
+     */
+    private fun soften(slots: List<SlotDist?>, crossed: Set<Int>): List<SlotDist?> {
+        if (crossed.isEmpty()) return slots
+        return slots.mapIndexed { i, sd -> if (sd == null || i !in crossed) sd else SlotDist(sd.alphabet, DoubleArray(sd.probs.size) { kotlin.math.sqrt(sd.probs[it]) }) }
     }
 
     private val restorer: ((GrayImage) -> GrayImage)? = models.restore?.let { m -> { img: GrayImage -> m.restore(img) } }
@@ -669,7 +783,7 @@ class RecoveryPipeline(
         log?.line("f$fi barcode regions: " + chosenRegions.joinToString { "${it.first}${if (it.second) " vertical" else ""}" } +
             (if (detected.isNotEmpty()) "; detector: " + detected.joinToString { "${it.kind}@${it.box}" } else ""))
         var droppedUps = 0
-        fun read(img: GrayImage, outer: Affine, rect: IntRect, whole: Boolean, tag: String) {
+        fun read(img: GrayImage, outer: Affine, rect: IntRect, whole: Boolean, tag: String, dead: List<DeadLines.Line> = emptyList()) {
             val vs = Variants.make(img, null, Variants.Options(maxSide = 2400, upscaleBelow = 900, rotations = if (lite) emptyList() else listOf(-3.0, 3.0), restore = if (whole || lite) null else restorer))
                 .filter { !whole || it.name == "gray" || it.name == "clahe" }
                 .filter { !lite || it.name in LITE_VARIANTS }
@@ -677,10 +791,13 @@ class RecoveryPipeline(
                 check()
                 w.variants++
                 full(v.image, "frame ${fi + 1} $tag${v.name}")
-                val ms = partialDecoder.measure(v.image)
+                val toFrame = v.toFrame.then(outer)
+                // Dead print-head columns, if found, are read as unknown rather than white.
+                val ms = if (dead.isEmpty()) partialDecoder.measure(v.image)
+                else partialDecoder.measure(v.image) { x, y -> DeadLines.covers(dead, toFrame.mapX(x + 0.5, y + 0.5).toInt(), toFrame.mapY(x + 0.5, y + 0.5).toInt(), MASK_BLUR) }
                 log?.measurements(fi, "$rect $tag${v.name}", ms)
                 for (ev in ms) {
-                    val t = v.toFrame.then(outer)
+                    val t = toFrame
                     if (zones.ups != null) {
                         val x0 = ev.slotX.firstOrNull() ?: 0.0; val x1 = ev.slotX.lastOrNull() ?: 0.0
                         if (zones.centerInUps(t.mapRect(IntRect(x0.toInt(), ev.yTop, x1.toInt() + 1, ev.yBottom + 1)))) { droppedUps++; continue }
@@ -707,8 +824,10 @@ class RecoveryPipeline(
         for (b in bars) {
             check()
             val dead = DeadLines.find(frame, IntRect(b.barsLeft, b.rect.top, b.barsRight, b.rect.bottom))
-            log?.line("f$fi barcode bars ${b.barsLeft}..${b.barsRight} in ${b.rect}" + if (dead.lines.isNotEmpty()) "; ${dead.lines.size} dead print-head columns" else "")
-            read(BarcodeBounds.cleanCrop(frame, b), Affine.translate(b.rect.left.toDouble(), b.rect.top.toDouble()), b.rect, false, "bars ")
+            log?.line("f$fi barcode bars ${b.barsLeft}..${b.barsRight} in ${b.rect}" + if (dead.lines.isNotEmpty()) "; ${dead.lines.size} dead print-head columns at x " + dead.lines.joinToString { "%.0f(%d px)".format(it.x0, it.width) } else "")
+            if (dead.lines.isNotEmpty() && w.deadLines.isEmpty()) { w.deadLines = dead.lines; w.deadBars = b.barsLeft to b.barsRight }
+            // Only lines seen in the ruled lines both above and below: one line alone can have breaks.
+            read(BarcodeBounds.cleanCrop(frame, b), Affine.translate(b.rect.left.toDouble(), b.rect.top.toDouble()), b.rect, false, "bars ", if (DEAD_MASK && dead.bands == 2) dead.lines else emptyList())
         }
         for ((rect, vertical) in chosenRegions) {
             check()
@@ -733,8 +852,21 @@ class RecoveryPipeline(
             val vs = Variants.make(frame, crop, Variants.Options(maxSide = 1600, rotations = emptyList()))
                 .filter { it.name in setOf("gray", "clahe", "threshold", "upscale2x", "upscale3x") }
             for (v in vs) { w.variants++; full(v.image, "frame ${fi + 1} crop ${v.name}") }
+            // ZXing found no valid code here: read the DataMatrix again with damaged codewords
+            // marked (dead print-head columns, uncertain modules) so Reed-Solomon can fix more.
+            if (DATAMATRIX_RESCUE) rescueDataMatrix(frame.crop(crop), crop, w)?.let { throw FoundException(Found(it, "DataMatrix, damaged codewords corrected (frame ${fi + 1})"), w.labelText, fi) }
         }
         if (tileCrops.isNotEmpty()) log?.line("f$fi 2D codes: full decoders found no valid tracking number in ${tileCrops.size} crops")
+    }
+
+    /** [DataMatrixRescue] on [img] (frame area [at]), with the frame's dead print-head columns as erasures. */
+    private fun rescueDataMatrix(img: GrayImage, at: IntRect, w: FrameWork): ParsedNumber? {
+        val dead = w.deadLines
+        val mask: ((Int, Int) -> Boolean)? = if (dead.isEmpty()) null else { x, y -> DeadLines.covers(dead, x + at.left, y + at.top) }
+        val r = try { DataMatrixRescue.decode(img, mask) } catch (e: Exception) { null } ?: return null
+        val p = ImpbParser.extractFromPayload(r.text).firstOrNull { it.checkValid } ?: return null
+        log?.line("DataMatrix rescue: \"${r.text.replace("\u001D", "<GS>")}\" (${r.erasures} codewords erased, ${r.errors} corrected)")
+        return p
     }
 
     private fun fullDecode(img: GrayImage, where: String): Found? {

@@ -15,7 +15,7 @@ import com.labelrescue.core.image.IntRect
 /** ZXing as the second decoder: Code 128 and DataMatrix, two binarizers, try-harder. */
 class ZxingDecoder(private val formats: List<BarcodeFormat> = listOf(BarcodeFormat.CODE_128, BarcodeFormat.DATA_MATRIX, BarcodeFormat.MAXICODE)) : BarcodeDecoder {
 
-    private class GraySource(private val img: GrayImage) : LuminanceSource(img.width, img.height) {
+    class GraySource(private val img: GrayImage) : LuminanceSource(img.width, img.height) {
         override fun getRow(y: Int, row: ByteArray?): ByteArray {
             val r = if (row == null || row.size < width) ByteArray(width) else row
             System.arraycopy(img.data, y * width, r, 0, width)

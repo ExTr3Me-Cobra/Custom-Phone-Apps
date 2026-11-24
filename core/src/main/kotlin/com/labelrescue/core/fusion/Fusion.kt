@@ -57,6 +57,8 @@ class RecoveryOutput(
     /** The frame [privacyBlank] applies to (the sharpest one, processed first). */
     val privacyFrame: Int = 0,
 ) {
+    /** Printed-number positions crossed by a dead print-head line (reads there count for less). */
+    var deadCrossed: Set<Int> = emptySet()
     /** Fused distribution per tracking position (the quick read can firm it up, see RecoveryPipeline). */
     var slots: List<SlotDist> = slots
 
