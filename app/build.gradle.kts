@@ -123,6 +123,7 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.exifinterface)
     implementation(libs.coroutines.android)
+    implementation(libs.work.runtime)
     implementation(libs.litert)
     implementation(libs.litert.gpu)
     implementation(libs.litert.gpu.api)

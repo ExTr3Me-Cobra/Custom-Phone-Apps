@@ -129,10 +129,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             res.onSuccess { r ->
+                com.labelrescue.app.data.ExportCleanup.schedule(getApplication())
                 // Full-resolution scan crops are big: sent once, then cleared (like the report photos).
                 withContext(Dispatchers.IO) { runCatching { scanCrops.clear() } }
                 _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
-                _message.value = "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file."
+                _message.value = "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file: it deletes itself in 10 minutes."
             }.onFailure { _message.value = "Couldn't save the export: ${it.message}" }
             loadSettings()
         }

@@ -15,6 +15,7 @@ securityCrypto = "1.1.0"
 browser = "1.10.0"
 exifinterface = "1.4.2"
 coroutines = "1.11.0"
+work = "2.10.1"
 litert = "1.4.2"
 onnxruntime = "1.32.0"
 zxingCpp = "3.1.1"
@@ -45,6 +46,7 @@ zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
 exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
+work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
