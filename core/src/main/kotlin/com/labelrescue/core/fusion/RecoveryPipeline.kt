@@ -79,10 +79,14 @@ class RecoveryPipeline(
         @JvmStatic var MASK_BLUR = System.getenv("LR_MASK_BLUR")?.toDouble() ?: 0.0
         /** Discount printed digits a dead print-head line crosses (a switch for comparison runs). */
         @JvmStatic var DEAD_DIGITS = System.getenv("LR_NO_DEAD_DIGITS") == null
+        /** Score damaged digits against the label's own clear digits (a switch for comparison runs). */
+        @JvmStatic var SELF_TEMPLATES = System.getenv("LR_NO_SELF") == null
         /** Printed 1/7 reads need the digit model's agreement (a switch for comparison runs). */
         @JvmStatic var STROKE_CHECK = System.getenv("LR_NO_STROKE") == null
         /** Re-read DataMatrix codes ZXing couldn't, with damaged codewords as erasures (a switch for comparison runs). */
-        @JvmStatic var DATAMATRIX_RESCUE = System.getenv("LR_NO_DM_RESCUE") == null
+        @JvmStatic var DATAMATRIX_RESCUE = System.getenv("LR_NO_DM_RESCUE") == null && System.getenv("LR_NO_FULL") == null
+        /** Tests only: never take a full decode, so intact labels exercise the recovery too. */
+        @JvmStatic var NO_FULL_DECODE = System.getenv("LR_NO_FULL") != null
         /** Frames processed before the first checkpoint. */
         const val MIN_FRAMES = 4
         /** A scan projected to take longer than this (a slow phone) switches to the lighter mode. */
@@ -459,7 +463,7 @@ class RecoveryPipeline(
     private fun rankQuick(out: RecoveryOutput) = runCatching {
         com.labelrescue.core.candidates.CandidateEngine(beam = 400, maxResults = 20).rank(
             out.format!!, out.slots,
-            com.labelrescue.core.candidates.StructurePrior(out.serviceHints, listOfNotNull(out.zip) + com.labelrescue.core.usps.ServiceHints.zips(out.labelText)),
+            out.prior(com.labelrescue.core.candidates.HistoryStats.EMPTY),
             out.exactEvidence(),
         )
     }.getOrNull()
@@ -523,16 +527,23 @@ class RecoveryPipeline(
         // Digit classifier (optional), on the re-aligned ML Kit glyph boxes only (first-pass boxes
         // can be shifted by a dropped digit), and only boxes fully inside the frame: a cut-off
         // digit at the edge gets classified as something confidently wrong.
+        var strokes: Set<Int> = emptySet()
         val digits = models.digits
         if (digits != null && format != TrackingFormat.S10) {
             val modelObs = ocrObs.filter { it.format == format }.groupBy { it.frame }.mapNotNull { (fi, os) ->
                 val frame = work.getOrNull(fi) ?: return@mapNotNull null
                 val o = os.maxBy { o -> o.weight * o.boxes.count { it != null } }
                 val m = 2
-                val ds = o.boxes.map { b ->
-                    b?.takeIf { !it.isEmpty && it.left >= m && it.top >= m && it.right <= frame.width - m && it.bottom <= frame.height - m }
-                        ?.let { SlotDist(SlotDist.DIGITS, digits.classify(frame, it)) }
-                }
+                val boxes = o.boxes.map { b -> b?.takeIf { !it.isEmpty && it.left >= m && it.top >= m && it.right <= frame.width - m && it.bottom <= frame.height - m } }
+                val found = boxes.map { b -> b?.let { com.labelrescue.core.ml.CharCrop.glyphAt(frame, it) } }
+                val glyphs = distinctGlyphs(boxes, found)
+                // A position whose glyph went to its neighbour has no glyph of its own to read: no vote.
+                val ds = boxes.mapIndexed { i, b -> b?.takeIf { found[i] == null || glyphs[i] != null || System.getenv("LR_DEDUPE_RAW") != null }?.let { SlotDist(SlotDist.DIGITS, digits.classify(frame, it, glyphs[i])) } }
+                // A frame whose reads mostly contradict clearly printed digits is reading noise
+                // (a very faded photo comes out as runs of 4s and 9s): left out.
+                val clear = ds.indices.filter { i -> ocr.getOrNull(i)?.let { it.bestP >= 0.9 } == true && ds[i] != null }
+                val agree = clear.count { i -> ds[i]!!.best == ocr[i]!!.best }
+                if (System.getenv("LR_NO_FRAMEFILTER") == null && clear.size >= 4 && agree < 0.5 * clear.size) { log?.line("digit model: f$fi left out (agrees with $agree of ${clear.size} clear printed digits)"); return@mapNotNull null }
                 if (ds.count { it != null } >= format.length / 2) Observation(Source.DIGIT_MODEL, format, ds, 0.5, fi, "digit-model", o.boxes, o.boxQuality) else null
             }
             if (modelObs.isNotEmpty()) {
@@ -541,7 +552,7 @@ class RecoveryPipeline(
                 // "7"), the same way in every read, so their agreement proves nothing. Where the digit
                 // model (trained on damaged digits) doesn't see that stroke digit too, the OCR read
                 // counts for less and the barcode and check digit decide.
-                val strokes = if (!STROKE_CHECK) emptySet() else ocr.indices.filter { i ->
+                strokes = if (!STROKE_CHECK) emptySet() else ocr.indices.filter { i ->
                     val o = ocr[i] ?: return@filter false
                     val m = digitModel.getOrNull(i) ?: return@filter false
                     (o.best == '1' || o.best == '7') && m.best != o.best && i !in crossed
@@ -554,7 +565,33 @@ class RecoveryPipeline(
                 log?.line("digit model: " + modelObs.joinToString(" | ") { "f${it.frame}=" + it.slots.joinToString("") { s -> s?.best?.toString() ?: "?" } })
             }
         }
+        // Damaged digits against the clear digits on the same label (fading, half-erased strokes).
+        var selfT: List<SlotDist?> = emptyList()
+        if (SELF_TEMPLATES && format != TrackingFormat.S10) {
+            val fusedNow = slots
+            val anchorOf = { i: Int -> fusedNow[i].takeIf { it.bestP >= 0.97 && i !in crossed && i !in strokes && ocr.getOrNull(i)?.best == it.best }?.best }
+            val perFrame = ocrObs.filter { it.format == format }.groupBy { it.frame }.mapNotNull { (fi, os) ->
+                val frame = work.getOrNull(fi) ?: return@mapNotNull null
+                val o = os.maxBy { o -> o.weight * o.boxes.count { it != null } }
+                try { SelfTemplates.read(frame, format, o.boxes, anchorOf) } catch (e: Exception) { null }
+            }
+            if (perFrame.isNotEmpty()) {
+                selfT = List(format.length) { i ->
+                    val rows = perFrame.mapNotNull { it.getOrNull(i) }
+                    if (rows.isEmpty()) null else {
+                        // Mean log probability over frames (one frame's view, not independent votes).
+                        val l = DoubleArray(10) { d -> rows.sumOf { kotlin.math.ln(it[d].coerceAtLeast(1e-6)) } / rows.size }
+                        val m = l.max(); SlotDist(SlotDist.DIGITS, DoubleArray(10) { kotlin.math.exp(l[it] - m) })
+                    }
+                }
+                if (selfT.any { it != null }) {
+                    slots = Fusion.fuse(format, ocr, partial, digitModel, ocr2, clearSet(ocrObs + ocr2Obs) - strokes, selfT)
+                    log?.line("same-label templates: " + selfT.mapIndexed { i, s -> s?.let { "#${i + 1}=${it.best}:${(it.bestP * 100).toInt()}" } }.filterNotNull().joinToString(" "))
+                }
+            }
+        }
         val perSource = HashMap<Source, List<SlotDist?>>()
+        if (selfT.any { it != null }) perSource[Source.SELF_TEMPLATE] = selfT
         if (ocrObs.any { it.format == format }) perSource[Source.OCR] = ocr
         if (ocr2.isNotEmpty()) perSource[Source.OCR2] = ocr2
         if (digitModel.isNotEmpty()) perSource[Source.DIGIT_MODEL] = digitModel
@@ -574,7 +611,7 @@ class RecoveryPipeline(
         val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[pf].width, work[pf].height) }
         log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame ${pf + 1}" } ?: "no safe photo (no OCR line positions)"))
         return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy, pf)
-            .also { it.deadCrossed = crossed }
+            .also { it.deadCrossed = crossed; it.suggestions = if (System.getenv("LR_NO_SUGGEST") == null) suggestions(format, partial, ocr) else emptyList() }
     }
 
     /**
@@ -613,6 +650,47 @@ class RecoveryPipeline(
             }
         }
         return out
+    }
+
+    /**
+     * Whole numbers always worth ranking, whatever the fused digits say: the barcode's own best
+     * reading, that reading with any one symbol (digit pair) left open, and the printed number as
+     * OCR read it. On a faded label the barcode was right at 20 of 22 digits but the fused digits
+     * (outvoted by misread print) never put its number in the list.
+     */
+    private fun suggestions(format: TrackingFormat, partial: PartialResult?, ocr: List<SlotDist?>): List<Map<Int, Char>> {
+        val out = ArrayList<Map<Int, Char>>()
+        val p = partial?.takeIf { it.structure.trackingFormat == format }
+        if (p != null) {
+            val best = p.trackingDigits.mapIndexed { i, s -> i to s.best }.toMap()
+            out += best
+            val bySlot = best.keys.groupBy { Fusion.slotForTrackingDigit(p.structure, it) }
+            for ((_, pos) in bySlot) out += best - pos.toSet()
+        }
+        val read = ocr.mapIndexedNotNull { i, s -> s?.takeIf { it.bestP >= 0.5 }?.let { i to it.best } }.toMap()
+        if (read.size >= format.length - 4) out += read
+        return out
+    }
+
+    /**
+     * The glyph each position's box points at, with no glyph used twice: a faded digit's box
+     * snaps onto its neighbour's ink, and the neighbour was then read for both positions. Where
+     * two positions land on the same glyph, the one whose box is centered nearer keeps it; the
+     * other is read from its own box.
+     */
+    private fun distinctGlyphs(boxes: List<IntRect?>, found: List<IntRect?>): List<IntRect?> {
+        val g = found.toMutableList()
+        // Off: on the real labels the dedupe cost more than the duplicates did (both ways of
+        // handling the losing position ranked the true number lower). Kept for comparison runs.
+        if (System.getenv("LR_DEDUPE") == null) return g
+        for (i in g.indices) for (j in i + 1 until g.size) {
+            val a = g[i] ?: continue; val b = g[j] ?: continue
+            val ov = a.intersect(b)
+            if (ov.isEmpty || ov.width < 0.5 * minOf(a.width, b.width)) continue
+            val di = abs(boxes[i]!!.centerX - a.centerX); val dj = abs(boxes[j]!!.centerX - b.centerX)
+            if (di <= dj) g[j] = null else g[i] = null
+        }
+        return g
     }
 
     /** Dead columns from the barcode above a number line [line] (frame coordinates), with the bars' extent. */
@@ -870,6 +948,7 @@ class RecoveryPipeline(
     }
 
     private fun fullDecode(img: GrayImage, where: String): Found? {
+        if (NO_FULL_DECODE) return null
         for (d in decoders) {
             val reads: List<BarcodeRead> = try { d.decode(img) } catch (e: Exception) { emptyList() }
             log?.let { l -> if (reads.isNotEmpty()) l.line("decode $where: " + reads.joinToString { "${it.decoder}/${it.kind}: \"${it.text.replace("\u001D", "<GS>")}\"" }) }

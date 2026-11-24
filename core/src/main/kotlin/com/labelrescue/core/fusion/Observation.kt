@@ -13,6 +13,8 @@ enum class Source(val label: String) {
     OCR2("Printed digits (2nd OCR)"),
     /** The on-device damaged-digit classifier, run on each digit's crop. */
     DIGIT_MODEL("Digit model"),
+    /** Damaged printed digits compared with the clearly printed digits on the same label. */
+    SELF_TEMPLATE("Same-label digits"),
 }
 
 /**

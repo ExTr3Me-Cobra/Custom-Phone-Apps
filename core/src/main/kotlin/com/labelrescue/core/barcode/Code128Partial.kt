@@ -59,6 +59,9 @@ class PartialResult(
 
     val bestTracking: String get() = trackingDigits.joinToString("") { it.best.toString() }
 
+    /** How many start/stop-anchored measurements found this symbol count. */
+    var support: Int = 0
+
     /** Ranks layouts against each other (see [Code128Partial.decodeAll]). */
     val selectionScore: Double get() = ln(max(1e-6, confidence)) + structure.prior
 
@@ -693,7 +696,7 @@ class Code128Partial(private val maxLines: Int = 32) {
             val representative = group.maxBy { it.quality.sum() }
             for (st in Gs1Structure.ALL) {
                 if (st.symbolCount != n) continue
-                all += solve(st, probs.subList(1, n + 1), representative) ?: continue
+                all += (solve(st, probs.subList(1, n + 1), representative) ?: continue).also { r -> r.support = group.count { !it.extentAnchored } }
             }
         }
         // Layouts with fewer symbols always have a higher likelihood, so they are compared by how

@@ -47,6 +47,7 @@ class PhoneLikeTest {
         val only = System.getenv("CASE")
         val frames = System.getenv("FRAMES")?.toInt() ?: 5
         val report = StringBuilder()
+        val fusionRows = ArrayList<String>()
         var solved = 0; var counted = 0; var logP = 0.0; var wrongQuick = 0; var quick = 0
         for (row in File(dir, "cases.txt").readLines().filter { it.isNotBlank() && !it.startsWith("#") }) {
             val parts = row.split("|").map { it.trim() }
@@ -73,9 +74,18 @@ class PhoneLikeTest {
             val top = ranked?.candidates?.take(2)?.joinToString { "${it.tracking} ${"%.0f".format(it.confidence * 100)}%" }
             report.append("$file: ${if (idx == 0) "RANK 1" else if (idx > 0) "rank ${idx + 1}" else "not listed"}, true number ${"%.0f".format(p * 100)}% ($how, ${ms / 1000.0}s); top: $top${if (hard) " (hard)" else ""}\n")
             File("build/phone${System.getenv("TAG") ?: ""}-$file.log").writeText(log.text())
+            // Per-position evidence with the truth, for fitting the fusion (training/fit_fusion.py).
+            if (f != null && out.fullDecode == null && truth.length == f.length) {
+                for (i in truth.indices) for ((src, ds) in out.perSource) {
+                    val sd = ds.getOrNull(i) ?: continue
+                    if (sd.alphabet != com.labelrescue.core.candidates.SlotDist.DIGITS) continue
+                    fusionRows += listOf(file, i.toString(), truth[i].toString(), src.name, if (i in out.deadCrossed) "1" else "0").joinToString(",") + "," + sd.probs.joinToString(",") { "%.5f".format(it) }
+                }
+            }
         }
         report.append("\nsolved $solved/$counted; mean log P(true) ${"%.2f".format(logP / counted.coerceAtLeast(1))} (geometric mean ${"%.0f".format(exp(logP / counted.coerceAtLeast(1)) * 100)}%); quick reads $quick, wrong $wrongQuick\n")
         File("build/phone-like${System.getenv("TAG") ?: ""}.txt").writeText(report.toString())
+        File("build/fusion${System.getenv("TAG") ?: ""}.csv").writeText("file,pos,truth,source,crossed," + (0..9).joinToString(",") { "p$it" } + "\n" + fusionRows.joinToString("\n") + "\n")
         println(report)
     }
 

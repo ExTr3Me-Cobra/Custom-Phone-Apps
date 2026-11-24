@@ -23,6 +23,12 @@ interface RankingPrior {
     }
 }
 
+/** Suggestions only (no score of its own): numbers the evidence itself proposes. */
+class SuggestionPrior(private val list: List<Map<Int, Char>>) : RankingPrior {
+    override fun logPrior(number: String, format: TrackingFormat) = 0.0
+    override fun suggestions(format: TrackingFormat) = list
+}
+
 class CompositePrior(private val parts: List<RankingPrior>) : RankingPrior {
     override fun logPrior(number: String, format: TrackingFormat) = parts.sumOf { it.logPrior(number, format) }
     override fun suggestions(format: TrackingFormat) = parts.flatMap { it.suggestions(format) }

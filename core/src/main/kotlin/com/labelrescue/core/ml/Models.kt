@@ -134,8 +134,10 @@ object CharCrop {
         return out
     }
 
-    fun extract(img: GrayImage, box: IntRect): FloatArray {
-        val found = glyphAt(img, box)
+    fun extract(img: GrayImage, box: IntRect): FloatArray = extract(img, box, glyphAt(img, box))
+
+    /** As [extract], with the glyph already found ([found] null: none, crop the box as it is). */
+    fun extract(img: GrayImage, box: IntRect, found: IntRect?): FloatArray {
         val g = found ?: box
         // The square follows the glyph's height (the box's if the glyph came out short, like a dash).
         val sizing = if (g.height >= box.height * 0.8) g else IntRect(g.left, box.top, g.right, box.bottom)
@@ -162,8 +164,11 @@ object CharCrop {
 
 /** Damaged-digit classifier: crop → probabilities for 0..9. */
 class DigitModel(private val net: NetRunner) {
-    fun classify(img: GrayImage, box: IntRect): DoubleArray {
-        val p = net.run(CharCrop.extract(img, box), CharCrop.SIZE, CharCrop.SIZE)
+    fun classify(img: GrayImage, box: IntRect): DoubleArray = classify(img, box, CharCrop.glyphAt(img, box))
+
+    /** As [classify], with the glyph to read already chosen (null: the box as it is). */
+    fun classify(img: GrayImage, box: IntRect, glyph: IntRect?): DoubleArray {
+        val p = net.run(CharCrop.extract(img, box, glyph), CharCrop.SIZE, CharCrop.SIZE)
         return DoubleArray(10) { p[it].toDouble() }
     }
 }

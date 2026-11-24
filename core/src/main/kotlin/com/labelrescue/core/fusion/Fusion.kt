@@ -9,6 +9,7 @@ import com.labelrescue.core.candidates.HistoryStats
 import com.labelrescue.core.candidates.RankingPrior
 import com.labelrescue.core.candidates.SlotDist
 import com.labelrescue.core.candidates.StructurePrior
+import com.labelrescue.core.candidates.SuggestionPrior
 import com.labelrescue.core.image.IntRect
 import com.labelrescue.core.usps.ParsedNumber
 import com.labelrescue.core.usps.ServiceHints
@@ -59,6 +60,9 @@ class RecoveryOutput(
 ) {
     /** Printed-number positions crossed by a dead print-head line (reads there count for less). */
     var deadCrossed: Set<Int> = emptySet()
+
+    /** Whole or partial numbers always tried when ranking (see RecoveryPipeline.suggestions). */
+    var suggestions: List<Map<Int, Char>> = emptyList()
     /** Fused distribution per tracking position (the quick read can firm it up, see RecoveryPipeline). */
     var slots: List<SlotDist> = slots
 
@@ -79,7 +83,7 @@ class RecoveryOutput(
     val serviceHints: List<ServiceHints.Hint> get() = ServiceHints.serviceHints(labelText)
 
     fun prior(history: HistoryStats): RankingPrior = CompositePrior(
-        listOf(StructurePrior(serviceHints, listOfNotNull(zip) + ServiceHints.zips(labelText)), HistoryPrior(history)),
+        listOf(StructurePrior(serviceHints, listOfNotNull(zip) + ServiceHints.zips(labelText)), HistoryPrior(history), SuggestionPrior(suggestions)),
     )
 
     /**
@@ -96,10 +100,10 @@ class RecoveryOutput(
             val t = number.substring(0, f.length)
             val exact = p.logLikelihood(t) - logZ
             var approx = 0.0
-            for (i in t.indices) approx += ln(Fusion.floored(marg[i].p(t[i]), Fusion.EPS_PARTIAL))
+            for (i in t.indices) approx += Fusion.W_PARTIAL * ln(Fusion.floored(marg[i].p(t[i]), Fusion.EPS_PARTIAL))
             // A tie-breaker, not an override: a smeared symbol can make the barcode's joint
             // likelihood confidently wrong, so the correction is damped and capped.
-            if (exact.isFinite()) (0.5 * (exact - approx)).coerceIn(-4.0, 4.0) else -4.0
+            if (exact.isFinite()) (0.5 * (Fusion.W_PARTIAL * exact - approx)).coerceIn(-4.0, 4.0) else -4.0
         }
     }
 
@@ -111,6 +115,19 @@ class RecoveryOutput(
 
 /** Multi-frame consensus per source, then fusion across sources, per digit position. */
 object Fusion {
+    /**
+     * How much each source counts (exponents on its factor). Fitted by maximum likelihood of the
+     * true digit on the real labels, checked leave-one-label-out (held-out log loss 0.094 -> 0.055,
+     * digit accuracy 97.8% -> 98.0%), pulled towards 1.0 because there are few labels.
+     */
+    @JvmField var W_OCR = envW("LR_W_OCR", 1.53)
+    @JvmField var W_OCR2 = envW("LR_W_OCR2", 1.0)
+    @JvmField var W_DIGIT_MODEL = envW("LR_W_DIGIT", 0.75)
+    @JvmField var W_PARTIAL = envW("LR_W_PARTIAL", 1.53)
+    @JvmField var W_SELF = envW("LR_W_SELF", 0.91)
+    const val EPS_SELF = 0.2
+    private fun envW(name: String, default: Double) = System.getenv(name)?.toDoubleOrNull() ?: if (System.getenv("LR_UNIT_WEIGHTS") != null) 1.0 else default
+
     const val EPS_OCR = 0.08
     const val EPS_PARTIAL = 0.03
     const val EPS_DIGIT_MODEL = 0.25
@@ -181,6 +198,15 @@ object Fusion {
         // A printed number that aligned to a format is strong evidence of its length.
         for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, 3.0 * o.weight, Double::plus)
         partials.firstOrNull()?.let { score.merge(it.structure.trackingFormat, 4.0 * it.confidence, Double::plus) }
+        // The barcode's length is measured from where its bars start and stop (a symbol count),
+        // whatever its digits read like: on a badly damaged barcode that is still sound, while the
+        // digits' confidence (above) is near zero. The layout measured most often gets a vote.
+        partials.filter { it.support >= 3 }.maxByOrNull { it.support }?.let { p ->
+            val best = partials.filter { it.structure.symbolCount == p.structure.symbolCount }.maxBy { it.selectionScore }
+            score.merge(best.structure.trackingFormat, 5.0, Double::plus)
+        }
+        // The legacy 20-digit layout is rare on current labels: a short partial read aligns to it easily.
+        score.computeIfPresent(TrackingFormat.IMPB_20) { _, v -> v * 0.5 }
         return score
     }
 
@@ -199,19 +225,27 @@ object Fusion {
         ocr2: List<SlotDist?> = emptyList(),
         /** Positions where the printed digit was read the same way almost every time (see [unanimous]). */
         printedClear: Set<Int> = emptySet(),
+        /** Damaged digits scored against the label's own clear digits (see [SelfTemplates]). */
+        selfTemplate: List<SlotDist?> = emptyList(),
     ): List<SlotDist> {
         val bar = partial?.takeIf { it.structure.trackingFormat == format }?.trackingDigits
         return List(format.length) { i ->
             val alphabet = if (format.isLetterPosition(i)) SlotDist.LETTERS else SlotDist.DIGITS
             val p = DoubleArray(alphabet.length) { 1.0 }
-            ocr.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR) }
+            // Each source's factor is raised to its weight (W_*), fitted on real labels by
+            // training/fit_fusion.py; the products are taken in logs to keep them in range.
+            ocr.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= Math.pow(floored(s.probs[k], EPS_OCR), W_OCR) }
             // A clearly printed digit, read the same way in nearly every read, outweighs a damaged
             // barcode symbol or a digit-model guess at that spot (a real label: a clear 6 lost to
             // the barcode's 1 and the model's 0).
             val clear = i in printedClear
-            digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_DIGIT_MODEL) }
-            ocr2.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], EPS_OCR2) }
-            bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_PARTIAL) }
+            digitModel.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= Math.pow(floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_DIGIT_MODEL), W_DIGIT_MODEL) }
+            ocr2.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= Math.pow(floored(s.probs[k], EPS_OCR2), W_OCR2) }
+            // The barcode weight was fitted alongside the main OCR; where OCR didn't read this position,
+            // it isn't there to balance a confidently wrong barcode symbol, so the barcode counts once.
+            val wBar = if (ocr.getOrNull(i) != null) W_PARTIAL else 1.0
+            bar?.getOrNull(i)?.let { s -> for (k in p.indices) p[k] *= Math.pow(floored(s.probs[k], if (clear) EPS_OUTVOTED else EPS_PARTIAL), wBar) }
+            selfTemplate.getOrNull(i)?.takeIf { it.alphabet == alphabet }?.let { s -> for (k in p.indices) p[k] *= Math.pow(floored(s.probs[k], EPS_SELF), W_SELF) }
             SlotDist(alphabet, p)
         }
     }
