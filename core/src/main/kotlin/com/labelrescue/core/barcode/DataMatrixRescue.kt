@@ -98,10 +98,41 @@ object DataMatrixRescue {
     }
 
     /**
+     * True if [box] in [img] has a DataMatrix's finder and timing pattern (solid L on two sides,
+     * alternating modules on the other two) at some standard size and orientation: tells a 2D code
+     * from a logo or a block of text.
+     */
+    fun looksLikeDataMatrix(img: GrayImage, box: com.labelrescue.core.image.IntRect, minFit: Double = 0.8): Boolean {
+        val tl = box.left.toDouble() to box.top.toDouble(); val tr = box.right.toDouble() to box.top.toDouble()
+        val br = box.right.toDouble() to box.bottom.toDouble(); val bl = box.left.toDouble() to box.bottom.toDouble()
+        val turns = listOf(listOf(tl, bl, br, tr), listOf(bl, br, tr, tl), listOf(br, tr, tl, bl), listOf(tr, tl, bl, br))
+        val side = min(box.width, box.height)
+        // An IMmb holds about 30 digits: 16×16 modules or more (smaller grids fit big letters too).
+        for (cs in turns) for (n in SIZES) if (n >= 16 && side / n.toDouble() >= 2.5) { val g = sample(img, n, cs, null) ?: continue; if (g.fit >= minFit && g.softFit >= 0.2 && dataLike(g)) return true }
+        return false
+    }
+
+    /**
+     * The inside of a DataMatrix is data: about half the modules dark and the color changing often
+     * along every row and column. Big letters (a "SHIP TO:" or "COD" box) have long runs and blank areas.
+     */
+    private fun dataLike(g: Grid): Boolean {
+        val n = g.n
+        var dark = 0; var all = 0
+        for (r in 1 until n - 1) for (c in 1 until n - 1) { all++; if (g.black[r * n + c]) dark++ }
+        val f = dark.toDouble() / all
+        if (f < 0.3 || f > 0.7) return false
+        var busy = 0; var lines = 0
+        for (r in 1 until n - 1) { var t = 0; for (c in 2 until n - 1) if (g.black[r * n + c] != g.black[r * n + c - 1]) t++; lines++; if (t >= (n - 3) / 4) busy++ }
+        for (c in 1 until n - 1) { var t = 0; for (r in 2 until n - 1) if (g.black[r * n + c] != g.black[(r - 1) * n + c]) t++; lines++; if (t >= (n - 3) / 4) busy++ }
+        return busy >= 0.8 * lines
+    }
+
+    /**
      * Square, dense patches of ink that could be a DataMatrix: dark pixels with small gaps closed,
      * connected, about square, at least 30 px, filled 30-85%. Largest first, at most 4.
      */
-    private fun inkSquares(img: GrayImage): List<com.labelrescue.core.image.IntRect> {
+    fun inkSquares(img: GrayImage): List<com.labelrescue.core.image.IntRect> {
         val sc = if (max(img.width, img.height) > 900) 900.0 / max(img.width, img.height) else 1.0
         val g = if (sc < 1.0) img.scaledBy(sc) else img
         val w = g.width; val h = g.height

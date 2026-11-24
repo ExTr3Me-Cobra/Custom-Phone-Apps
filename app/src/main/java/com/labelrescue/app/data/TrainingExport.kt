@@ -18,6 +18,7 @@ import java.util.zip.ZipOutputStream
  * - training_report.txt and report_photos/ (one entry and one photo per scan, not redacted)
  * - training_crops/ (digit crops + labels.csv) for the digit classifier
  * - barcode_examples/ (damaged barcodes + barcodes.csv with their true numbers)
+ * - scan_crops/ (full-resolution barcodes, number lines and 2D codes of every scan, read or not)
  * - diagnostic_log.txt (the last scan, names and addresses hidden)
  * - confirmed_numbers.csv (numbers confirmed in the app: true numbers for the report entries)
  * Nothing goes to the gallery or the clipboard. The training report clears afterwards; crops and
@@ -36,6 +37,7 @@ object TrainingExport {
         appVersion: String,
         /** Learned barcode positions (numbers only). */
         layout: File? = null,
+        scanCrops: ScanCrops? = null,
     ): Result {
         val name = "LabelRescue-training-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".zip"
         var entries = 0
@@ -56,6 +58,7 @@ object TrainingExport {
             for (f in photos) putFile("report_photos/${f.name}", f)
             for (f in cropFiles) putFile("training_crops/${f.name}", f)
             for (f in barcodeFiles) putFile("barcode_examples/${f.name}", f)
+            for (f in scanCrops?.files().orEmpty().sortedBy { it.name }) putFile("scan_crops/${f.name}", f)
             layout?.takeIf { it.exists() && it.length() > 0 }?.let { putFile("barcode_layout.txt", it) }
             diagnosticLog?.takeIf { it.isNotBlank() }?.let { put("diagnostic_log.txt", it.toByteArray()) }
             if (confirmed.isNotEmpty()) {

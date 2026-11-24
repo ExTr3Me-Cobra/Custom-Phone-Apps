@@ -56,6 +56,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val crops by lazy { TrainingCrops(app) }
     private val barcodeExamples by lazy { com.labelrescue.app.data.BarcodeExamples(app) }
+    private val scanCrops by lazy { com.labelrescue.app.data.ScanCrops(app) }
     private val barcodeLayouts by lazy { com.labelrescue.app.data.BarcodeLayouts(app) }
 
     /** Keep a damaged-barcode example when collecting training data is on (either setting). */
@@ -93,8 +94,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // The burst's full-resolution photo when there is one: preview-sized frames are too small
         // to show a damaged 2D code's modules, and those are worth learning from.
         val frame = _frames.value.maxByOrNull { it.width.toLong() * it.height } ?: _frames.value.getOrNull(out.privacyFrame)
+        val truth = scanConfirmed ?: scanPasted ?: out.fullDecode?.tracking
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
+            // Full-resolution crops of the barcodes, number lines and 2D codes, readable or not.
+            if (frame != null) runCatching { if (!scanCrops.has(id)) scanCrops.save(id, frame, truth) else if (truth != null) scanCrops.setTruth(id, truth) }
             // One photo per scan, as taken (training data is not redacted, by the user's choice).
             if (frame != null && !report.hasPhoto(id)) {
                 runCatching {
@@ -120,11 +124,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     com.labelrescue.app.data.TrainingExport.write(
                         getApplication(), report, crops, barcodeExamples, diagnosticLog(redact = false),
-                        db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME, layout = barcodeLayouts.file,
+                        db.confirmed().allOnce(), com.labelrescue.app.BuildConfig.VERSION_NAME, layout = barcodeLayouts.file, scanCrops = scanCrops,
                     )
                 }
             }
             res.onSuccess { r ->
+                // Full-resolution scan crops are big: sent once, then cleared (like the report photos).
+                withContext(Dispatchers.IO) { runCatching { scanCrops.clear() } }
                 _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
                 _message.value = "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file."
             }.onFailure { _message.value = "Couldn't save the export: ${it.message}" }
@@ -170,7 +176,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Training crop review ----
 
     fun clearTrainingCrops() {
-        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
+        viewModelScope.launch { withContext(Dispatchers.IO) { crops.clear(); barcodeExamples.clear(); scanCrops.clear() }; loadSettings(); _message.value = "Training crops and barcode examples deleted." }
     }
 
     fun deleteConfirmed(id: Long) { viewModelScope.launch { db.confirmed().delete(id) } }
