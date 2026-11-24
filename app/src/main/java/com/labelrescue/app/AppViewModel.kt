@@ -90,7 +90,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val out = photoOutput ?: return
         val header = "app ${com.labelrescue.app.BuildConfig.VERSION_NAME} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} · models: ${OnDeviceModels.status}"
         val entry = com.labelrescue.core.fusion.TrainingReport.entry(id, scanTime, header, out, lastRanked, scanConfirmed, scanPasted)
-        val frame = _frames.value.getOrNull(out.privacyFrame)
+        // The burst's full-resolution photo when there is one: preview-sized frames are too small
+        // to show a damaged 2D code's modules, and those are worth learning from.
+        val frame = _frames.value.maxByOrNull { it.width.toLong() * it.height } ?: _frames.value.getOrNull(out.privacyFrame)
         viewModelScope.launch(Dispatchers.IO) {
             report.put(id, entry)
             // One photo per scan, as taken (training data is not redacted, by the user's choice).

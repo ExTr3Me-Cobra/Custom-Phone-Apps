@@ -35,6 +35,32 @@ object DataMatrixRescue {
     private val SIZES = intArrayOf(10, 12, 14, 16, 18, 20, 22, 24, 26, 32)
 
     fun decode(img: GrayImage, dead: ((Int, Int) -> Boolean)? = null): Result? {
+        val squares = inkSquares(img)
+        decodeOne(img, dead, squares)?.let { return it }
+        // Dead print-head lines can run through every column of modules (each module split by
+        // thin white lines, reading half white). Fill thin white gaps across the print direction
+        // (a horizontal closing of the ink) around each candidate patch, then read again.
+        for (box in squares) {
+            val m = max(8, box.width / 6)
+            val area = com.labelrescue.core.image.IntRect(box.left - m, box.top - m, box.right + m, box.bottom + m).intersect(com.labelrescue.core.image.IntRect(0, 0, img.width, img.height))
+            val crop = img.crop(area)
+            val d = dead?.let { f -> { x: Int, y: Int -> f(x + area.left, y + area.top) } }
+            val local = listOf(com.labelrescue.core.image.IntRect(box.left - area.left, box.top - area.top, box.right - area.left, box.bottom - area.top))
+            for (r in 1..3) decodeOne(closeH(crop, r), d, local)?.let { return it }
+        }
+        return null
+    }
+
+    /** [img] with light gaps up to 2·[r] px wide filled between dark pixels, along rows. */
+    fun closeH(img: GrayImage, r: Int): GrayImage {
+        val w = img.width; val h = img.height
+        val a = GrayImage(w, h); val b = GrayImage(w, h)
+        for (y in 0 until h) for (x in 0 until w) { var m = 255; for (k in max(0, x - r)..min(w - 1, x + r)) { val v = img[k, y]; if (v < m) m = v }; a[x, y] = m }
+        for (y in 0 until h) for (x in 0 until w) { var m = 0; for (k in max(0, x - r)..min(w - 1, x + r)) { val v = a[k, y]; if (v > m) m = v }; b[x, y] = m }
+        return b
+    }
+
+    private fun decodeOne(img: GrayImage, dead: ((Int, Int) -> Boolean)?, squares: List<com.labelrescue.core.image.IntRect>): Result? {
         val source = ZxingDecoder.GraySource(img)
         for (bin in listOf(HybridBinarizer(source), GlobalHistogramBinarizer(source))) {
             val det = try { Detector(BinaryBitmap(bin).blackMatrix).detect() } catch (e: Exception) { continue }
@@ -56,7 +82,67 @@ object DataMatrixRescue {
             val grids = outlines.flatMap { cs -> tried.mapNotNull { n -> sample(img, n, cs, dead) } }.filter { it.fit >= 0.8 }.sortedByDescending { it.softFit }
             for (g in grids.take(3)) (decodeGrid(g) ?: decodeGrid(refine(img, g, dead)))?.let { return it }
         }
+        // ZXing's detector found nothing usable (dead lines through the finder pattern break the
+        // edge tracing it relies on): find square patches of ink, and try each orientation.
+        for (box in squares) {
+            val tl = box.left.toDouble() to box.top.toDouble(); val tr = box.right.toDouble() to box.top.toDouble()
+            val br = box.right.toDouble() to box.bottom.toDouble(); val bl = box.left.toDouble() to box.bottom.toDouble()
+            // (tl, bl, br, tr) with the solid L at left and bottom; the other three turns of it.
+            val turns = listOf(listOf(tl, bl, br, tr), listOf(bl, br, tr, tl), listOf(br, tr, tl, bl), listOf(tr, tl, bl, br))
+            val side = min(box.width, box.height)
+            val sizes = SIZES.filter { side / it.toDouble() >= 2.5 }
+            val grids = turns.flatMap { cs -> sizes.mapNotNull { n -> sample(img, n, cs, dead) } }.filter { it.fit >= 0.6 }.sortedByDescending { it.softFit }
+            for (g in grids.take(4)) (decodeGrid(g) ?: decodeGrid(refine(img, g, dead)))?.let { return it }
+        }
         return null
+    }
+
+    /**
+     * Square, dense patches of ink that could be a DataMatrix: dark pixels with small gaps closed,
+     * connected, about square, at least 30 px, filled 30-85%. Largest first, at most 4.
+     */
+    private fun inkSquares(img: GrayImage): List<com.labelrescue.core.image.IntRect> {
+        val sc = if (max(img.width, img.height) > 900) 900.0 / max(img.width, img.height) else 1.0
+        val g = if (sc < 1.0) img.scaledBy(sc) else img
+        val w = g.width; val h = g.height
+        val v = IntArray(w * h) { g[it % w, it / w] }.sortedArray()
+        val thr = (v[(v.size * 0.05).toInt()] + v[(v.size * 0.95).toInt()]) / 2
+        val base = BooleanArray(w * h) { g[it % w, it / w] < thr }
+        val out = ArrayList<Pair<com.labelrescue.core.image.IntRect, Int>>()
+        // Light modules and dead lines leave gaps of about a module inside the symbol: bridge
+        // them at a few widths (the right one depends on the module size).
+        for (r in intArrayOf(2, 4, 7)) out += inkComponents(base, w, h, r, sc)
+        return out.sortedByDescending { it.second }.distinctBy { it.first }.take(6).map { it.first }
+    }
+
+    private fun inkComponents(base: BooleanArray, w: Int, h: Int, r: Int, sc: Double): List<Pair<com.labelrescue.core.image.IntRect, Int>> {
+        var m = base
+        fun grow(a: BooleanArray, on: Boolean): BooleanArray {
+            val hz = BooleanArray(w * h); for (y in 0 until h) for (x in 0 until w) { var o = !on; for (k in max(0, x - r)..min(w - 1, x + r)) if (a[y * w + k] == on) { o = on; break }; hz[y * w + x] = o }
+            val out = BooleanArray(w * h); for (y in 0 until h) for (x in 0 until w) { var o = !on; for (k in max(0, y - r)..min(h - 1, y + r)) if (hz[k * w + x] == on) { o = on; break }; out[y * w + x] = o }
+            return out
+        }
+        m = grow(grow(m, true), false)
+        val seen = BooleanArray(w * h); val stack = IntArray(w * h)
+        val out = ArrayList<Pair<com.labelrescue.core.image.IntRect, Int>>()
+        for (i in m.indices) {
+            if (!m[i] || seen[i]) continue
+            var sp = 0; stack[sp++] = i; seen[i] = true
+            var l = w; var rr = 0; var t = h; var b = 0; var n = 0
+            while (sp > 0) {
+                val p = stack[--sp]; val x = p % w; val y = p / w; n++
+                if (x < l) l = x; if (x > rr) rr = x; if (y < t) t = y; if (y > b) b = y
+                for ((dx, dy) in NB) { val nx = x + dx; val ny = y + dy; if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue; val q = ny * w + nx; if (m[q] && !seen[q]) { seen[q] = true; stack[sp++] = q } }
+            }
+            val bw = rr - l + 1; val bh = b - t + 1
+            if (bw < 30 * sc || bh < 30 * sc || bw > 0.9 * w || bh > 0.9 * h) continue
+            if (bw < 0.8 * bh || bw > 1.25 * bh) continue
+            val fill = n.toDouble() / (bw * bh)
+            if (fill < 0.3 || fill > 0.85) continue
+            // Back to full resolution; closing grew the ink by about a pixel each way.
+            out += com.labelrescue.core.image.IntRect(((l + 0.5) / sc).toInt(), ((t + 0.5) / sc).toInt(), ((rr + 0.5) / sc).toInt(), ((b + 0.5) / sc).toInt()) to n
+        }
+        return out
     }
 
     /**
@@ -212,7 +298,7 @@ object DataMatrixRescue {
 
     private fun decodeGrid(g: Grid): Result? {
         val rows = g.n; val cols = g.n
-        if (g.fit < 0.8) return null
+        if (g.fit < 0.6) return null
         val total = try { ZxingDataMatrixAccess.totalCodewords(rows, cols) } catch (e: Exception) { return null }
         // Codewords and how sure each is (its least certain bit); unknown if any bit is hidden.
         val map = ZxingDataMatrixAccess.moduleMap(rows, cols)

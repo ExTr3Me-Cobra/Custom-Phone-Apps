@@ -201,6 +201,9 @@ class RecoveryPipeline(
         // Phase 2: every layer on every frame, sharpest first, in parallel. Checkpoints after every
         // couple of frames rank the evidence so far; once the answer is settled the rest are skipped.
         val work = frames.take(opt.maxFrames)
+        // Only a frame clearly bigger than the rest (the burst's full-resolution photo) counts.
+        val sizes = work.map { it.width.toLong() * it.height }.sorted()
+        largestPixels = if (sizes.isNotEmpty() && sizes.last() > 1.5 * sizes[sizes.size / 2]) sizes.last() else 0L
         val total = work.size
         val order = work.indices.sortedByDescending { com.labelrescue.core.image.Filters.sharpness(work[it]) }
         log?.line("processing order (sharpest first): " + order.joinToString { "f$it" })
@@ -924,7 +927,9 @@ class RecoveryPipeline(
 
         // DataMatrix (and any barcode) on many crops: Reed-Solomon survives heavy damage. Only on
         // the sharpest few frames (the sharpest one alone in the lighter mode).
-        val tileCrops = if (rank < (if (lite) 1 else TILE_FRAMES)) tiles(frame) else emptyList()
+        // The burst's full-resolution photo (one among preview-sized frames) is the only one where
+        // the 2D codes' modules are big enough to read: it always gets the 2D-code pass.
+        val tileCrops = if (rank < (if (lite) 1 else TILE_FRAMES) || isLargest(frame)) tiles(frame) else emptyList()
         for (crop in tileCrops) {
             check()
             val vs = Variants.make(frame, crop, Variants.Options(maxSide = 1600, rotations = emptyList()))
@@ -985,6 +990,9 @@ class RecoveryPipeline(
     }
 
     /** Overlapping crops for 2D codes: quadrants and center, so small codes get more pixels. */
+    @Volatile private var largestPixels = 0L
+    private fun isLargest(frame: GrayImage) = frame.width.toLong() * frame.height >= largestPixels && largestPixels > 0
+
     private fun tiles(frame: GrayImage): List<IntRect> {
         val w = frame.width; val h = frame.height
         val tw = (w * 0.6).toInt(); val th = (h * 0.6).toInt()
