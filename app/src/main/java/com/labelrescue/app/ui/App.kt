@@ -88,6 +88,22 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     val ctx = LocalContext.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
+    // An export too big for one upload was split: say so plainly, with the number of files.
+    val split by vm.splitExport.collectAsStateWithLifecycle()
+    split?.let { sp ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Export saved as ${sp.parts} files", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall) },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    Text("It was too big for one upload, so it was split into ${sp.parts} files, each under 30 MB.", style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                    Text("\nSend all ${sp.parts}. They're in ${sp.where}, named …-part1of${sp.parts}.zip to …-part${sp.parts}of${sp.parts}.zip.", style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                    Text("\nThey delete themselves in 10 minutes.", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = { androidx.compose.material3.Button(onClick = vm::splitExportShown) { Text("OK, I'll send all ${sp.parts}") } },
+        )
+    }
     LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
     val reportCount by vm.reportCount.collectAsStateWithLifecycle()
     val reportPhoto by vm.reportPhoto.collectAsStateWithLifecycle()

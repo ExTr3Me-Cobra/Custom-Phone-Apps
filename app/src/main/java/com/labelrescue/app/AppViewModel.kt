@@ -48,6 +48,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         db.confirmed().all().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val historyStats = MutableStateFlow(HistoryStats.EMPTY)
     val learned: StateFlow<HistoryStats> = historyStats
+    /** An export that was split into several files (shown as a popup until dismissed). */
+    data class SplitExport(val parts: Int, val first: String, val where: String)
+    private val _splitExport = MutableStateFlow<SplitExport?>(null)
+    val splitExport: StateFlow<SplitExport?> = _splitExport
+    fun splitExportShown() { _splitExport.value = null }
+
     private val _message = MutableStateFlow<String?>(null)
     /** One-off messages (toasts). */
     val message: StateFlow<String?> = _message
@@ -139,7 +145,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // Full-resolution scan crops are big: sent once, then cleared (like the report photos).
                 withContext(Dispatchers.IO) { runCatching { scanCrops.clear() } }
                 _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
-                _message.value = (if (r.parts > 1) "Saved ${r.parts} files (${r.name} and the next parts) to ${r.where}, each under 30 MB. Send them all" else "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file") + ": exports delete themselves in 10 minutes."
+                if (r.parts > 1) _splitExport.value = SplitExport(r.parts, r.name, r.where)
+                else _message.value = (if (r.parts > 1) "Saved ${r.parts} files (${r.name} and the next parts) to ${r.where}, each under 30 MB. Send them all" else "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file") + ": exports delete themselves in 10 minutes."
             }.onFailure { _message.value = "Couldn't save the export: ${it.message}" }
             loadSettings()
         }
