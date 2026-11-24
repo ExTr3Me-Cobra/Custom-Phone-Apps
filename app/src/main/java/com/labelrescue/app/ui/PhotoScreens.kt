@@ -76,7 +76,8 @@ fun PhotoResultsScreen(
     noResult: RecoveryOutput?,
     actions: ResultActions,
     onManual: () -> Unit,
-    onRetry: () -> Unit,
+    /** Null: no retry button (the crop screen is hidden). */
+    onRetry: (() -> Unit)?,
     reportCount: Int = 0,
     onExportTraining: () -> Unit = {},
     reportPhotos: Int = 0,
@@ -117,7 +118,7 @@ fun PhotoResultsScreen(
                 Text("Try again with the label filling the corner marks, in good light.", style = MaterialTheme.typography.bodyLarge)
                 return@Column
             }
-            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") }
+            onRetry?.let { Button(onClick = it, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Crop and try again") } }
             OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Type the digits I can read") }
             TrainingReportCard(reportCount, reportPhotos, reportPhoto, onExportTraining)
             return@Column

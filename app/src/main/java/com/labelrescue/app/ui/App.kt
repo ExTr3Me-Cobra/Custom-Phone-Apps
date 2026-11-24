@@ -34,6 +34,13 @@ enum class Screen(val title: String) {
     HISTORY("Confirmed history"), SETTINGS("Settings"), BARCODE("Barcode")
 }
 
+/**
+ * The crop screen (drag boxes around the barcode and number) is hidden: the app locates both
+ * itself, and a hand-drawn barcode box skipped the quick read and could cut the quiet zone the
+ * damaged-barcode reader needs. Kept, unreachable, for development; true brings it back.
+ */
+private const val SHOW_CROP_SCREEN = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LabelRescueApp(vm: AppViewModel = viewModel()) {
@@ -63,14 +70,17 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
         }
         screen = when (screen) {
             Screen.CROP -> Screen.HOME
-            Screen.PROCESSING -> { vm.cancelRecovery(); Screen.CROP }
-            Screen.RESULTS -> Screen.CROP
+            Screen.PROCESSING -> { vm.cancelRecovery(); if (SHOW_CROP_SCREEN) Screen.CROP else Screen.HOME }
+            Screen.RESULTS -> if (SHOW_CROP_SCREEN) Screen.CROP else Screen.HOME
             else -> Screen.HOME
         }
     }
     BackHandler(enabled = screen != Screen.HOME) { back() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
-        if (uris.isNotEmpty()) vm.importUris(uris) { screen = Screen.CROP }
+        if (uris.isNotEmpty()) vm.importUris(uris) {
+            if (SHOW_CROP_SCREEN) screen = Screen.CROP
+            else { screen = Screen.PROCESSING; vm.startRecovery { screen = Screen.RESULTS } }
+        }
     }
     fun pickPhotos() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let(vm::exportHistory) }
@@ -117,8 +127,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                     )
                 }
                 Screen.CAMERA -> CameraScreen(onFrame = vm::addFrame, onBurstDone = {
-                    // User mode skips the crop screen: straight to reading.
-                    if (dev) screen = Screen.CROP
+                    // Straight to reading (the crop screen is hidden; see SHOW_CROP_SCREEN).
+                    if (dev && SHOW_CROP_SCREEN) screen = Screen.CROP
                     else { screen = Screen.PROCESSING; vm.startRecovery { screen = Screen.RESULTS } }
                 })
                 Screen.CROP -> {
@@ -189,7 +199,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                             onUseNumber = { n -> useCopied(n) },
                         ),
                         onManual = { screen = Screen.MANUAL },
-                        onRetry = { screen = Screen.CROP },
+                        onRetry = if (SHOW_CROP_SCREEN) { { screen = Screen.CROP } } else null,
                         reportCount = reportCount,
                         onExportTraining = vm::exportTrainingData,
                         reportPhotos = reportPhotos,
