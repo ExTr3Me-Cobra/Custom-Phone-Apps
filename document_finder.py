@@ -30,6 +30,8 @@ STD = np.array([0.26862954, 0.26130258, 0.27577711], np.float32)
 logging.basicConfig(filename=LOG, level=logging.DEBUG, encoding='utf-8',
                     format='%(asctime)s.%(msecs)03d %(levelname)s [%(threadName)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 log = logging.getLogger('df')
+import faulthandler
+_fh = open(DATA / 'crash.log', 'a', encoding='utf-8'); faulthandler.enable(_fh)  # hard crashes (native code) land here
 sys.excepthook = lambda t, v, tb: log.critical('UNCAUGHT %s', ''.join(traceback.format_exception(t, v, tb)))
 threading.excepthook = lambda a: log.critical('UNCAUGHT in thread %s: %s', a.thread.name,
                                                ''.join(traceback.format_exception(a.exc_type, a.exc_value, a.exc_traceback)))
@@ -120,7 +122,7 @@ class App:
             ttk.Label(f, text=label).pack(anchor='w')
             r = ttk.Frame(f); r.pack(fill='x', pady=(0, 10))
             ttk.Entry(r, textvariable=var).pack(side='left', fill='x', expand=True)
-            ttk.Button(r, text='Browse…', command=lambda v=var: v.set(filedialog.askdirectory() or v.get())).pack(side='left', padx=5)
+            ttk.Button(r, text='Browse…', command=lambda v=var, l=label: self.browse(v, l)).pack(side='left', padx=5)
         self.thr = tk.DoubleVar(value=self.s.get('thr', 0.35))
         r = ttk.Frame(f); r.pack(fill='x', pady=5)
         ttk.Label(r, text='Sensitivity (lower = catches more):').pack(side='left')
@@ -134,6 +136,16 @@ class App:
         ttk.Button(b, text='Export log…', command=self.export_log).pack(side='right')
         self.prog = ttk.Progressbar(f, mode='determinate'); self.prog.pack(fill='x', pady=5)
         self.status = ttk.Label(f, text=''); self.status.pack(anchor='w')
+
+    def browse(self, var, title):
+        log.info('browse: %s (current %r)', title, var.get())
+        try:
+            d = filedialog.askdirectory(parent=self.root, title=title, mustexist=False,
+                                        initialdir=var.get() if Path(var.get() or '.').is_dir() else str(Path.home()))
+            log.info('browse result: %r', d)
+            if d: var.set(str(Path(d)))
+        except Exception:
+            log.exception('folder picker failed'); messagebox.showerror(APP, 'The folder picker failed. You can type or paste the folder path instead.')
 
     def start_scan(self):
         src, dst = Path(self.src.get()), Path(self.dst.get())
@@ -285,20 +297,33 @@ class App:
         log.info('session %s undone: %d of %d', last, ok, len(todo)); messagebox.showinfo(APP, f'Moved {ok} back.')
 
     def export_log(self):
-        out = filedialog.asksaveasfilename(defaultextension='.txt', initialfile='document_finder_log.txt')
+        out = filedialog.asksaveasfilename(parent=self.root, title='Export log', defaultextension='.txt',
+                                           initialfile=f'document_finder_log_{time.strftime("%Y%m%d-%H%M%S")}.txt',
+                                           initialdir=str(Path.home() / 'Desktop'), filetypes=[('Text file', '*.txt'), ('All files', '*.*')])
+        log.info('export log to %r', out)
         if not out: return
+        out = str(Path(out))
+        for h in log.handlers + logging.getLogger().handlers: h.flush()
         try:
             with open(out, 'w', encoding='utf-8') as o:
                 o.write(f'{APP} log export {time.ctime()}\nsettings: {json.dumps(self.s)}\n\n')
                 o.write(LOG.read_text(encoding='utf-8', errors='replace')[-20_000_000:])
                 if MOVES.exists(): o.write('\n\n=== moves.jsonl ===\n' + MOVES.read_text(encoding='utf-8')[-2_000_000:])
-            messagebox.showinfo(APP, f'Saved:\n{out}')
+                c = DATA / 'crash.log'
+                if c.exists(): o.write('\n\n=== crash.log ===\n' + c.read_text(encoding='utf-8', errors='replace')[-2_000_000:])
+            size = Path(out).stat().st_size
+            log.info('exported %d bytes', size)
+            try: __import__('subprocess').Popen(['explorer', '/select,', out])  # show it in File Explorer
+            except Exception: pass
+            messagebox.showinfo(APP, f'Saved ({size // 1024} KB):\n{out}')
         except Exception as e:
             log.exception('export failed'); messagebox.showerror(APP, str(e))
 
 
 if __name__ == '__main__':
     root = tk.Tk()
+    root.report_callback_exception = lambda t, v, tb: (log.critical('UI error %s', ''.join(traceback.format_exception(t, v, tb))),
+                                                        messagebox.showerror(APP, f'Something went wrong: {v}\nUse Export log and send it over.'))
     try: ttk.Style().theme_use('vista')
     except Exception: pass
     App(root); root.mainloop()
