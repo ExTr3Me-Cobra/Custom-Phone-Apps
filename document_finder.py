@@ -23,6 +23,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 LOG = DATA / 'document_finder.log'
 MOVES = DATA / 'moves.jsonl'
 SETTINGS = DATA / 'settings.json'
+LAST = DATA / 'last_scan.json'
 EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff', '.heic', '.heif'}
 MEAN = np.array([0.48145466, 0.4578275, 0.40821073], np.float32)
 STD = np.array([0.26862954, 0.26130258, 0.27577711], np.float32)
@@ -132,6 +133,7 @@ class App:
         b = ttk.Frame(f); b.pack(fill='x', pady=15)
         self.go = ttk.Button(b, text='Scan', command=self.start_scan); self.go.pack(side='left')
         ttk.Button(b, text='Stop', command=self.stop.set).pack(side='left', padx=5)
+        ttk.Button(b, text='Resume last scan', command=self.resume).pack(side='left', padx=5)
         ttk.Button(b, text='Undo last session’s moves', command=self.undo_session).pack(side='left', padx=5)
         ttk.Button(b, text='Export log…', command=self.export_log).pack(side='right')
         self.prog = ttk.Progressbar(f, mode='determinate'); self.prog.pack(fill='x', pady=5)
@@ -199,10 +201,34 @@ class App:
                     self.q.put(('prog', done, len(files)))
                     self.q.put(('status', f'{done}/{len(files)} scanned · {len(found)} found · {done / max(el, 1e-6):.0f}/s · {self.model.provider}'))
             found.sort(key=lambda x: -x[0])
+            try: LAST.write_text(json.dumps({'src': str(src), 'dst': str(dst), 'thr': thr, 'items': [[d, str(p), l] for d, p, l in found]}))
+            except Exception: log.exception('saving the scan')
             log.info('scan finished: %d scanned, %d unreadable, %d found, %.1fs', done, bad, len(found), time.perf_counter() - t0)
             self.q.put(('done', (found, src, dst)))
         except Exception:
             log.exception('scan failed'); self.q.put(('error', 'Scan failed. Use Export log and send it over.'))
+
+    def resume(self):
+        """Reopens the last scan: from last_scan.json, or rebuilt from the log's score lines."""
+        import re
+        src, dst = Path(self.src.get()), Path(self.dst.get())
+        thr = self.thr.get(); items = None
+        try:
+            j = json.loads(LAST.read_text()); src, dst = Path(j['src']), Path(j['dst'])
+            items = [(d, Path(p), l) for d, p, l in j['items']]; log.info('resume from last_scan.json: %d', len(items))
+        except Exception:
+            text = LOG.read_text(encoding='utf-8', errors='replace')
+            k = text.rfind(' scan ' + str(src) + ' -> ')
+            if k < 0: k = text.rfind('] scan ')
+            if k < 0: return messagebox.showinfo(APP, 'No earlier scan found.')
+            m = re.search(r'scan (.+?) -> (.+?) \| threshold ([0-9.]+)', text[k - 50:k + 2000])
+            if m: src, dst, thr = Path(m.group(1)), Path(m.group(2)), float(m.group(3))
+            items = [(float(a), Path(c), b) for a, b, c in re.findall(r'score ([0-9.]+) top=(.+?) ([A-Za-z]:\\.+)', text[k:]) if float(a) >= thr]
+            items.sort(key=lambda x: -x[0]); log.info('resume rebuilt from the log: %d (threshold %.3f)', len(items), thr)
+        items = [it for it in items if it[1].exists()]
+        if not items: return messagebox.showinfo(APP, 'Nothing left from the last scan.')
+        self.src.set(str(src)); self.dst.set(str(dst))
+        self.scan_done((items, src, dst))
 
     def scan_done(self, r):
         self.items, self.src_root, self.dst_root = r
