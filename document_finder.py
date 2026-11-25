@@ -226,8 +226,10 @@ class App:
 
     def frame_top(self, title):
         for w in self.root.winfo_children(): w.destroy()
-        top = ttk.Frame(self.root, padding=6); top.pack(fill='x')
-        self.info = ttk.Label(top, text=title, font=('Segoe UI', 11)); self.info.pack(side='left')
+        top = ttk.Frame(self.root, padding=6); top.pack(side='top', fill='x')
+        self.info = ttk.Label(self.root, text=title, font=('Segoe UI', 10), anchor='w', padding=(8, 0))
+        self.info.pack(side='top', fill='x')
+        self.info.bind('<Configure>', lambda e: self.info.config(wraplength=max(200, e.width - 16)))
         ttk.Button(top, text='Export log…', command=self.export_log).pack(side='right')
         ttk.Button(top, text='Finish', command=self.finish).pack(side='right', padx=4)
         ttk.Button(top, text='Undo (Ctrl+Z)', command=self.undo).pack(side='right', padx=4)
@@ -273,8 +275,9 @@ class App:
     # full view: ← → browse, Delete moves the shown image to the destination
     def full_view(self):
         self.frame_top('')
-        self.canvas = tk.Label(self.root, bg='#111', fg='white'); self.canvas.pack(fill='both', expand=True)
-        b = ttk.Frame(self.root, padding=8); b.pack(fill='x')
+        b = ttk.Frame(self.root, padding=8); b.pack(side='bottom', fill='x')
+        box = tk.Frame(self.root, bg='#111'); box.pack(side='top', fill='both', expand=True); box.pack_propagate(False)
+        self.canvas = tk.Label(box, bg='#111', fg='white'); self.canvas.pack(fill='both', expand=True)
         ttk.Button(b, text='◀ Previous (←)', command=lambda: self.step(-1)).pack(side='left')
         ttk.Button(b, text='Next (→) ▶', command=lambda: self.step(1)).pack(side='left', padx=4)
         ttk.Button(b, text='Move to destination (Delete)', command=self.delete_key).pack(side='right')
@@ -308,7 +311,7 @@ class App:
     # split view: left = destination folder, right = found images still in place
     def split_view(self):
         self.frame_top('Split view: click to select, Ctrl+click to add, Shift+click for a range. Double-click opens it full size.')
-        bar = ttk.Frame(self.root, padding=(8, 0)); bar.pack(fill='x')
+        bar = ttk.Frame(self.root, padding=(8, 4)); bar.pack(side='top', fill='x')
         ttk.Button(bar, text='◀ Move selected to destination (Delete)', command=self.move_selected).pack(side='left')
         ttk.Button(bar, text='Select all', command=lambda: (self.sel.update(self.right_ids()), self.refresh_split())).pack(side='left', padx=4)
         ttk.Button(bar, text='Select none', command=lambda: (self.sel.clear(), self.refresh_split())).pack(side='left')
