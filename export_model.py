@@ -1,6 +1,7 @@
 """Build step: exports the CLIP image encoder to ONNX and pre-computes the label text embeddings."""
 import json, numpy as np, torch, open_clip
 from labels import DOC, PHOTO
+import os; os.makedirs('model', exist_ok=True)
 m, _, _ = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
 m.eval(); tok = open_clip.get_tokenizer('ViT-B-32')
 class V(torch.nn.Module):
