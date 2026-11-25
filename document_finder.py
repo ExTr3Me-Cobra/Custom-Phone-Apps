@@ -242,8 +242,8 @@ class App:
     # Undo stack: list of batches; each batch is a list of (item index, path it was moved to).
     def build_review(self):
         self.items = [[d, p, l, None] for d, p, l in self.items]
-        self.undo_stack = []; self.sel = set(); self.anchor = None
-        self.thumb_px = tk.IntVar(value=self.s.get('thumb', 160)); self.thumbs = {}
+        self.undo_stack = []; self.sel = set(); self.anchor = None; self.mode = 'full'
+        self.thumb_px = tk.IntVar(value=self.s.get('thumb', 160)); self.thumbs = {}; self.pil = {}; self.tq = queue.Queue(); self.poll_thumbs()
         self.pool = ThreadPoolExecutor(8, thread_name_prefix='thumb')
         for k, fn in (('<Left>', lambda e: self.step(-1)), ('<Right>', lambda e: self.step(1)), ('<Delete>', lambda e: self.delete_key()),
                       ('<Control-z>', lambda e: self.undo())):
@@ -342,8 +342,9 @@ class App:
         ttk.Button(bar, text='Select all', command=lambda: (self.sel.update(self.right_ids()), self.refresh_split())).pack(side='left', padx=4)
         ttk.Button(bar, text='Select none', command=lambda: (self.sel.clear(), self.refresh_split())).pack(side='left')
         ttk.Label(bar, text='Thumbnail size').pack(side='right')
-        ttk.Scale(bar, from_=80, to=400, variable=self.thumb_px, length=180,
-                  command=lambda v: self.root.after_idle(self.resize_thumbs)).pack(side='right', padx=4)
+        sc = ttk.Scale(bar, from_=80, to=400, variable=self.thumb_px, length=180); sc.pack(side='right', padx=4)
+        sc.bind('<ButtonRelease-1>', lambda e: self.resize_thumbs())  # redraw once you let go
+        ttk.Button(bar, text='Change destination…', command=self.change_dst).pack(side='left', padx=12)
         pw = ttk.PanedWindow(self.root, orient='horizontal'); pw.pack(fill='both', expand=True, padx=6, pady=6)
         self.left = self.grid_panel(pw, 'Destination'); self.right = self.grid_panel(pw, 'Detected')
         self.refresh_split()
@@ -370,8 +371,26 @@ class App:
         self.right['label'].config(text=f'Detected, not moved yet ({len(self.right["paths"])}) · {len(self.sel)} selected')
         self.layout()
 
+    def change_dst(self):
+        d = filedialog.askdirectory(parent=self.root, title='Destination for approved documents', initialdir=str(self.dst_root))
+        if not d: return
+        self.dst_root = Path(d); self.dst.set(str(self.dst_root)); self.s['dst'] = str(self.dst_root); save_settings(self.s)
+        log.info('destination changed to %s', self.dst_root); self.refresh_split()
+
+    def poll_thumbs(self):
+        """Thumbnails are decoded on worker threads; Tk images are only made here, on the UI thread."""
+        got = False
+        try:
+            while True:
+                p, im = self.tq.get_nowait(); self.pil[p] = im; got = True
+        except queue.Empty:
+            pass
+        if got: self.layout()
+        if self.mode is not None: self.root.after(150, self.poll_thumbs)
+
     def resize_thumbs(self):
-        self.s['thumb'] = int(self.thumb_px.get()); save_settings(self.s); self.layout()
+        self.s['thumb'] = int(self.thumb_px.get()); save_settings(self.s)
+        self.thumbs.clear(); self.layout()  # new size: remake the Tk images from the kept pictures
 
     def layout(self):
         if self.mode != 'split': return
@@ -396,21 +415,22 @@ class App:
     def thumb(self, p, t):
         k = (str(p), t)
         if k in self.thumbs: return self.thumbs[k]
-        self.thumbs[k] = None
-        def load():
-            try:
-                im = Image.open(p)
-                if im.format == 'JPEG': im.draft('RGB', (t * 2, t * 2))
-                im = ImageOps.exif_transpose(im).convert('RGB'); im.thumbnail((t, t)); return im
-            except Exception as e:
-                log.debug('thumb failed %s: %r', p, e); return None
-        fut = self.pool.submit(load)
-        def done(f):
-            im = f.result()
-            if im is not None:
-                self.root.after(0, lambda: (self.thumbs.__setitem__(k, ImageTk.PhotoImage(im)), self.schedule_layout()))
-        fut.add_done_callback(done)
-        return None
+        im = self.pil.get(str(p))
+        if im is None:
+            if str(p) not in self.pil:
+                self.pil[str(p)] = None  # loading
+                def load(p=p):
+                    try:
+                        x = Image.open(p)
+                        if x.format == 'JPEG': x.draft('RGB', (800, 800))
+                        x = ImageOps.exif_transpose(x).convert('RGB'); x.thumbnail((400, 400))
+                    except Exception as e:
+                        log.debug('thumb failed %s: %r', p, e); x = Image.new('RGB', (40, 40), '#552222')
+                    self.tq.put((str(p), x))
+                self.pool.submit(load)
+            return None
+        c = im.copy(); c.thumbnail((t, t)); self.thumbs[k] = ImageTk.PhotoImage(c)
+        return self.thumbs[k]
 
     def schedule_layout(self):
         if not getattr(self, '_lay', False):
