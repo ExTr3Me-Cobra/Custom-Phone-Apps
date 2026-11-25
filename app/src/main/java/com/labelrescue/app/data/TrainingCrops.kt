@@ -29,6 +29,8 @@ import kotlin.math.roundToInt
  */
 class TrainingCrops(ctx: Context) {
     val dir = File(ctx.filesDir, "training_crops").apply { mkdirs() }
+    /** Every label crops were ever saved from (kept when the crops are cleared after an export). */
+    private val history = File(ctx.filesDir, "learned_labels.txt")
     private val labels = File(dir, "labels.csv")
 
     data class Item(val file: File, val digit: Char, val trusted: Boolean, val agreedBy: String, val tracking: String)
@@ -55,6 +57,7 @@ class TrainingCrops(ctx: Context) {
             writeRows(rows + listOf(listOf(name, digit.toString(), if (trusted) "1" else "0", agree.joinToString("+") { it.name }, tracking)))
             saved++
         }
+        if (saved > 0 && history.readLinesOrEmpty().none { it == tracking }) history.appendText(tracking + "\n")
         return SaveResult(saved, skipped)
     }
 
@@ -87,8 +90,11 @@ class TrainingCrops(ctx: Context) {
      */
     fun labelsFromSameShipper(tracking: String): Int {
         val mid = shipperKey(tracking) ?: return 0
-        return readRows().mapNotNull { it.getOrNull(4) }.distinct().count { it != tracking && shipperKey(it) == mid }
+        // Including labels whose crops were already exported and cleared.
+        return (readRows().mapNotNull { it.getOrNull(4) } + history.readLinesOrEmpty()).distinct().count { it != tracking && shipperKey(it) == mid }
     }
+
+    private fun File.readLinesOrEmpty(): List<String> = if (exists()) readLines().filter { it.isNotBlank() } else emptyList()
 
     private fun shipperKey(t: String): String? = com.labelrescue.core.usps.ImpbParser.parse(t)?.mailerId
 

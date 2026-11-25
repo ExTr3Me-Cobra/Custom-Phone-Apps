@@ -89,8 +89,8 @@ fun SettingsScreen(
         Text("Training data", style = MaterialTheme.typography.titleLarge)
         Text(
             "${ui.reportCount} report entr${if (ui.reportCount == 1) "y" else "ies"} · ${ui.cropCount} digit crops · ${ui.barcodeCount} barcode examples. " +
-                "Export saves all of it, with the report photos and the last scan's diagnostic log, as one ZIP in Downloads: the file to send. " +
-                "The report clears after; crops and barcodes stay until you delete them.",
+                "Export saves all of it, with the photos and the last scan's diagnostic log, as a ZIP in Downloads (split into parts if over 30 MB): the file to send. " +
+                "Everything exported is then wiped from the phone, and the export deletes itself after 10 minutes.",
             style = MaterialTheme.typography.bodySmall,
         )
         Button(

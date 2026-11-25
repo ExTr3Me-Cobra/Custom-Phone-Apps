@@ -142,8 +142,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             res.onSuccess { r ->
                 com.labelrescue.app.data.ExportCleanup.schedule(getApplication())
-                // Full-resolution scan crops are big: sent once, then cleared (like the report photos).
-                withContext(Dispatchers.IO) { runCatching { scanCrops.clear() } }
+                // Everything exported is now with the developer: the phone keeps none of it.
+                withContext(Dispatchers.IO) {
+                    runCatching { scanCrops.clear(); crops.clear(); barcodeExamples.clear(); com.labelrescue.app.data.TrainingExport.forgetSent(getApplication()) }
+                }
                 _reportCount.value = 0; _reportPhotos.value = 0; _reportPhoto.value = null
                 if (r.parts > 1) _splitExport.value = SplitExport(r.parts, r.name, r.where)
                 else _message.value = (if (r.parts > 1) "Saved ${r.parts} files (${r.name} and the next parts) to ${r.where}, each under 30 MB. Send them all" else "Saved ${r.name} to ${r.where} (${r.entries} files). Send that one file") + ": exports delete themselves in 10 minutes."
