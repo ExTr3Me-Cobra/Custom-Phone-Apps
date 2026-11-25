@@ -1,0 +1,23 @@
+name: Build Document Finder
+on: { push: { branches: [claude/document-finder-app] }, workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Export the model (build only)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install open_clip_torch onnx
+          python export_model.py
+      - name: Build the app
+        run: |
+          pip install onnxruntime-directml pillow pillow-heif numpy pyinstaller
+          pyinstaller --noconfirm --windowed --name "Document Finder" --add-data "model;model" --hidden-import pillow_heif document_finder.py
+          Compress-Archive -Path "dist/Document Finder" -DestinationPath DocumentFinder.zip
+      - name: Publish
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh release create "document-finder-${{ github.run_number }}" DocumentFinder.zip --target "${{ github.sha }}" --title "Document Finder (build ${{ github.run_number }})" --notes "Download DocumentFinder.zip, unzip it anywhere, and run 'Document Finder.exe'."
