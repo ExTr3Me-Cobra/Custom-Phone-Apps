@@ -31,6 +31,7 @@ STD = np.array([0.26862954, 0.26130258, 0.27577711], np.float32)
 logging.basicConfig(filename=LOG, level=logging.DEBUG, encoding='utf-8',
                     format='%(asctime)s.%(msecs)03d %(levelname)s [%(threadName)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 log = logging.getLogger('df')
+for _n in ('PIL', 'PIL.TiffImagePlugin', 'PIL.Image'): logging.getLogger(_n).setLevel(logging.WARNING)
 import faulthandler
 _fh = open(DATA / 'crash.log', 'a', encoding='utf-8'); faulthandler.enable(_fh)  # hard crashes (native code) land here
 sys.excepthook = lambda t, v, tb: log.critical('UNCAUGHT %s', ''.join(traceback.format_exception(t, v, tb)))
@@ -242,9 +243,16 @@ class App:
     # Undo stack: list of batches; each batch is a list of (item index, path it was moved to).
     def build_review(self):
         self.items = [[d, p, l, None] for d, p, l in self.items]
-        self.undo_stack = []; self.sel = set(); self.anchor = None; self.mode = 'full'
+        self.undo_stack = []; self.sel = set(); self.anchor = None; self.mode = 'full'; self.side = None
+        self.origin = {}
+        try:
+            for l in open(MOVES, encoding='utf-8'):
+                r = json.loads(l)
+                if 'to' in r: self.origin[r['to']] = r['from'] if r.get('what', 'to destination') == 'to destination' else None
+                elif 'undo' in r: self.origin.pop(r['undo'], None)
+        except FileNotFoundError: pass
         self.thumb_px = tk.IntVar(value=self.s.get('thumb', 160)); self.thumbs = {}; self.pil = {}; self.tq = queue.Queue(); self.poll_thumbs()
-        self.pool = ThreadPoolExecutor(8, thread_name_prefix='thumb')
+        self.pool = ThreadPoolExecutor(4, thread_name_prefix='thumb')
         for k, fn in (('<Left>', lambda e: self.step(-1)), ('<Right>', lambda e: self.step(1)), ('<Delete>', lambda e: self.delete_key()),
                       ('<Control-z>', lambda e: self.undo())):
             self.root.bind(k, fn)
@@ -266,36 +274,39 @@ class App:
         log.info('view -> %s', self.mode)
         self.full_view() if self.mode == 'full' else self.split_view()
 
-    def move_items(self, idxs):
-        """Moves these found images to the destination (keeping subfolders). One undo step."""
+    def do_moves(self, pairs, what):
+        """Moves files (before -> after), logs each one, and makes the batch one undo step."""
         batch = []
-        for i in idxs:
-            d, p, lbl, cur = self.items[i]
-            if cur: continue
+        for before, after in pairs:
             try:
-                dest = unique(self.dst_root / p.relative_to(self.src_root)); dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(p), str(dest)); self.items[i][3] = dest; batch.append((i, dest))
+                after = unique(after); after.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(before), str(after)); batch.append((before, after))
+                self.origin[str(after)] = str(before) if what == 'to destination' else None
                 with open(MOVES, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({'session': self.session, 'from': str(p), 'to': str(dest), 't': time.time()}) + '\n')
-                log.info('moved score=%.3f top=%s %s -> %s', d, lbl, p, dest)
+                    f.write(json.dumps({'session': self.session, 'from': str(before), 'to': str(after), 'what': what, 't': time.time()}) + '\n')
+                log.info('%s: %s -> %s', what, before, after)
             except Exception as e:
-                log.exception('move failed %s', p); messagebox.showerror(APP, f'Could not move {p.name}:\n{e}'); break
+                log.exception('move failed %s', before); messagebox.showerror(APP, f'Could not move {Path(before).name}:\n{e}'); break
         if batch: self.undo_stack.append(batch)
         return batch
+
+    def move_items(self, idxs):
+        return self.do_moves([(self.items[i][1], self.dst_root / self.items[i][1].relative_to(self.src_root))
+                              for i in idxs if self.items[i][1].exists()], 'to destination')
 
     def undo(self):
         if not self.undo_stack: return
         batch = self.undo_stack.pop()
-        for i, dest in reversed(batch):
-            orig = self.items[i][1]
+        for before, after in reversed(batch):
             try:
-                orig.parent.mkdir(parents=True, exist_ok=True); shutil.move(str(dest), str(orig)); self.items[i][3] = None
+                Path(before).parent.mkdir(parents=True, exist_ok=True); shutil.move(str(after), str(before))
                 with open(MOVES, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({'session': self.session, 'undo': str(dest), 'back': str(orig)}) + '\n')
-                log.info('undo: %s -> %s', dest, orig)
+                    f.write(json.dumps({'session': self.session, 'undo': str(after), 'back': str(before)}) + '\n')
+                log.info('undo: %s -> %s', after, before)
             except Exception as e:
-                log.exception('undo failed'); messagebox.showerror(APP, f'Could not move it back:\n{e}')
-        if self.mode == 'full': self.idx = batch[0][0]; self.show()
+                log.exception('undo failed'); messagebox.showerror(APP, f'Could not undo:\n{e}')
+        if self.mode == 'full':
+            self.idx = next((i for i, it in enumerate(self.items) if str(it[1]) == str(batch[0][0])), self.idx); self.show()
         else: self.refresh_split()
 
     # full view: ← → browse, Delete moves the shown image to the destination
@@ -316,15 +327,16 @@ class App:
         self.idx = max(0, min(len(self.items) - 1, self.idx + d)); self.show()
 
     def delete_key(self):
-        if self.mode == 'split': return self.move_selected()
-        if self.items[self.idx][3] is None: self.move_items([self.idx])
+        if self.mode == 'split': return self.move_selected() if self.side == 'R' else None
+        if self.items[self.idx][1].exists(): self.move_items([self.idx])
         if self.idx < len(self.items) - 1: self.idx += 1
         self.show()
 
     def show(self):
         if self.mode != 'full' or not self.canvas.winfo_exists(): return
-        d, p, lbl, cur = self.items[self.idx]
-        moved = sum(1 for it in self.items if it[3])
+        d, p, lbl, _ = self.items[self.idx]
+        cur = None if p.exists() else next((Path(k) for k, v in self.origin.items() if v == str(p) and Path(k).exists()), None)
+        moved = sum(1 for it in self.items if not it[1].exists())
         self.info.config(text=f'{self.idx + 1} / {len(self.items)}  ·  {moved} moved  ·  score {d:.2f} ({lbl})'
                               f'  ·  {"MOVED → " + str(cur) if cur else p}')
         try:
@@ -334,42 +346,179 @@ class App:
         except Exception as e:
             log.warning('preview failed %s: %r', p, e); self.canvas.config(image='', text=f'Cannot show this image\n{e}')
 
-    # split view: left = destination folder, right = found images still in place
+    # split view: left = destination folder, right = found images still in place.
+    # Click, Ctrl+click and Shift+click select like Windows (on either side); drag a selection to the other side.
     def split_view(self):
-        self.frame_top('Split view: click to select, Ctrl+click to add, Shift+click for a range. Double-click opens it full size.')
-        bar = ttk.Frame(self.root, padding=(8, 4)); bar.pack(side='top', fill='x')
-        ttk.Button(bar, text='◀ Move selected to destination (Delete)', command=self.move_selected).pack(side='left')
-        ttk.Button(bar, text='Select all', command=lambda: (self.sel.update(self.right_ids()), self.refresh_split())).pack(side='left', padx=4)
-        ttk.Button(bar, text='Select none', command=lambda: (self.sel.clear(), self.refresh_split())).pack(side='left')
-        ttk.Label(bar, text='Thumbnail size').pack(side='right')
-        sc = ttk.Scale(bar, from_=80, to=400, variable=self.thumb_px, length=180); sc.pack(side='right', padx=4)
-        sc.bind('<ButtonRelease-1>', lambda e: self.resize_thumbs())  # redraw once you let go
-        ttk.Button(bar, text='Change destination…', command=self.change_dst).pack(side='left', padx=12)
+        self.frame_top('Split view: click, Ctrl+click or Shift+click to select · drag to the other side · double-click to open')
+        self.bar = ttk.Frame(self.root, padding=(8, 4)); self.bar.pack(side='top', fill='x')
         pw = ttk.PanedWindow(self.root, orient='horizontal'); pw.pack(fill='both', expand=True, padx=6, pady=6)
-        self.left = self.grid_panel(pw, 'Destination'); self.right = self.grid_panel(pw, 'Detected')
+        self.left = self.grid_panel(pw, 'L'); self.right = self.grid_panel(pw, 'R')
+        self.side = None; self.sel = set(); self.anchor = None
         self.refresh_split()
 
-    def grid_panel(self, pw, title):
+    def build_bar(self):
+        for w in self.bar.winfo_children(): w.destroy()
+        b = self.bar; n = len(self.sel)
+        if self.side == 'R' and n:
+            ttk.Button(b, text=f'◀ Move {n} to destination (Delete)', command=self.move_selected).pack(side='left')
+        elif self.side == 'L' and n:
+            known = sum(1 for p in self.sel if self.origin.get(p))
+            bt = ttk.Button(b, text=f'Move {known} back to where they came from ▶', command=self.move_back)
+            bt.pack(side='left')
+            if not known: bt.state(['disabled'])
+        if n:
+            ttk.Button(b, text=f'🗑 Recycle {n}', command=self.trash_selected).pack(side='left', padx=6)
+            ttk.Button(b, text='Open', command=lambda: self.open_path(next(iter(self.sel)))).pack(side='left')
+            ttk.Button(b, text='Select none', command=lambda: self.select(None, set())).pack(side='left', padx=6)
+        ttk.Button(b, text='Select all detected', command=lambda: self.select('R', {str(p) for p in self.right['paths']})).pack(side='left', padx=6)
+        ttk.Button(b, text='Change destination…', command=self.change_dst).pack(side='left', padx=6)
+        sc = ttk.Scale(b, from_=80, to=400, variable=self.thumb_px, length=160); sc.pack(side='right', padx=4)
+        sc.bind('<ButtonRelease-1>', lambda e: self.resize_thumbs())
+        ttk.Label(b, text='Thumbnail size').pack(side='right')
+
+    def grid_panel(self, pw, side):
         f = ttk.Frame(pw); pw.add(f, weight=1)
         lab = ttk.Label(f, font=('Segoe UI', 11, 'bold')); lab.pack(anchor='w')
         c = tk.Canvas(f, bg='#1b1b1b', highlightthickness=0); sb = ttk.Scrollbar(f, command=c.yview)
         c.configure(yscrollcommand=sb.set); sb.pack(side='right', fill='y'); c.pack(fill='both', expand=True)
-        c.bind('<Configure>', lambda e: self.root.after_idle(self.layout))
+        c.bind('<Configure>', lambda e: self.schedule_layout())
         c.bind('<Enter>', lambda e: c.bind_all('<MouseWheel>', lambda ev: c.yview_scroll(-ev.delta // 120 * 3, 'units')))
-        return {'c': c, 'title': title, 'label': lab, 'paths': []}
+        c.bind('<ButtonPress-1>', lambda e: self.press(side, e))
+        c.bind('<B1-Motion>', lambda e: self.motion(e))
+        c.bind('<ButtonRelease-1>', lambda e: self.release(side, e))
+        c.bind('<Double-Button-1>', lambda e: self.dbl(side, e))
+        return {'c': c, 'side': side, 'label': lab, 'paths': [], 'pos': {}, 'cols': 1}
 
-    def right_ids(self): return [i for i, it in enumerate(self.items) if it[3] is None]
+    def panel(self, side): return self.left if side == 'L' else self.right
+
+    def hit(self, side, e):
+        """The picture under the mouse, or None."""
+        pn = self.panel(side); c = pn['c']; t = int(self.thumb_px.get()); gap = 6
+        x, y = c.canvasx(e.x), c.canvasy(e.y)
+        col, row = int((x - gap) // (t + gap)), int((y - gap) // (t + gap))
+        if col < 0 or col >= pn['cols'] or row < 0: return None
+        n = row * pn['cols'] + col
+        return str(pn['paths'][n]) if n < len(pn['paths']) else None
+
+    def press(self, side, e):
+        self.drag = {'side': side, 'x': e.x_root, 'y': e.y_root, 'p': self.hit(side, e), 'moving': False, 'state': e.state}
+
+    def motion(self, e):
+        d = getattr(self, 'drag', None)
+        if not d or not d['p']: return
+        if not d['moving'] and abs(e.x_root - d['x']) + abs(e.y_root - d['y']) > 12:
+            d['moving'] = True
+            if not (d['side'] == self.side and d['p'] in self.sel): self.select(d['side'], {d['p']}, d['p'])
+            self.root.config(cursor='hand2')
+
+    def release(self, side, e):
+        d = getattr(self, 'drag', None); self.drag = None; self.root.config(cursor='')
+        if not d: return
+        if d['moving']:
+            w = self.root.winfo_containing(e.x_root, e.y_root)
+            other = self.right if side == 'L' else self.left
+            if w is other['c']:
+                log.info('drag %d from %s to the other side', len(self.sel), side)
+                self.move_selected() if side == 'R' else self.move_back()
+            return
+        p = d['p']; ctrl, shift = d['state'] & 0x4, d['state'] & 0x1
+        if p is None:
+            if not ctrl: self.select(None, set())
+            return
+        same = self.side == side
+        if shift and same and self.anchor:
+            ids = [str(x) for x in self.panel(side)['paths']]
+            if self.anchor in ids:
+                a, b = sorted((ids.index(self.anchor), ids.index(p)))
+                rng = set(ids[a:b + 1])
+                return self.select(side, (self.sel | rng) if ctrl else rng, self.anchor)
+        if ctrl and same:
+            return self.select(side, self.sel ^ {p}, p)
+        self.select(side, {p}, p)
+
+    def dbl(self, side, e):
+        p = self.hit(side, e)
+        if p: self.open_path(p)
+
+    def select(self, side, sel, anchor=None):
+        self.side = side if sel else None; self.sel = set(sel); self.anchor = anchor if sel else None
+        self.redraw_selection(); self.build_bar()
+
+    def open_path(self, p):
+        i = next((i for i, it in enumerate(self.items) if str(it[1]) == p), None)
+        if i is not None: self.idx = i; self.mode = 'full'; self.full_view()
+        else: __import__('os').startfile(p)
+
+    def move_selected(self):
+        if self.side != 'R' or not self.sel: return
+        idx = [i for i, it in enumerate(self.items) if str(it[1]) in self.sel]
+        self.move_items(idx); self.select(None, set()); self.refresh_split()
+
+    def move_back(self):
+        if self.side != 'L' or not self.sel: return
+        pairs = [(Path(p), Path(self.origin[p])) for p in self.sel if self.origin.get(p)]
+        self.do_moves(pairs, 'back to original'); self.select(None, set()); self.refresh_split()
+
+    def trash_selected(self):
+        if not self.sel: return
+        n = len(self.sel)
+        if not messagebox.askyesno(APP, f'Send {n} image(s) to the Recycle Bin?\n(You can restore them from the Recycle Bin.)'): return
+        from send2trash import send2trash
+        for p in list(self.sel):
+            try: send2trash(p); log.info('recycled %s', p)
+            except Exception as e: log.exception('recycle failed %s', p); messagebox.showerror(APP, f'Could not recycle:\n{e}'); break
+        self.select(None, set()); self.refresh_split()
 
     def refresh_split(self):
         if self.mode != 'split': return
         try: dst = sorted((p for p in self.dst_root.rglob('*') if p.suffix.lower() in EXTS), key=lambda p: p.stat().st_mtime, reverse=True)
         except Exception: dst = []
-        self.left['paths'] = [(None, p) for p in dst]
-        self.right['paths'] = [(i, self.items[i][1]) for i in self.right_ids()]
-        self.sel &= set(self.right_ids())
+        self.left['paths'] = dst
+        self.right['paths'] = [it[1] for it in self.items if it[1].exists()]
+        live = {str(p) for p in (dst if self.side == 'L' else self.right['paths'])}
+        self.sel &= live
         self.left['label'].config(text=f'Destination: {self.dst_root}  ({len(dst)})')
-        self.right['label'].config(text=f'Detected, not moved yet ({len(self.right["paths"])}) · {len(self.sel)} selected')
-        self.layout()
+        self.right['label'].config(text=f'Detected, not moved yet ({len(self.right["paths"])})')
+        self.layout(); self.build_bar()
+
+    def schedule_layout(self):
+        if not getattr(self, '_lay', False):
+            self._lay = True; self.root.after(120, lambda: (setattr(self, '_lay', False), self.layout()))
+
+    def layout(self):
+        if self.mode != 'split': return
+        t = int(self.thumb_px.get()); gap = 6
+        for pn in (self.left, self.right):
+            c = pn['c']; c.delete('all'); pn['pos'] = {}
+            w = max(c.winfo_width(), t + gap); cols = max(1, (w - gap) // (t + gap)); pn['cols'] = cols
+            for n, p in enumerate(pn['paths']):
+                x, y = gap + (n % cols) * (t + gap), gap + (n // cols) * (t + gap)
+                sp = str(p)
+                img = self.thumb(p, t)
+                iid = c.create_image(x + t // 2, y + t // 2, image=img) if img else c.create_rectangle(x, y, x + t, y + t, fill='#333', outline='')
+                pn['pos'][sp] = (x, y, iid)
+            rows = (len(pn['paths']) + cols - 1) // cols
+            c.configure(scrollregion=(0, 0, w, gap + rows * (t + gap)))
+        self.redraw_selection()
+
+    def redraw_selection(self):
+        t = int(self.thumb_px.get())
+        for pn in (self.left, self.right):
+            c = pn['c']; c.delete('sel')
+            if pn['side'] != self.side: continue
+            for p in self.sel:
+                if p in pn['pos']:
+                    x, y, _ = pn['pos'][p]; c.create_rectangle(x - 3, y - 3, x + t + 3, y + t + 3, outline='#22c3ff', width=4, tags='sel')
+
+    def thumb_arrived(self, p):
+        """A thumbnail finished loading: swap it in without redrawing everything."""
+        t = int(self.thumb_px.get())
+        for pn in (self.left, self.right):
+            if p in pn['pos']:
+                x, y, iid = pn['pos'][p]; img = self.thumb(p, t)
+                if img:
+                    pn['c'].delete(iid); nid = pn['c'].create_image(x + t // 2, y + t // 2, image=img); pn['pos'][p] = (x, y, nid)
+                    pn['c'].tag_raise('sel')
 
     def change_dst(self):
         d = filedialog.askdirectory(parent=self.root, title='Destination for approved documents', initialdir=str(self.dst_root))
@@ -382,35 +531,15 @@ class App:
         got = False
         try:
             while True:
-                p, im = self.tq.get_nowait(); self.pil[p] = im; got = True
+                p, im = self.tq.get_nowait(); self.pil[p] = im
+                if self.mode == 'split': self.thumb_arrived(p)
         except queue.Empty:
             pass
-        if got: self.layout()
         if self.mode is not None: self.root.after(150, self.poll_thumbs)
 
     def resize_thumbs(self):
         self.s['thumb'] = int(self.thumb_px.get()); save_settings(self.s)
         self.thumbs.clear(); self.layout()  # new size: remake the Tk images from the kept pictures
-
-    def layout(self):
-        if self.mode != 'split': return
-        t = int(self.thumb_px.get()); gap = 6
-        for panel in (self.left, self.right):
-            c = panel['c']; c.delete('all'); w = max(c.winfo_width(), t + gap)
-            cols = max(1, w // (t + gap))
-            for n, (i, p) in enumerate(panel['paths']):
-                x, y = gap + (n % cols) * (t + gap), gap + (n // cols) * (t + gap)
-                if i is not None and i in self.sel:
-                    c.create_rectangle(x - 3, y - 3, x + t + 3, y + t + 3, outline='#22c3ff', width=4)
-                img = self.thumb(p, t)
-                tag = f'n{n}'
-                if img: c.create_image(x + t // 2, y + t // 2, image=img, tags=tag)
-                else: c.create_rectangle(x, y, x + t, y + t, fill='#333', outline='', tags=tag)
-                if i is not None:
-                    c.tag_bind(tag, '<Button-1>', lambda e, i=i: self.click(i, e))
-                    c.tag_bind(tag, '<Double-Button-1>', lambda e, i=i: self.open_full(i))
-            rows = (len(panel['paths']) + cols - 1) // cols
-            c.configure(scrollregion=(0, 0, w, gap + rows * (t + gap)))
 
     def thumb(self, p, t):
         k = (str(p), t)
@@ -421,9 +550,12 @@ class App:
                 self.pil[str(p)] = None  # loading
                 def load(p=p):
                     try:
-                        x = Image.open(p)
-                        if x.format == 'JPEG': x.draft('RGB', (800, 800))
-                        x = ImageOps.exif_transpose(x).convert('RGB'); x.thumbnail((400, 400))
+                        with Image.open(p) as x:
+                            if x.format == 'JPEG': x.draft('RGB', (800, 800))
+                            x.load(); x = x.convert('RGB')
+                        try: x = ImageOps.exif_transpose(x)
+                        except Exception: pass
+                        x.thumbnail((400, 400))
                     except Exception as e:
                         log.debug('thumb failed %s: %r', p, e); x = Image.new('RGB', (40, 40), '#552222')
                     self.tq.put((str(p), x))
@@ -432,30 +564,9 @@ class App:
         c = im.copy(); c.thumbnail((t, t)); self.thumbs[k] = ImageTk.PhotoImage(c)
         return self.thumbs[k]
 
-    def schedule_layout(self):
-        if not getattr(self, '_lay', False):
-            self._lay = True; self.root.after(150, lambda: (setattr(self, '_lay', False), self.layout()))
-
-    def click(self, i, e):
-        ids = self.right_ids()
-        if e.state & 0x1 and self.anchor in ids:  # Shift: range
-            a, b = sorted((ids.index(self.anchor), ids.index(i))); self.sel.update(ids[a:b + 1])
-        elif e.state & 0x4:  # Ctrl: toggle
-            self.sel ^= {i}; self.anchor = i
-        else:
-            self.sel = {i}; self.anchor = i
-        self.refresh_split()
-
-    def move_selected(self):
-        if not self.sel: return
-        log.info('move selected: %d', len(self.sel))
-        self.move_items(sorted(self.sel)); self.sel.clear(); self.refresh_split()
-
-    def open_full(self, i):
-        self.idx = i; self.mode = 'full'; self.full_view()
 
     def finish(self):
-        n = sum(1 for it in self.items if it[3])
+        n = sum(1 for it in self.items if not it[1].exists())
         log.info('review finished: %d moved of %d found', n, len(self.items))
         messagebox.showinfo(APP, f'Done. {n} image(s) moved to the destination.')
         for k in ('<Left>', '<Right>', '<Delete>', '<Configure>', '<Control-z>', '<MouseWheel>'): self.root.unbind_all(k) if k == '<MouseWheel>' else self.root.unbind(k)

@@ -15,7 +15,7 @@ jobs:
           python export_model.py
       - name: Build the app
         run: |
-          pip install onnxruntime-directml pillow pillow-heif numpy pyinstaller
+          pip install onnxruntime-directml pillow pillow-heif numpy send2trash pyinstaller
           pyinstaller --noconfirm --windowed --name "Document Finder" --add-data "model;model" --hidden-import pillow_heif document_finder.py
           Compress-Archive -Path "dist/Document Finder" -DestinationPath DocumentFinder.zip
       - name: Publish
