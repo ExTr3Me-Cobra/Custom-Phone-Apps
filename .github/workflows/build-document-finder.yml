@@ -11,7 +11,7 @@ jobs:
       - name: Export the model (build only)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install open_clip_torch onnx
+          pip install open_clip_torch onnx onnxscript
           python export_model.py
       - name: Build the app
         run: |

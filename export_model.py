@@ -7,7 +7,7 @@ class V(torch.nn.Module):
     def __init__(s, v): super().__init__(); s.v = v
     def forward(s, x): f = s.v(x); return f / f.norm(dim=-1, keepdim=True)
 torch.onnx.export(V(m.visual), torch.randn(1, 3, 224, 224), 'model/visual.onnx', input_names=['x'], output_names=['f'],
-                  dynamic_axes={'x': {0: 'b'}, 'f': {0: 'b'}}, opset_version=17)
+                  dynamic_axes={'x': {0: 'b'}, 'f': {0: 'b'}}, opset_version=17, dynamo=False)
 with torch.no_grad():
     t = m.encode_text(tok([f'a photo of {p}' for p in DOC + PHOTO])); t = t / t.norm(dim=-1, keepdim=True)
 np.save('model/text.npy', t.numpy().astype(np.float32))
