@@ -10,16 +10,16 @@
     "params": 92788,
     "tflite_bytes": 376860,
     "val_iou": {
-      "barcode": 0.954,
-      "service_banner": 0.871,
-      "tracking_text": 0.849,
-      "zip": 0.786
+      "barcode": 0.956,
+      "service_banner": 0.88,
+      "tracking_text": 0.858,
+      "zip": 0.766
     }
   },
   "restore": {
-    "identity_mae": 0.09811,
+    "identity_mae": 0.09872,
     "params": 4945,
     "tflite_bytes": 22784,
-    "val_mae": 0.03589
+    "val_mae": 0.03681
   }
 }
