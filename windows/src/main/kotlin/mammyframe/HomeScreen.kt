@@ -134,6 +134,8 @@ fun HomeScreen(
             val devOff: @Composable () -> Unit = {
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
+                    StatusTextSizeRow(settings, onChange, Modifier.widthIn(max = 560.dp))
+                    Spacer(Modifier.height(12.dp))
                     StartOnBootRow(Modifier.widthIn(max = 560.dp))
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -509,5 +511,21 @@ private fun ForceCloseButton(onForceClose: () -> Unit) {
     OutlinedButton(onClick = { if (asking) onForceClose() else asking = true }) {
         Text(if (asking) "Tap again to close Mammy Frame" else "Force close Mammy Frame",
             fontSize = 16.sp, color = Color(0xFFB3261E))
+    }
+}
+
+/** Developer setting: how big "Playing" / "Paused" is above the pause button in the slideshow. */
+@Composable
+private fun StatusTextSizeRow(s: Settings, onChange: (Settings) -> Unit, modifier: Modifier) {
+    Surface(color = Color.White.copy(alpha = 0.82f), shape = RoundedCornerShape(20.dp), modifier = modifier) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Text("Playing / Paused text size: ${s.statusTextSize}", fontSize = 18.sp, color = Ink, fontWeight = FontWeight.Medium)
+            Slider(
+                value = s.statusTextSize.toFloat(),
+                onValueChange = { onChange(s.copy(statusTextSize = it.toInt())) },
+                valueRange = 12f..72f,
+            )
+            Text("Playing", fontSize = s.statusTextSize.sp, color = Ink.copy(alpha = 0.8f), maxLines = 1)
+        }
     }
 }

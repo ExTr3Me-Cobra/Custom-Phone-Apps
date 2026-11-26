@@ -33,6 +33,8 @@ data class Settings(
     val developer: Boolean = false,
     /** Open by itself and start the slideshow when the tablet turns on or restarts. */
     val startOnBoot: Boolean = false,
+    /** Size of the "Playing" / "Paused" words above the pause button (sp). */
+    val statusTextSize: Int = 24,
 )
 
 object Prefs {
@@ -54,6 +56,7 @@ object Prefs {
             gentleZoom = p.getBoolean("gentleZoom", d.gentleZoom),
             developer = p.getBoolean("developer", d.developer),
             startOnBoot = p.getBoolean("startOnBoot", d.startOnBoot),
+            statusTextSize = p.getInt("statusTextSize", d.statusTextSize),
         )
     }
 
@@ -70,6 +73,7 @@ object Prefs {
             .putBoolean("gentleZoom", s.gentleZoom)
             .putBoolean("developer", s.developer)
             .putBoolean("startOnBoot", s.startOnBoot)
+            .putInt("statusTextSize", s.statusTextSize)
             .apply()
     }
 }

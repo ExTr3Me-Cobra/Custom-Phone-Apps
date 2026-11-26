@@ -1,5 +1,6 @@
 package mammyframe
 
+import androidx.compose.ui.layout.layout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -261,7 +262,23 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RoundButton(Glyph.BACK, big, enabled = list?.canGoBack == true) { controlsTouched++; scope.launch { go(-1) } }
-                    RoundButton(if (paused) Glyph.PLAY else Glyph.PAUSE, big * 1.12f) { controlsTouched++; paused = !paused }
+                    // "Playing" or "Paused" just above the middle button (it doesn't move the buttons).
+                    Box {
+                        RoundButton(if (paused) Glyph.PLAY else Glyph.PAUSE, big * 1.12f) { controlsTouched++; paused = !paused }
+                        Text(
+                            if (paused) "Paused" else "Playing",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = settings.statusTextSize.sp,
+                            maxLines = 1,
+                            style = androidx.compose.ui.text.TextStyle(
+                                shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.7f), blurRadius = 8f)
+                            ),
+                            modifier = Modifier.align(Alignment.TopCenter).layout { m, c ->
+                                val p = m.measure(c.copy(minWidth = 0, maxWidth = androidx.compose.ui.unit.Constraints.Infinity))
+                                layout(0, 0) { p.place(-p.width / 2, -p.height - 10.dp.roundToPx()) }
+                            }
+                        )
+                    }
                     RoundButton(Glyph.FORWARD, big, enabled = list?.isEmpty == false) { controlsTouched++; scope.launch { go(1) } }
                 }
                 // Small "End Slideshow" button in the top left corner.

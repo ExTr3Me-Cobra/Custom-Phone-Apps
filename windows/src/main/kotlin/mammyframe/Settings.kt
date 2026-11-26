@@ -35,6 +35,8 @@ data class Settings(
     val photoSeconds: Int = 10,
     val gentleZoom: Boolean = true,
     val developer: Boolean = false,
+    /** Size of the "Playing" / "Paused" words above the pause button (sp). */
+    val statusTextSize: Int = 24,
 ) {
     val folderName: String? get() = folder?.let { File(it).name.ifEmpty { it } }
 }
@@ -58,6 +60,7 @@ object Prefs {
             photoSeconds = int("photoSeconds", d.photoSeconds),
             gentleZoom = bool("gentleZoom", d.gentleZoom),
             developer = bool("developer", d.developer),
+            statusTextSize = int("statusTextSize", d.statusTextSize),
         )
     }
 
@@ -72,6 +75,7 @@ object Prefs {
         p.setProperty("photoSeconds", s.photoSeconds.toString())
         p.setProperty("gentleZoom", s.gentleZoom.toString())
         p.setProperty("developer", s.developer.toString())
+        p.setProperty("statusTextSize", s.statusTextSize.toString())
         runCatching {
             val tmp = File(file.path + ".tmp")
             tmp.outputStream().use { p.store(it, "Mammy Frame") }

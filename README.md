@@ -116,6 +116,8 @@ undoes it; Android won't uninstall Mammy Frame until it's removed.
   shown whole and the right way up, portrait or landscape, with black around it.
 - Tap the screen for large see-through **back**, **pause/play** and **forward** buttons. A very
   small **End Slideshow** in the top left corner goes back to the home screen.
+  **Playing** or **Paused** shows just above the middle button; its size is set in the developer
+  settings (**Playing / Paused text size**).
 - Tap anywhere that isn't a button to hide the buttons again. They also go away by themselves
   2 seconds after the last tap.
 
