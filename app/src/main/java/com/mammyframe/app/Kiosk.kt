@@ -58,7 +58,7 @@ object Kiosk {
                 val admin = ComponentName(a, KioskAdmin::class.java)
                 dpm.setLockTaskPackages(admin, arrayOf(a.packageName))
                 // The power menu stays (to turn the tablet off or restart it).
-                dpm.setLockTaskFeatures(admin, DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS)
+                if (Build.VERSION.SDK_INT >= 28) dpm.setLockTaskFeatures(admin, DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS)
             }
             val am = a.getSystemService(ActivityManager::class.java)
             if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) runCatching { a.startLockTask() }

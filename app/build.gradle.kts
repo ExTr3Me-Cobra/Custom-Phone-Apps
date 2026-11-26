@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.mammyframe.app"
-        minSdk = 31
+        minSdk = 26
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.0.$versionCode"

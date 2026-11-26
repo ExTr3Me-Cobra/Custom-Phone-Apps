@@ -61,8 +61,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // A photo frame: keep the screen on, and come on over the lock screen at the start time.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setShowWhenLocked(true)
-        setTurnScreenOn(true)
+        if (android.os.Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
 
         // Opened (again): Mammy Frame keeps itself open, even after an earlier Force close.
         Kiosk.forceClosed = false

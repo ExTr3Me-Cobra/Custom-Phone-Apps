@@ -368,7 +368,7 @@ private fun ScheduleDialog(s: Settings, onChange: (Settings) -> Unit, resumeTick
                             Uri.parse("package:${context.packageName}")))
                     }
                 }
-                if (!onTime) {
+                if (!onTime && android.os.Build.VERSION.SDK_INT >= 31) {
                     PermissionRow("So it switches right on time, allow \"Alarms & reminders\" for Mammy Frame.") {
                         Kiosk.stepAside(context as? android.app.Activity); context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                             Uri.parse("package:${context.packageName}")))

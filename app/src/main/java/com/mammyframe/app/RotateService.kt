@@ -33,7 +33,7 @@ class RotateService : Service() {
         // Android 14+: "special use" has no daily time limit (a full check can take many hours).
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        startForeground(ID, build(0, 0), type)
+        if (Build.VERSION.SDK_INT >= 29) startForeground(ID, build(0, 0), type) else startForeground(ID, build(0, 0))
         if (!started) {
             started = true
             // Keep the processor working while checking, even if the screen goes off.

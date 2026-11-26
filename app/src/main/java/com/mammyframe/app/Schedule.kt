@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings as AndroidSettings
 import java.util.Calendar
 
@@ -58,7 +59,7 @@ object Schedule {
         }
         val (at, phase) = nextBoundary(s)
         val pi = alarmIntent(c, phase)
-        if (am.canScheduleExactAlarms()) {
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
         } else {
             am.setWindow(AlarmManager.RTC_WAKEUP, at, 60_000, pi)
@@ -68,7 +69,7 @@ object Schedule {
     /** Opening the app by itself from the background needs "Display over other apps". */
     fun canOpenByItself(c: Context) = AndroidSettings.canDrawOverlays(c)
 
-    fun canWakeOnTime(c: Context) = c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+    fun canWakeOnTime(c: Context) = Build.VERSION.SDK_INT < 31 || c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     fun openApp(c: Context, phase: Phase) {
         c.startActivity(

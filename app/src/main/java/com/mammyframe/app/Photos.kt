@@ -121,6 +121,10 @@ object Photos {
      */
     suspend fun decode(c: Context, uri: Uri, maxSide: Int, turnCw: Int = 0): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
+            if (android.os.Build.VERSION.SDK_INT < 28) {
+                val b = legacyDecode({ c.contentResolver.openInputStream(uri) }, maxSide) ?: return@runCatching null
+                return@runCatching if (turnCw == 0) b else turned(b, turnCw)
+            }
             val bmp = ImageDecoder.decodeBitmap(ImageDecoder.createSource(c.contentResolver, uri)) { decoder, info, _ ->
                 val longest = maxOf(info.size.width, info.size.height)
                 var sample = 1
@@ -131,6 +135,39 @@ object Photos {
             }
             if (turnCw == 0) bmp else turned(bmp, turnCw)
         }.getOrNull()
+    }
+
+    /**
+     * Android 8 (before ImageDecoder): BitmapFactory, shrunk so the longest side is at least
+     * [maxSide] (null: full size), with the camera's rotation tag applied by hand.
+     */
+    fun legacyDecode(open: () -> java.io.InputStream?, maxSide: Int?): Bitmap? {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        open()?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        if (maxSide != null) {
+            val longest = maxOf(bounds.outWidth, bounds.outHeight)
+            while (longest / (sample * 2) >= maxSide) sample *= 2
+        }
+        val bmp = open()?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: return null
+        val tag = runCatching {
+            open()?.use { androidx.exifinterface.media.ExifInterface(it).getAttributeInt(androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION, 1) }
+        }.getOrNull() ?: 1
+        val m = android.graphics.Matrix()
+        when (tag) {
+            2 -> m.postScale(-1f, 1f)
+            3 -> m.postRotate(180f)
+            4 -> m.postScale(1f, -1f)
+            5 -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            6 -> m.postRotate(90f)
+            7 -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            8 -> m.postRotate(270f)
+        }
+        if (m.isIdentity) return bmp
+        return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true).also { if (it !== bmp) bmp.recycle() }
     }
 
     fun turned(bmp: Bitmap, degreesCw: Int): Bitmap {

@@ -3,6 +3,8 @@
 A very simple digital photo frame for an Android tablet. There's also a Windows version: see
 [windows/README.md](windows/README.md) (its own download, **mammy-frame-windows-N** on the Releases page).
 
+Works on Android 8.0 and newer.
+
 ## Home screen
 - **Mammy Frame** name in a script font, with a big **Play** button.
 - Normally that's all that shows. Every setting is in the hidden developer settings below.

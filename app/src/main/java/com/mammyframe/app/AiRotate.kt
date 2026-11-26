@@ -404,6 +404,11 @@ object AiRotate {
             cr.openInputStream(f.uri)?.use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, 0) } ?: 0
         }.getOrDefault(0)
         val square = runCatching {
+            if (android.os.Build.VERSION.SDK_INT < 28) {
+                val b = Photos.legacyDecode({ cr.openInputStream(f.uri) }, OrientationModel.RESIZE) ?: return@runCatching null
+                return@runCatching Bitmap.createScaledBitmap(b, OrientationModel.RESIZE, OrientationModel.RESIZE, true)
+                    .also { if (it !== b) b.recycle() }
+            }
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(cr, f.uri)) { d, _, _ ->
                 d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 d.setTargetSize(OrientationModel.RESIZE, OrientationModel.RESIZE)
@@ -453,11 +458,14 @@ object AiRotate {
                         if (want == 0) {
                             backup.inputStream().use { it.copyTo(out) }
                         } else {
-                            val full = ImageDecoder.decodeBitmap(ImageDecoder.createSource(backup)) { d, _, _ ->
+                            val full = if (android.os.Build.VERSION.SDK_INT < 28)
+                                android.graphics.BitmapFactory.decodeFile(backup.path)!!
+                            else ImageDecoder.decodeBitmap(ImageDecoder.createSource(backup)) { d, _, _ ->
                                 d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                             }
                             val turned = Photos.turned(full, want)
-                            val format = if (r.mime == "image/png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.WEBP_LOSSLESS
+                            val format = if (r.mime == "image/png") Bitmap.CompressFormat.PNG else (if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSLESS
+                                else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP)
                             turned.compress(format, 100, out)
                             if (turned !== full) turned.recycle()
                             full.recycle()
