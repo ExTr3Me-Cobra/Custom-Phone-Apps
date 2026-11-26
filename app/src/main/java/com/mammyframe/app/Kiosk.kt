@@ -47,6 +47,7 @@ object Kiosk {
     fun onResume(a: Activity) {
         onScreen = true
         awayUntil = 0L
+        cancelReopen(a)
         if (forceClosed) return
         // With the full kiosk set-up (Mammy Frame is the tablet's "device owner"): lock the tablet
         // to Mammy Frame. Home and Recents do nothing and Android shows no messages about it.
@@ -70,7 +71,32 @@ object Kiosk {
         runCatching { a.startForegroundService(Intent(a, KeepOpenService::class.java)) }
     }
 
-    fun onPause() { onScreen = false }
+    fun onPause(c: Context) {
+        onScreen = false
+        // A back-up that works even if Android ends the whole app (e.g. swiped away on Samsung):
+        // an alarm that opens Mammy Frame again shortly.
+        if (!forceClosed && !steppingAside()) armReopen(c, 1_200)
+    }
+
+    private fun reopenIntent(c: Context) = PendingIntent.getBroadcast(
+        c, 2, Intent(c, ReopenReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    fun armReopen(c: Context, inMs: Long) = runCatching {
+        val am = c.getSystemService(android.app.AlarmManager::class.java)
+        val at = SystemClock.elapsedRealtime() + inMs
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms())
+            am.setExactAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, reopenIntent(c))
+        else am.setAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, reopenIntent(c))
+    }
+
+    fun cancelReopen(c: Context) = runCatching {
+        c.getSystemService(android.app.AlarmManager::class.java).cancel(reopenIntent(c))
+    }
+
+    /** Whether Android lets Mammy Frame keep running in the background (battery optimisation off). */
+    fun batteryUnrestricted(c: Context) =
+        c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName)
 
     /** Whether the full kiosk set-up has been done (adb … dpm set-device-owner, see the README). */
     fun isOwner(c: Context) = runCatching {
@@ -86,6 +112,7 @@ object Kiosk {
     /** "Force close Mammy Frame" in the developer settings. */
     fun forceClose(a: Activity) {
         forceClosed = true
+        cancelReopen(a)
         runCatching { a.stopLockTask() }
         a.stopService(Intent(a, KeepOpenService::class.java))
         a.finishAndRemoveTask()
@@ -144,7 +171,10 @@ class KeepOpenService : Service() {
 
     /** Swiped away from Recents (only possible if pinning is off): open it again. */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!Kiosk.forceClosed) handler.postDelayed({ Kiosk.open(this) }, 1_000)
+        if (Kiosk.forceClosed) return
+        // Right away, and the alarm too in case Android ends the app before that works.
+        Kiosk.armReopen(this, 1_000)
+        Kiosk.open(this)
     }
 
     override fun onDestroy() {
@@ -160,3 +190,14 @@ class KeepOpenService : Service() {
 
 /** Only used for the optional full kiosk set-up (device owner); it has nothing else to do. */
 class KioskAdmin : DeviceAdminReceiver()
+
+/** The back-up alarm: opens Mammy Frame again if it still isn't on screen (and the screen is on). */
+class ReopenReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(c: Context, intent: Intent) {
+        if (Kiosk.forceClosed || Kiosk.onScreen) return
+        if (!c.getSystemService(PowerManager::class.java).isInteractive) return
+        Kiosk.open(c)
+        // Try again shortly if it didn't come up (cancelled as soon as it's on screen).
+        Kiosk.armReopen(c, 3_000)
+    }
+}

@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         resumed = false
-        Kiosk.onPause()
+        Kiosk.onPause(this)
         super.onPause()
     }
 

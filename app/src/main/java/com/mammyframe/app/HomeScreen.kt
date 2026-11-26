@@ -359,7 +359,23 @@ private fun ScheduleDialog(s: Settings, onChange: (Settings) -> Unit, resumeTick
                 // Re-checked every time you come back from the phone's settings.
                 val canOpen = remember(resumeTick) { Schedule.canOpenByItself(context) }
                 val onTime = remember(resumeTick) { Schedule.canWakeOnTime(context) }
-                if (!canOpen) {
+                val unrestricted = remember(resumeTick) { Kiosk.batteryUnrestricted(context) }
+            if (!unrestricted) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    Text(
+                        "Android's battery saving can slow down Mammy Frame coming back. Allow it to run unrestricted.",
+                        fontSize = 14.sp, color = Color(0xFFB3261E), modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        Kiosk.stepAside(context as? android.app.Activity)
+                        runCatching {
+                            context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}")))
+                        }
+                    }) { Text("Allow", fontSize = 16.sp) }
+                }
+            }
+            if (!canOpen) {
                     PermissionRow(
                         "So the frame can switch on by itself even if the app was closed, allow " +
                             "\"Display over other apps\" for Mammy Frame."

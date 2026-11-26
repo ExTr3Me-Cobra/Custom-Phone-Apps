@@ -93,6 +93,10 @@ scrolls if it ever doesn't fit (for example with very large system text).
   leaves it (or it's stopped), it comes straight back by itself. A quiet "Keeping the photo frame
   open" notification shows this is on. This needs **Display over other apps** allowed; the
   developer settings show an **Allow** button if it isn't.
+- If Android ends the whole app (Samsung does when it's swiped away from Recents), a back-up alarm
+  opens it again about a second later. If the developer settings say battery saving is on for
+  Mammy Frame, tap **Allow** so Android doesn't slow this down. On Samsung, also add Mammy Frame to
+  **Settings > Battery > Background usage limits > Never sleeping apps**.
 - It doesn't use Android's App pinning (that shows a "to unpin, touch & hold…" message on every
   button press). App pinning can be left off.
 - Turning the screen off with the power button is still fine.
