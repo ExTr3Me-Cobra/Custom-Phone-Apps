@@ -87,17 +87,29 @@ sideways. The name, Play button and slideshow buttons scale with the screen, and
 scrolls if it ever doesn't fit (for example with very large system text).
 
 ## Always open
-- Mammy Frame keeps itself on screen. Back does nothing on the home screen, and the app pins
-  itself (Android's **App pinning**), so Home and Recents can't leave it. Turn on
-  **Settings > Security > App pinning** once (and, if you like, "Ask for PIN before unpinning").
-- If it's ever left or stopped anyway, it opens again by itself within a few seconds (a quiet
-  "Keeping the photo frame open" notification shows this is on). This needs **Display over other
-  apps** allowed; the developer settings show an **Allow** button if it isn't.
+- Mammy Frame keeps itself on screen. Back does nothing on the home screen. If Home or Recents
+  leaves it (or it's stopped), it comes straight back by itself. A quiet "Keeping the photo frame
+  open" notification shows this is on. This needs **Display over other apps** allowed; the
+  developer settings show an **Allow** button if it isn't.
+- It doesn't use Android's App pinning (that shows a "to unpin, touch & hold…" message on every
+  button press). App pinning can be left off.
 - Turning the screen off with the power button is still fine.
 - **Force close Mammy Frame** (developer settings, tap it twice) is the only way to close it. Opening
   Mammy Frame again (or the schedule, or a restart) turns keeping-open back on.
 - The folder picker and Android's settings pages opened from the developer settings are allowed
   for 3 minutes.
+
+### Optional: full lock (Home and Recents switched off, no messages)
+Android only allows this for an app set up as the tablet's "device owner", done once from a computer:
+1. On the tablet, remove every account in **Settings > Accounts** (Google etc.; Android refuses
+   otherwise). They can be added back afterwards.
+2. Turn on USB debugging (Settings > About tablet > tap Build number 7 times; then Developer options).
+3. With the tablet plugged into a computer that has Android's `adb` tool:
+   `adb shell dpm set-device-owner com.mammyframe.app/.KioskAdmin`
+4. Add the accounts back if you like.
+
+The developer settings then say "Full lock is on". **Force close** still works. **Remove full lock**
+undoes it; Android won't uninstall Mammy Frame until it's removed.
 
 ## Slideshow
 - Always shuffled (every photo shows once before any repeat), always full screen. Each photo is

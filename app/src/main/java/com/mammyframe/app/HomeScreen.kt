@@ -141,6 +141,7 @@ fun HomeScreen(
                     StartOnBootRow(settings, onChange, resumeTick, Modifier.widthIn(max = 560.dp))
                     Spacer(Modifier.height(12.dp))
                     ForceCloseButton(onForceClose)
+                    KioskSetupNote()
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
                         Text("Turn off developer settings", fontSize = 16.sp)
@@ -489,5 +490,23 @@ private fun ForceCloseButton(onForceClose: () -> Unit) {
     OutlinedButton(onClick = { if (asking) onForceClose() else asking = true }) {
         Text(if (asking) "Tap again to close Mammy Frame" else "Force close Mammy Frame",
             fontSize = 16.sp, color = Color(0xFFB3261E))
+    }
+}
+
+/** Developer settings: whether the full kiosk set-up is on, and a way to undo it. */
+@Composable
+private fun KioskSetupNote() {
+    val context = LocalContext.current
+    var owner by remember { mutableStateOf(Kiosk.isOwner(context)) }
+    Spacer(Modifier.height(8.dp))
+    if (owner) {
+        Text("Full lock is on (Home and Recents are switched off).", fontSize = 14.sp, color = Ink.copy(alpha = 0.7f))
+        TextButton(onClick = {
+            (context as? android.app.Activity)?.let(Kiosk::removeOwner)
+            owner = Kiosk.isOwner(context)
+        }) { Text("Remove full lock (needed before uninstalling)", fontSize = 15.sp) }
+    } else {
+        Text("Full lock is off: Home leaves Mammy Frame for a moment, then it comes straight back.",
+            fontSize = 14.sp, color = Ink.copy(alpha = 0.7f))
     }
 }

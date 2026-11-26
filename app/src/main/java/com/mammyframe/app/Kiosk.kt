@@ -7,6 +7,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.admin.DeviceAdminReceiver
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -45,14 +48,40 @@ object Kiosk {
         onScreen = true
         awayUntil = 0L
         if (forceClosed) return
-        // Pin the app (Android shows "App pinned" the first time; Settings > Security > App pinning
-        // must be on). Then Home, Recents and other apps can't take over.
-        val am = a.getSystemService(ActivityManager::class.java)
-        if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) runCatching { a.startLockTask() }
+        // With the full kiosk set-up (Mammy Frame is the tablet's "device owner"): lock the tablet
+        // to Mammy Frame. Home and Recents do nothing and Android shows no messages about it.
+        // Without it, there's no pinning (its "to unpin, touch & hold…" message comes up on every
+        // button press); leaving with Home just brings Mammy Frame straight back (KeepOpenService).
+        if (isOwner(a)) {
+            runCatching {
+                val dpm = a.getSystemService(DevicePolicyManager::class.java)
+                val admin = ComponentName(a, KioskAdmin::class.java)
+                dpm.setLockTaskPackages(admin, arrayOf(a.packageName))
+                // The power menu stays (to turn the tablet off or restart it).
+                dpm.setLockTaskFeatures(admin, DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS)
+            }
+            val am = a.getSystemService(ActivityManager::class.java)
+            if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) runCatching { a.startLockTask() }
+        } else {
+            // Undo pinning from the earlier version.
+            val am = a.getSystemService(ActivityManager::class.java)
+            if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_PINNED) runCatching { a.stopLockTask() }
+        }
         runCatching { a.startForegroundService(Intent(a, KeepOpenService::class.java)) }
     }
 
     fun onPause() { onScreen = false }
+
+    /** Whether the full kiosk set-up has been done (adb … dpm set-device-owner, see the README). */
+    fun isOwner(c: Context) = runCatching {
+        c.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(c.packageName)
+    }.getOrDefault(false)
+
+    /** Undoes the full kiosk set-up (so Mammy Frame can be uninstalled normally again). */
+    fun removeOwner(a: Activity) {
+        runCatching { a.stopLockTask() }
+        runCatching { a.getSystemService(DevicePolicyManager::class.java).clearDeviceOwnerApp(a.packageName) }
+    }
 
     /** "Force close Mammy Frame" in the developer settings. */
     fun forceClose(a: Activity) {
@@ -84,8 +113,8 @@ class KeepOpenService : Service() {
             val screenOn = getSystemService(PowerManager::class.java).isInteractive
             if (Kiosk.onScreen || Kiosk.steppingAside() || !screenOn) offSince = 0L
             else if (offSince == 0L) offSince = now
-            else if (now - offSince > 3_000) { Kiosk.open(this@KeepOpenService); offSince = now }
-            handler.postDelayed(this, 1_500)
+            else if (now - offSince > 400) { Kiosk.open(this@KeepOpenService); offSince = now }
+            handler.postDelayed(this, 300)
         }
     }
 
@@ -128,3 +157,6 @@ class KeepOpenService : Service() {
         const val ID = 8
     }
 }
+
+/** Only used for the optional full kiosk set-up (device owner); it has nothing else to do. */
+class KioskAdmin : DeviceAdminReceiver()
