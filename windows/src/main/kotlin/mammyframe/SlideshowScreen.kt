@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -86,6 +87,11 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     var paused by remember { mutableStateOf(false) }
     var controls by remember { mutableStateOf(false) }
+    // The buttons hide by themselves 2 seconds after they appear (or after the last button press).
+    var controlsTouched by remember { mutableIntStateOf(0) }
+    LaunchedEffect(controls, controlsTouched) {
+        if (controls) { delay(2000); controls = false }
+    }
     val cache = remember { mutableStateMapOf<String, ImageBitmap>() }
 
     // Photos AI rotate turned inside the app only (kinds Android can't save, such as HEIC).
@@ -254,21 +260,20 @@ fun SlideshowScreen(settings: Settings, onExit: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    RoundButton(Glyph.BACK, big, enabled = list?.canGoBack == true) { scope.launch { go(-1) } }
-                    RoundButton(if (paused) Glyph.PLAY else Glyph.PAUSE, big * 1.12f) { paused = !paused }
-                    RoundButton(Glyph.FORWARD, big, enabled = list?.isEmpty == false) { scope.launch { go(1) } }
+                    RoundButton(Glyph.BACK, big, enabled = list?.canGoBack == true) { controlsTouched++; scope.launch { go(-1) } }
+                    RoundButton(if (paused) Glyph.PLAY else Glyph.PAUSE, big * 1.12f) { controlsTouched++; paused = !paused }
+                    RoundButton(Glyph.FORWARD, big, enabled = list?.isEmpty == false) { controlsTouched++; scope.launch { go(1) } }
                 }
-                // Very small "end slideshow" button in the top left corner.
+                // Small "End Slideshow" button in the top left corner.
                 Box(
                     Modifier
                         .padding(10.dp)
-                        .size(34.dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(50))
                         .background(Color.Black.copy(alpha = 0.35f))
                         .clickable(onClick = onExit)
-                        .padding(9.dp)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                 ) {
-                    GlyphIcon(Glyph.CLOSE, Color.White.copy(alpha = 0.75f), Modifier.fillMaxSize())
+                    Text("End Slideshow", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
                 }
             }
         }

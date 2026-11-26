@@ -266,9 +266,13 @@ private fun App(
         picking = true
     }
 
-    // Opened at startup: straight into the slideshow, or black, as the schedule says.
+    // Opened at startup ("Start on power-up"): straight into the slideshow, or black if the
+    // schedule says it's night.
     LaunchedEffect(Unit) {
-        if (fromStartup) Schedule.phaseNow(settings)?.let(::enter)
+        if (fromStartup) {
+            Log.i("Opened at startup: ${Schedule.phaseNow(settings) ?: "no schedule"}")
+            enter(Schedule.phaseNow(settings) ?: Phase.ON)
+        }
     }
 
     // Keep the PC awake while it's a photo frame, and while the AI is checking photos.

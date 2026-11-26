@@ -13,7 +13,7 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
   developer settings: Photos folder, Schedule, Transitions and Ai Rotate, plus
   **Turn off developer settings**.
 - Slideshow: always shuffled, full screen, each photo the right way up. Click (or tap) for the
-  big back / pause / forward buttons and the small ✕ in the top left. Keyboard: ← →, space, Esc.
+  big back / pause / forward buttons and the small **End Slideshow** in the top left (they hide by themselves after 2 seconds). Keyboard: ← →, space, Esc.
 - Schedule: starts the slideshow at the start time and goes black at the end time. Clicking the
   black screen brings up the menu, and it goes black again after a minute.
 - Ai Rotate: the same AI, rules, review screen, timer and switches. JPEGs are turned by changing
@@ -27,8 +27,8 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
   screen** when there's more than one screen). It fills the screen above the taskbar; the slideshow,
   review and black screen cover the whole screen. It opens on the screen it was on last time.
 - Mammy Frame has to be open for the schedule to work (minimised is fine). At the start time it
-  comes to the front by itself. In the Schedule settings, **Open Mammy Frame when Windows starts**
-  starts it straight into the slideshow (or black screen) when the PC is switched on.
+  comes to the front by itself. **Start on power-up** (developer settings) opens it when Windows
+  starts and signs in, straight into the slideshow (or the black screen if the schedule says it's night).
 - While it's showing photos or the black screen, the PC won't sleep or turn the screen off.
   While Ai Rotate is checking, the PC won't sleep.
 - Settings and Ai Rotate's list are kept in `%APPDATA%\MammyFrame`.

@@ -94,7 +94,13 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val s = Prefs.load(c)
         Schedule.arm(c, s)
-        val phase = Schedule.phaseNow(s) ?: return
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) runCatching { Schedule.openApp(c, phase) }
+        val turnedOn = intent.action in setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            "android.intent.action.QUICKBOOT_POWERON", "com.htc.intent.action.QUICKBOOT_POWERON",
+        )
+        if (!turnedOn) return
+        // What the schedule says; with no schedule, "Start on power-up" means the slideshow.
+        val phase = Schedule.phaseNow(s) ?: if (s.startOnBoot) Phase.ON else return
+        runCatching { Schedule.openApp(c, phase) }
     }
 }

@@ -1,5 +1,6 @@
 package mammyframe
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -132,6 +133,8 @@ fun HomeScreen(
             val devOff: @Composable () -> Unit = {
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
+                    StartOnBootRow(Modifier.widthIn(max = 560.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
                             Text("Turn off developer settings", fontSize = 16.sp)
@@ -362,13 +365,6 @@ private fun ScheduleDialog(s: Settings, onChange: (Settings) -> Unit, onClose: (
                     "Leave Mammy Frame open (minimised is fine): the schedule works while it's running.",
                     fontSize = 14.sp, color = Ink.copy(alpha = 0.75f)
                 )
-                if (StartWithWindows.available) {
-                    var startup by remember { mutableStateOf(StartWithWindows.enabled) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Open Mammy Frame when Windows starts", fontSize = 17.sp, modifier = Modifier.weight(1f))
-                        Switch(startup, { StartWithWindows.set(it); startup = StartWithWindows.enabled })
-                    }
-                }
             }
         }
     )
@@ -469,4 +465,28 @@ private fun TransitionsDialog(s: Settings, onChange: (Settings) -> Unit, onClose
             }
         }
     )
+}
+
+/** Developer setting: open by itself and start the slideshow when the PC turns on or restarts. */
+@Composable
+private fun StartOnBootRow(modifier: Modifier) {
+    var on by remember { mutableStateOf(StartWithWindows.enabled) }
+    Surface(color = Color.White.copy(alpha = 0.82f), shape = RoundedCornerShape(20.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Start on power-up", fontSize = 18.sp, color = Ink, fontWeight = FontWeight.Medium)
+                Text(
+                    if (StartWithWindows.available)
+                        "When the PC turns on or restarts (and signs in), Mammy Frame opens and starts the " +
+                            "slideshow by itself (or the black screen, if the schedule says it's night)."
+                    else "Only works with the installed Mammy Frame.",
+                    fontSize = 14.sp, color = Ink.copy(alpha = 0.7f)
+                )
+            }
+            Switch(on, {
+                Log.i("Start on power-up ${if (it) "on" else "off"}")
+                StartWithWindows.set(it); on = StartWithWindows.enabled
+            }, enabled = StartWithWindows.available)
+        }
+    }
 }

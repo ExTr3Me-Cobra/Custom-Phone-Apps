@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -135,6 +136,8 @@ fun HomeScreen(
             val devOff: @Composable () -> Unit = {
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
+                    StartOnBootRow(settings, onChange, resumeTick, Modifier.widthIn(max = 560.dp))
+                    Spacer(Modifier.height(12.dp))
                     OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
                         Text("Turn off developer settings", fontSize = 16.sp)
                     }
@@ -437,4 +440,38 @@ private fun TransitionsDialog(s: Settings, onChange: (Settings) -> Unit, onClose
             }
         }
     )
+}
+
+/** Developer setting: open by itself and start the slideshow when the tablet turns on or restarts. */
+@Composable
+private fun StartOnBootRow(s: Settings, onChange: (Settings) -> Unit, resumeTick: Int, modifier: Modifier) {
+    val context = LocalContext.current
+    val canOpen = remember(resumeTick) { Schedule.canOpenByItself(context) }
+    Surface(color = Color.White.copy(alpha = 0.82f), shape = RoundedCornerShape(20.dp), modifier = modifier) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Start on power-up", fontSize = 18.sp, color = Ink, fontWeight = FontWeight.Medium)
+                    Text(
+                        "When the tablet turns on or restarts, Mammy Frame opens and starts the slideshow " +
+                            "by itself (or the black screen, if the schedule says it's night).",
+                        fontSize = 14.sp, color = Ink.copy(alpha = 0.7f)
+                    )
+                }
+                Switch(s.startOnBoot, { onChange(s.copy(startOnBoot = it)) })
+            }
+            if (s.startOnBoot && !canOpen) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    Text(
+                        "Android needs \"Display over other apps\" allowed for Mammy Frame to open by itself.",
+                        fontSize = 14.sp, color = Color(0xFFB3261E), modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")))
+                    }) { Text("Allow", fontSize = 16.sp) }
+                }
+            }
+        }
+    }
 }

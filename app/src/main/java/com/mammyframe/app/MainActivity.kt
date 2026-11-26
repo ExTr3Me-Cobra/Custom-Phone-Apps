@@ -99,8 +99,13 @@ class MainActivity : ComponentActivity() {
         val name = intent?.getStringExtra(Schedule.EXTRA_PHASE) ?: return
         intent.removeExtra(Schedule.EXTRA_PHASE)
         val phase = runCatching { Phase.valueOf(name) }.getOrNull() ?: return
-        // Only if the schedule still agrees (it may have been changed since).
-        val now = Schedule.phaseNow(settings) ?: return
+        // Only if the schedule still agrees (it may have been changed since). With no schedule,
+        // it's "Start on power-up" asking for the slideshow.
+        val now = Schedule.phaseNow(settings)
+        if (now == null) {
+            if (phase == Phase.ON && settings.startOnBoot) enter(Phase.ON)
+            return
+        }
         if (now == phase) enter(phase)
         lastPhase = now
     }

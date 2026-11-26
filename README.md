@@ -20,6 +20,9 @@ A very simple digital photo frame for an Android tablet. There's also a Windows 
 - **Transitions** (developer settings): Fade, Fade through black, Slide, Slide up, Zoom in, None, or a Mix of all;
   how long the transition takes; how long each photo shows (5 seconds to 10 minutes); and an
   optional gentle slow zoom on each photo.
+- **Start on power-up** (developer settings): when the tablet turns on or restarts, Mammy Frame
+  opens by itself and starts the slideshow (or the black screen, if the schedule says it's night).
+  Android needs **Display over other apps** allowed for this; an **Allow** button shows if it isn't.
 
 ## AI rotate (developer settings)
 Finds sideways and upside-down photos in the chosen folder and turns them the right way up.
@@ -87,8 +90,9 @@ scrolls if it ever doesn't fit (for example with very large system text).
 - Always shuffled (every photo shows once before any repeat), always full screen. Each photo is
   shown whole and the right way up, portrait or landscape, with black around it.
 - Tap the screen for large see-through **back**, **pause/play** and **forward** buttons. A very
-  small **✕** in the top left corner ends the slideshow and goes back to the home screen.
-- Tap anywhere that isn't a button to hide the buttons again.
+  small **End Slideshow** in the top left corner goes back to the home screen.
+- Tap anywhere that isn't a button to hide the buttons again. They also go away by themselves
+  2 seconds after the last tap.
 
 ## Install
 1. Open the latest **mammy-frame-N** release on the Releases page and tap **MammyFrame.apk**.
