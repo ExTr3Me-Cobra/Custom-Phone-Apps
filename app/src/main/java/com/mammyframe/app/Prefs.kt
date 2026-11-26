@@ -35,6 +35,8 @@ data class Settings(
     val startOnBoot: Boolean = false,
     /** Size of the "Playing" / "Paused" words above the pause button (sp). */
     val statusTextSize: Int = 24,
+    /** While Android makes Mammy Frame wait to come back (after Home), cover the screen in black. */
+    val coverOnReturn: Boolean = true,
 )
 
 object Prefs {
@@ -57,6 +59,7 @@ object Prefs {
             developer = p.getBoolean("developer", d.developer),
             startOnBoot = p.getBoolean("startOnBoot", d.startOnBoot),
             statusTextSize = p.getInt("statusTextSize", d.statusTextSize),
+            coverOnReturn = p.getBoolean("coverOnReturn", d.coverOnReturn),
         )
     }
 
@@ -74,6 +77,7 @@ object Prefs {
             .putBoolean("developer", s.developer)
             .putBoolean("startOnBoot", s.startOnBoot)
             .putInt("statusTextSize", s.statusTextSize)
+            .putBoolean("coverOnReturn", s.coverOnReturn)
             .apply()
     }
 }

@@ -97,6 +97,11 @@ scrolls if it ever doesn't fit (for example with very large system text).
   opens it again about a second later. If the developer settings say battery saving is on for
   Mammy Frame, tap **Allow** so Android doesn't slow this down. On Samsung, also add Mammy Frame to
   **Settings > Battery > Background usage limits > Never sleeping apps**.
+- After **Home**, Android makes apps wait about 5 seconds before they can come back. Meanwhile a black
+  screen says *Taking you back to Mammy Frame...* (in the name's script and colours, with the dots
+  appearing one by one) instead of showing the tablet's home screen. It goes as soon as Mammy Frame
+  is back (or after 30 seconds at most). Turn it off with **Cover the screen while coming back** in
+  the developer settings.
 - It doesn't use Android's App pinning (that shows a "to unpin, touch & hold…" message on every
   button press). App pinning can be left off.
 - Turning the screen off with the power button is still fine.

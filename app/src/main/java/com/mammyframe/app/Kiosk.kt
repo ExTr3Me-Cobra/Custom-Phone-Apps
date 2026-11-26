@@ -48,6 +48,7 @@ object Kiosk {
         onScreen = true
         awayUntil = 0L
         cancelReopen(a)
+        ReturnCover.hide()
         if (forceClosed) return
         // With the full kiosk set-up (Mammy Frame is the tablet's "device owner"): lock the tablet
         // to Mammy Frame. Home and Recents do nothing and Android shows no messages about it.
@@ -113,6 +114,7 @@ object Kiosk {
     fun forceClose(a: Activity) {
         forceClosed = true
         cancelReopen(a)
+        ReturnCover.hide()
         runCatching { a.stopLockTask() }
         a.stopService(Intent(a, KeepOpenService::class.java))
         a.finishAndRemoveTask()
@@ -138,10 +140,18 @@ class KeepOpenService : Service() {
             // Only while the screen is on: turning the screen off with the power button is fine
             // (Mammy Frame is still there when it comes back on).
             val screenOn = getSystemService(PowerManager::class.java).isInteractive
-            if (Kiosk.onScreen || Kiosk.steppingAside() || !screenOn) offSince = 0L
-            else if (offSince == 0L) offSince = now
-            else if (now - offSince > 400) { Kiosk.open(this@KeepOpenService); offSince = now }
-            handler.postDelayed(this, 300)
+            if (Kiosk.onScreen || Kiosk.steppingAside() || !screenOn) {
+                offSince = 0L
+                ReturnCover.hide()
+            } else {
+                if (offSince == 0L) {
+                    offSince = now
+                    // Cover whatever Android shows (the tablet's home screen) until Mammy Frame is back.
+                    if (Prefs.load(this@KeepOpenService).coverOnReturn) ReturnCover.show(applicationContext)
+                } else if (now - offSince > 400) { Kiosk.open(this@KeepOpenService); offSince = now - 1 }
+                ReturnCover.giveUpIfStuck()
+            }
+            handler.postDelayed(this, 150)
         }
     }
 
@@ -179,6 +189,7 @@ class KeepOpenService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(check)
+        ReturnCover.hide()
         super.onDestroy()
     }
 
@@ -199,5 +210,106 @@ class ReopenReceiver : android.content.BroadcastReceiver() {
         Kiosk.open(c)
         // Try again shortly if it didn't come up (cancelled as soon as it's on screen).
         Kiosk.armReopen(c, 3_000)
+    }
+}
+
+/**
+ * The black screen with "Taking you back to Mammy Frame..." shown over the tablet's home screen
+ * while Android makes Mammy Frame wait to come back. Drawn over other apps (needs "Display over
+ * other apps"); gone as soon as Mammy Frame is on screen again.
+ */
+object ReturnCover {
+    private var view: android.view.View? = null
+    private var shownAt = 0L
+    private var gaveUp = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var dots = 0
+    private var label: android.widget.TextView? = null
+
+    private const val TEXT = "Taking you back to Mammy Frame"
+
+    private val tick = object : Runnable {
+        override fun run() {
+            dots = dots % 3 + 1 // 1, 2, 3, 1, 2, 3, …
+            label?.text = withDots(dots)
+            handler.postDelayed(this, 450)
+        }
+    }
+
+    /** All three dots always take their room (so the words don't move); only [n] can be seen. */
+    private fun withDots(n: Int): CharSequence {
+        val s = android.text.SpannableString("$TEXT...")
+        if (n < 3) s.setSpan(
+            android.text.style.ForegroundColorSpan(android.graphics.Color.TRANSPARENT),
+            TEXT.length + n, s.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        return s
+    }
+
+    fun show(c: Context) {
+        if (view != null || gaveUp) return
+        if (!android.provider.Settings.canDrawOverlays(c)) return
+        runCatching {
+            val wm = c.getSystemService(android.view.WindowManager::class.java)
+            val metrics = c.resources.displayMetrics
+            val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
+            val text = object : android.widget.TextView(c) {
+                // The name's colours, as on the home screen: rose to gold.
+                override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+                    super.onSizeChanged(w, h, ow, oh)
+                    paint.shader = android.graphics.LinearGradient(
+                        0f, 0f, w.toFloat(), h.toFloat(),
+                        intArrayOf(0xFF9E3D5C.toInt(), 0xFFB4506F.toInt(), 0xFFC9973B.toInt(), 0xFFA8455F.toInt()),
+                        null, android.graphics.Shader.TileMode.CLAMP
+                    )
+                }
+            }.apply {
+                typeface = androidx.core.content.res.ResourcesCompat.getFont(c, R.font.great_vibes)
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, shortSide / 11f)
+                setTextColor(android.graphics.Color.WHITE)
+                gravity = android.view.Gravity.CENTER
+                setPadding(shortSide / 16, 0, shortSide / 16, 0)
+                text = withDots(1)
+            }
+            val root = android.widget.FrameLayout(c).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                addView(text, android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.CENTER
+                ))
+                // Touches land on the cover, not on the home screen underneath.
+                setOnTouchListener { _, _ -> true }
+            }
+            val lp = android.view.WindowManager.LayoutParams(
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                android.graphics.PixelFormat.OPAQUE
+            )
+            wm.addView(root, lp)
+            view = root
+            label = text
+            shownAt = SystemClock.elapsedRealtime()
+            dots = 1
+            handler.removeCallbacks(tick)
+            handler.postDelayed(tick, 450)
+        }
+    }
+
+    /** Never trap the tablet behind the cover: if Mammy Frame hasn't come back in 30 s, remove it. */
+    fun giveUpIfStuck() {
+        if (view != null && SystemClock.elapsedRealtime() - shownAt > 30_000) { hide(); gaveUp = true }
+    }
+
+    fun hide() {
+        handler.removeCallbacks(tick)
+        val v = view ?: run { gaveUp = false; return }
+        view = null
+        label = null
+        gaveUp = false
+        runCatching { v.context.getSystemService(android.view.WindowManager::class.java).removeView(v) }
     }
 }

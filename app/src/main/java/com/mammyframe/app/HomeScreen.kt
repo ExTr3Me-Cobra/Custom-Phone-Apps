@@ -142,6 +142,8 @@ fun HomeScreen(
                     Spacer(Modifier.height(12.dp))
                     StartOnBootRow(settings, onChange, resumeTick, Modifier.widthIn(max = 560.dp))
                     Spacer(Modifier.height(12.dp))
+                    CoverOnReturnRow(settings, onChange, Modifier.widthIn(max = 560.dp))
+                    Spacer(Modifier.height(12.dp))
                     ForceCloseButton(onForceClose)
                     KioskSetupNote()
                     Spacer(Modifier.height(12.dp))
@@ -541,6 +543,24 @@ private fun StatusTextSizeRow(s: Settings, onChange: (Settings) -> Unit, modifie
                 valueRange = 12f..72f,
             )
             Text("Playing", fontSize = s.statusTextSize.sp, color = Ink.copy(alpha = 0.8f), maxLines = 1)
+        }
+    }
+}
+
+/** Developer setting: the black "Taking you back to Mammy Frame..." screen after Home is pressed. */
+@Composable
+private fun CoverOnReturnRow(s: Settings, onChange: (Settings) -> Unit, modifier: Modifier) {
+    Surface(color = Color.White.copy(alpha = 0.82f), shape = RoundedCornerShape(20.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Cover the screen while coming back", fontSize = 18.sp, color = Ink, fontWeight = FontWeight.Medium)
+                Text(
+                    "After Home is pressed, Android makes Mammy Frame wait a few seconds. Meanwhile a black " +
+                        "screen says \"Taking you back to Mammy Frame...\" instead of the tablet's home screen.",
+                    fontSize = 14.sp, color = Ink.copy(alpha = 0.7f)
+                )
+            }
+            Switch(s.coverOnReturn, { onChange(s.copy(coverOnReturn = it)) })
         }
     }
 }
