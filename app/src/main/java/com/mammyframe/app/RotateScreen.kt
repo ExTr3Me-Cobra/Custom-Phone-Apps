@@ -111,7 +111,7 @@ fun RotateScreen(settings: Settings, onBack: () -> Unit, onReview: () -> Unit) {
     fun startChecking() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ) { Kiosk.stepAside(context as? android.app.Activity); notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
         else AiRotate.start(context, settings.folderUri)
     }
 

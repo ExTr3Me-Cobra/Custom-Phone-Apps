@@ -23,9 +23,15 @@ Open the latest **mammy-frame-windows-N** release on the Releases page.
   Review keyboard: R = turn 90°, Enter or → = Next, Backspace or ← = Back, Esc = leave.
 
 ## Windows-only bits
-- The window has its own slim bar at the top of the menus (minimise, close, and **Move to next
-  screen** when there's more than one screen). It fills the screen above the taskbar; the slideshow,
-  review and black screen cover the whole screen. It opens on the screen it was on last time.
+- **Always open:** there's no close or minimise. Mammy Frame covers the whole screen (taskbar too),
+  stays in front of other programs, and Alt+F4, Win+D and minimising don't get rid of it. If it's
+  ended anyway (Task Manager, a crash), a small guard program opens it again within a few seconds
+  (the guard is restarted too if it's ended). Only one copy opens at a time.
+- **Force close Mammy Frame** (developer settings, tap it twice) is the only way to close it. Use it
+  before installing an update. Windows shutting down or signing out closes it normally.
+- **Open log folder** lets File Explorer come in front for 2 minutes.
+- The slim bar at the top of the menus has **Move to next screen** when there's more than one
+  screen. It opens on the screen it was on last time.
 - Mammy Frame has to be open for the schedule to work (minimised is fine). At the start time it
   comes to the front by itself. **Start on power-up** (developer settings) opens it when Windows
   starts and signs in, straight into the slideshow (or the black screen if the schedule says it's night).

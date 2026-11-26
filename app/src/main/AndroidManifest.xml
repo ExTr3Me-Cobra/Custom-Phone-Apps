@@ -41,6 +41,15 @@
                 android:value="Checking which way up the photos in a folder are, on the device (can take hours)" />
         </service>
 
+        <service
+            android:name=".KeepOpenService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Photo frame kiosk: reopens the frame if it is closed, so it always stays on screen" />
+        </service>
+
         <receiver android:name=".ScheduleReceiver" android:exported="false" />
 
         <receiver android:name=".BootReceiver" android:exported="true">

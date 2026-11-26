@@ -78,6 +78,7 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onChange: (Settings) -> Unit,
     onCopyLog: () -> Unit = {},
+    onForceClose: (() -> Unit)? = null,
 ) {
     Box(
         Modifier
@@ -142,9 +143,18 @@ fun HomeScreen(
                         OutlinedButton(onClick = { onCopyLog(); note = "Measuring, then copying the diagnostic log…" }) {
                             Text("Copy diagnostic log", fontSize = 16.sp)
                         }
-                        OutlinedButton(onClick = { Log.i("Home: Open log folder"); Log.openFolder() }) {
+                        OutlinedButton(onClick = {
+                            Log.i("Home: Open log folder")
+                            // Lets File Explorer come in front of Mammy Frame for 2 minutes.
+                            Kiosk.stepAsideUntil = System.currentTimeMillis() + 120_000
+                            Log.openFolder()
+                        }) {
                             Text("Open log folder", fontSize = 16.sp)
                         }
+                    }
+                    if (onForceClose != null) {
+                        Spacer(Modifier.height(12.dp))
+                        ForceCloseButton(onForceClose)
                     }
                 }
             }
@@ -488,5 +498,16 @@ private fun StartOnBootRow(modifier: Modifier) {
                 StartWithWindows.set(it); on = StartWithWindows.enabled
             }, enabled = StartWithWindows.available)
         }
+    }
+}
+
+/** The only way to close Mammy Frame. Tap twice (the first tap asks), so it isn't hit by accident. */
+@Composable
+private fun ForceCloseButton(onForceClose: () -> Unit) {
+    var asking by remember { mutableStateOf(false) }
+    LaunchedEffect(asking) { if (asking) { kotlinx.coroutines.delay(4_000); asking = false } }
+    OutlinedButton(onClick = { if (asking) onForceClose() else asking = true }) {
+        Text(if (asking) "Tap again to close Mammy Frame" else "Force close Mammy Frame",
+            fontSize = 16.sp, color = Color(0xFFB3261E))
     }
 }

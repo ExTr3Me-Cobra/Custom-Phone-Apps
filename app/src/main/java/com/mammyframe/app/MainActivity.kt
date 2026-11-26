@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
 
+        // Opened (again): Mammy Frame keeps itself open, even after an earlier Force close.
+        Kiosk.forceClosed = false
         settings = Prefs.load(this)
         lastPhase = Schedule.phaseNow(settings)
         if (savedInstanceState == null) handlePhaseIntent(intent)
@@ -80,12 +82,14 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         resumed = true
         resumeTick++
+        Kiosk.onResume(this)
         lastTouch = SystemClock.elapsedRealtime()
         Schedule.arm(this, settings)
     }
 
     override fun onPause() {
         resumed = false
+        Kiosk.onPause()
         super.onPause()
     }
 
@@ -214,7 +218,10 @@ class MainActivity : ComponentActivity() {
         val counts by Photos.counts.collectAsState()
         LaunchedEffect(settings.folderUri) { Photos.ensureCount(this@MainActivity, settings.folderUri) }
 
-        BackHandler(enabled = screen != Screen.HOME) { screen = if (screen == Screen.REVIEW) Screen.ROTATE else Screen.HOME }
+        // Back never leaves Mammy Frame: on the home screen it does nothing.
+        BackHandler(enabled = true) {
+            if (screen != Screen.HOME) screen = if (screen == Screen.REVIEW) Screen.ROTATE else Screen.HOME
+        }
 
         MaterialTheme(colorScheme = lightColorScheme(primary = Rose, secondary = Rose)) {
             when (screen) {
@@ -223,12 +230,13 @@ class MainActivity : ComponentActivity() {
                     photoCount = settings.folderUri?.let { counts[it] },
                     dialog = dialog,
                     onDialog = { dialog = it; lastTouch = SystemClock.elapsedRealtime() },
-                    onChooseFolder = { runCatching { picker.launch(settings.folderUri?.let(Uri::parse)) } },
+                    onChooseFolder = { Kiosk.stepAside(this@MainActivity); runCatching { picker.launch(settings.folderUri?.let(Uri::parse)) } },
                     aiText = aiText,
                     onOpenAiRotate = { screen = Screen.ROTATE },
                     onPlay = { slideshowRun++; screen = Screen.SLIDESHOW },
                     onChange = ::update,
                     resumeTick = resumeTick,
+                    onForceClose = { Kiosk.forceClose(this@MainActivity) },
                 )
                 Screen.SLIDESHOW -> androidx.compose.runtime.key(slideshowRun) {
                     SlideshowScreen(settings) { screen = Screen.HOME }

@@ -81,6 +81,8 @@ private val blankPointer: PointerIcon by lazy {
 fun main(args: Array<String>) {
     // The AI helper program (started by Ai Rotate): no window, just answers.
     if ("--ai-worker" in args) WorkerEngine.runWorker()
+    // The guard (started by Mammy Frame): no window; opens Mammy Frame again if it's stopped.
+    if ("--guard" in args) Kiosk.runGuard(args)
     // Prefer the graphics card over the processor's built-in graphics (both exist on many desktops;
     // drawing on the built-in one and showing on the card's screens is slow).
     if (System.getProperty("skiko.directx.gpu.priority") == null) System.setProperty("skiko.directx.gpu.priority", "discrete")
@@ -99,6 +101,15 @@ fun main(args: Array<String>) {
     // Automatic test on the build machine: --autotest <folder for results> <folder of test photos>
     val autotest = args.indexOf("--autotest").takeIf { it >= 0 && args.size > it + 2 }
         ?.let { java.io.File(args[it + 1]) to java.io.File(args[it + 2]) }
+    // Kept open: can't be closed or minimised, stays in front, and opens again if it's stopped.
+    // Only "Force close" in the developer settings closes it. (Not for the build machine's test.)
+    val kiosk = autotest == null && Kiosk.active
+    if (kiosk && !Kiosk.onlyCopy()) {
+        Log.i("Mammy Frame is already open; this second copy closes")
+        kotlin.system.exitProcess(0)
+    }
+    if ("--reopened" in args) Log.i("Opened again by the guard after Mammy Frame was stopped")
+    if (kiosk) Kiosk.start()
     application {
         // The window has no Windows title bar and is placed by hand: full screen is simply
         // "cover the whole screen" (switching Windows' full screen on and off proved unreliable).
@@ -111,7 +122,10 @@ fun main(args: Array<String>) {
         var restarts by remember { mutableIntStateOf(0) }
         var recent by remember { mutableStateOf(listOf<Long>()) }
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                if (!kiosk || Kiosk.closing) exitApplication()
+                else Log.i("Close request ignored: Mammy Frame stays open (Force close is in the developer settings)")
+            },
             title = "Mammy Frame",
             state = windowState,
             undecorated = true,
@@ -135,7 +149,15 @@ fun main(args: Array<String>) {
                     override fun componentHidden(e: java.awt.event.ComponentEvent) = Log.i("Window hidden")
                 })
                 window.addWindowListener(object : java.awt.event.WindowAdapter() {
-                    override fun windowIconified(e: java.awt.event.WindowEvent) = Log.i("Window minimised")
+                    override fun windowIconified(e: java.awt.event.WindowEvent) {
+                        Log.i("Window minimised")
+                        if (kiosk && !Kiosk.steppingAside()) javax.swing.SwingUtilities.invokeLater {
+                            Log.i("Mammy Frame stays open: restoring the window")
+                            windowState.isMinimized = false
+                            window.extendedState = java.awt.Frame.NORMAL
+                            window.toFront()
+                        }
+                    }
                     override fun windowDeiconified(e: java.awt.event.WindowEvent) = Log.i("Window restored")
                     override fun windowClosing(e: java.awt.event.WindowEvent) = Log.i("Window close button pressed")
                 })
@@ -169,10 +191,29 @@ fun main(args: Array<String>) {
             // Photos, review and the black screen cover the whole screen (above the taskbar too);
             // the menus fill the screen apart from the taskbar.
             val frame = screen == Screen.SLIDESHOW || screen == Screen.BLACK || screen == Screen.REVIEW
-            LaunchedEffect(screen, device) {
+            // Kept open: every screen covers the whole screen (taskbar too) and stays in front.
+            var aside by remember { mutableStateOf(false) }
+            if (kiosk) LaunchedEffect(Unit) {
+                var awaySince = 0L
+                while (true) {
+                    delay(1_000)
+                    aside = Kiosk.steppingAside()
+                    if (aside) { awaySince = 0L; continue }
+                    if (!window.isAlwaysOnTop) window.isAlwaysOnTop = true
+                    if (windowState.isMinimized) windowState.isMinimized = false
+                    // Another program took over: come back in front after a couple of seconds.
+                    val ours = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow != null
+                    if (ours) awaySince = 0L
+                    else if (awaySince == 0L) awaySince = AiRotate.now()
+                    else if (AiRotate.now() - awaySince > 2_000) {
+                        window.toFront(); window.requestFocus(); awaySince = AiRotate.now()
+                    }
+                }
+            }
+            LaunchedEffect(screen, device, aside) {
                 val d = device ?: window.graphicsConfiguration.device
-                placeWindow(window, d, full = frame)
-                window.isAlwaysOnTop = frame
+                placeWindow(window, d, full = frame || (kiosk && !aside))
+                window.isAlwaysOnTop = frame || (kiosk && !aside)
                 if (device != d) device = d
                 ScreenMemory.remember(d.iDstring)
                 if (screen == Screen.SLIDESHOW || screen == Screen.BLACK) {
@@ -207,8 +248,6 @@ fun main(args: Array<String>) {
                             device = all[(cur + 1) % all.size]
                             Log.i("Move to next screen: ${device?.iDstring}")
                         },
-                        onMinimise = { Log.i("Minimise button"); windowState.isMinimized = true },
-                        onClose = { Log.i("Close button"); exitApplication() },
                     )
                     Box(Modifier.weight(1f).fillMaxSize()) {
                 key(restarts) {
@@ -473,6 +512,7 @@ private fun App(
                     onOpenAiRotate = { setScreen(Screen.ROTATE) },
                     onPlay = { slideshowRun++; setScreen(Screen.SLIDESHOW) },
                     onChange = ::update,
+                    onForceClose = if (Kiosk.active) ({ Kiosk.forceClose { kotlin.system.exitProcess(0) } }) else null,
                     onCopyLog = {
                         scope.launch {
                             val fps = measureDrawing()
@@ -571,9 +611,9 @@ fun placeWindow(window: java.awt.Window, d: java.awt.GraphicsDevice, full: Boole
     }
 }
 
-/** The slim bar at the top of the menus: name, move to the next screen, minimise, close. */
+/** The slim bar at the top of the menus: name and move to the next screen (no close or minimise). */
 @Composable
-private fun TopBar(screens: Int, onNextScreen: () -> Unit, onMinimise: () -> Unit, onClose: () -> Unit) {
+private fun TopBar(screens: Int, onNextScreen: () -> Unit) {
     androidx.compose.foundation.layout.Row(
         Modifier.fillMaxWidth().height(36.dp).background(Color(0xFFF7EAE6)),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -583,8 +623,6 @@ private fun TopBar(screens: Int, onNextScreen: () -> Unit, onMinimise: () -> Uni
             modifier = Modifier.padding(start = 14.dp).weight(1f)
         )
         if (screens > 1) BarButton("Move to next screen", onNextScreen)
-        BarButton("—", onMinimise)
-        BarButton("✕", onClose)
     }
 }
 

@@ -71,6 +71,42 @@ jobs:
           if (Test-Path $log) { Copy-Item $log "$out\log.txt"; Get-Content $log -Tail 150 } else { "No log was written" }
           if (-not ((Test-Path $log) -and (Select-String -Path $log -Pattern "AUTOTEST PASSED" -Quiet))) { throw "The Windows test did not pass" }
 
+      # Mammy Frame keeps itself open: end it the hard way (like Task Manager) and check it comes back.
+      - name: Test that it opens again after being ended
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "mammyframe-test"
+          $data = "$env:APPDATA\MammyFrame"
+          $log = "$data\log.txt"
+          $exe = Get-ChildItem -Path "$env:LOCALAPPDATA", "$env:ProgramFiles" -Recurse -Filter "Mammy Frame.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          Remove-Item "$data\guard.txt" -ErrorAction SilentlyContinue
+          $first = Start-Process -FilePath $exe.FullName -PassThru
+          "Started Mammy Frame (process $($first.Id))"
+          for ($i = 0; $i -lt 60 -and -not (Test-Path "$data\guard.txt"); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path "$data\guard.txt")) { Get-Content $log -Tail 60; throw "The guard never started" }
+          "guard.txt: $(Get-Content "$data\guard.txt")"
+          # A second copy must not open a second window.
+          $second = Start-Process -FilePath $exe.FullName -PassThru
+          if (-not $second.WaitForExit(60000)) { $second.Kill(); throw "A second copy stayed open" }
+          "Second copy closed by itself, as it should"
+          Stop-Process -Id $first.Id -Force
+          "Ended Mammy Frame the hard way"
+          $back = $null
+          for ($i = 0; $i -lt 90 -and -not $back; $i++) {
+            Start-Sleep 1
+            # Reopened, and its window is up.
+            $text = Get-Content $log -Raw
+            $at = $text.LastIndexOf("Opened again by the guard")
+            if ($at -ge 0 -and $text.IndexOf("Window open:", $at) -ge 0) { $back = $true }
+          }
+          Get-Content $log -Tail 40
+          # Tidy up like Force close: say it's on purpose, then end everything.
+          Set-Content "$data\closed-on-purpose" "test"
+          Get-Process -Name "Mammy Frame" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Copy-Item $log "$out\log.txt" -Force
+          if (-not $back) { throw "Mammy Frame did not open again after being ended" }
+          "Mammy Frame opened again by itself"
+
       # The test's screenshots and logs, kept even if it failed (a separate pre-release, not for installing).
       - name: Keep the test results
         if: always()

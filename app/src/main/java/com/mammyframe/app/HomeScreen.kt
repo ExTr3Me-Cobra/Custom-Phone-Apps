@@ -39,6 +39,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,7 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onChange: (Settings) -> Unit,
     resumeTick: Int,
+    onForceClose: () -> Unit = {},
 ) {
     Box(
         Modifier
@@ -137,6 +139,8 @@ fun HomeScreen(
                 if (settings.developer) {
                     Spacer(Modifier.height(18.dp))
                     StartOnBootRow(settings, onChange, resumeTick, Modifier.widthIn(max = 560.dp))
+                    Spacer(Modifier.height(12.dp))
+                    ForceCloseButton(onForceClose)
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(onClick = { onChange(settings.copy(developer = false)) }) {
                         Text("Turn off developer settings", fontSize = 16.sp)
@@ -357,13 +361,13 @@ private fun ScheduleDialog(s: Settings, onChange: (Settings) -> Unit, resumeTick
                         "So the frame can switch on by itself even if the app was closed, allow " +
                             "\"Display over other apps\" for Mammy Frame."
                     ) {
-                        context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Kiosk.stepAside(context as? android.app.Activity); context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:${context.packageName}")))
                     }
                 }
                 if (!onTime) {
                     PermissionRow("So it switches right on time, allow \"Alarms & reminders\" for Mammy Frame.") {
-                        context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Kiosk.stepAside(context as? android.app.Activity); context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                             Uri.parse("package:${context.packageName}")))
                     }
                 }
@@ -460,18 +464,30 @@ private fun StartOnBootRow(s: Settings, onChange: (Settings) -> Unit, resumeTick
                 }
                 Switch(s.startOnBoot, { onChange(s.copy(startOnBoot = it)) })
             }
-            if (s.startOnBoot && !canOpen) {
+            if (!canOpen) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
                     Text(
-                        "Android needs \"Display over other apps\" allowed for Mammy Frame to open by itself.",
+                        "Android needs \"Display over other apps\" allowed for Mammy Frame to open by itself " +
+                            "(at power-up, and to come back if it's ever left).",
                         fontSize = 14.sp, color = Color(0xFFB3261E), modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = {
-                        context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Kiosk.stepAside(context as? android.app.Activity); context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:${context.packageName}")))
                     }) { Text("Allow", fontSize = 16.sp) }
                 }
             }
         }
+    }
+}
+
+/** The only way to close Mammy Frame. Tap twice (the first tap asks), so it isn't hit by accident. */
+@Composable
+private fun ForceCloseButton(onForceClose: () -> Unit) {
+    var asking by remember { mutableStateOf(false) }
+    LaunchedEffect(asking) { if (asking) { kotlinx.coroutines.delay(4_000); asking = false } }
+    OutlinedButton(onClick = { if (asking) onForceClose() else asking = true }) {
+        Text(if (asking) "Tap again to close Mammy Frame" else "Force close Mammy Frame",
+            fontSize = 16.sp, color = Color(0xFFB3261E))
     }
 }

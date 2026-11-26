@@ -59,6 +59,7 @@ object Log {
 
     /** Everything worth knowing about this PC, then start recording everything. Call first thing. */
     fun startup(args: Array<String>) {
+        val previous = safelyGet { previousRunEnding() }
         i("================ Mammy Frame ${System.getProperty("jpackage.app-version") ?: "(dev)"} starting, args=${args.toList()}")
         i("Windows: ${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}")
         i("Java: ${System.getProperty("java.vendor")} ${System.getProperty("java.version")}, " +
@@ -72,10 +73,35 @@ object Log {
         safely("console capture") { captureConsole() }
         Thread.setDefaultUncaughtExceptionHandler { th, t -> e("uncaught on thread ${th.name}", t) }
         safely("close hook") { Runtime.getRuntime().addShutdownHook(Thread { i("Mammy Frame closing (normal close)") }) }
+        previous?.let { i(it) }
         safely("crash reports") { crashReports() }
         safely("freeze watch") { watchMainThread() }
         safely("memory watch") { watchMemory() }
         i("Logging started")
+    }
+
+    private inline fun <T> safelyGet(block: () -> T): T? = try { block() } catch (t: Throwable) { null }
+
+    /**
+     * How the last run ended, read from the end of the log before this run starts: closed normally,
+     * or stopped suddenly (a crash, the power going off, or Windows ending it), and when.
+     */
+    private fun previousRunEnding(): String? {
+        if (!file.exists()) return null
+        val tail = java.io.RandomAccessFile(file, "r").use { f ->
+            val n = minOf(f.length(), 20_000L)
+            f.seek(f.length() - n)
+            ByteArray(n.toInt()).also { f.readFully(it) }.toString(Charsets.UTF_8)
+        }
+        val lines = tail.lines().filter { it.isNotBlank() }
+        val last = lines.lastOrNull() ?: return null
+        if ("closing (normal close)" in last) {
+            val why = lines.dropLast(1).lastOrNull { "Close button" in it || "closing" in it || "Screen:" in it }
+            return "Last run: closed normally at ${last.take(23)}" + (if (why != null && "Close button" in why) " (the ✕ in the top bar was clicked)" else "")
+        }
+        return "LAST RUN DID NOT CLOSE NORMALLY: its last line was at ${last.take(23)}. It was stopped suddenly " +
+            "(a crash, the PC turning off or restarting, or Windows ending it). Its last lines:\n" +
+            lines.takeLast(15).joinToString("\n") { "    | $it" }
     }
 
     /** Logging must never stop the app: anything that goes wrong here (even a missing part of Java) is just noted. */
@@ -191,6 +217,33 @@ object Log {
         val last = all.lastIndexOf(marker)
         val before = if (last > 0) all.lastIndexOf(marker, last - 1) else -1
         val from = (if (before >= 0) before else maxOf(last, 0)).let { all.lastIndexOf('\n', it).coerceAtLeast(0) }
-        append(all.substring(from).takeLast(150_000))
+        append(squeeze(all.substring(from)).takeLast(150_000))
+    }
+
+    /**
+     * Shortens long runs of the same line (like holding an arrow key in review) to the first one and
+     * a count, so the copied log has room for whole runs.
+     */
+    private fun squeeze(text: String): String {
+        fun body(line: String) = line.substringAfter("  ", line)
+        val out = StringBuilder()
+        var prev: String? = null
+        var repeats = 0
+        var lastSame = ""
+        fun flush() {
+            if (repeats == 1) out.append(lastSame).append('\n')
+            else if (repeats > 1) out.append("    … the same line ${repeats} more times, the last at ${lastSame.take(23)}\n")
+            repeats = 0
+        }
+        for (line in text.lines()) {
+            // Lines that only differ in their time (and FPS / memory counters) count as the same.
+            val key = body(line).replace(Regex("\\d+"), "#")
+            if (key == prev && !line.startsWith(" ")) { repeats++; lastSame = line; continue }
+            flush()
+            out.append(line).append('\n')
+            prev = key
+        }
+        flush()
+        return out.toString()
     }
 }
