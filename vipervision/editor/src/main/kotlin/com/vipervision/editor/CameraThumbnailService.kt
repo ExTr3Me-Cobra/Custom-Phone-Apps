@@ -150,7 +150,9 @@ class CameraThumbnailService : AccessibilityService() {
                 // Every button the camera reports, so the log shows what its shutter is called.
                 ViperLog.i("CAMERA", "Camera button: id=${id.substringAfter('/').ifEmpty { "-" }} label=\"$label\" class=${event.className}" +
                         if (isShutter) " (shutter)" else "")
-                if (isShutter) lastShutterAt = System.currentTimeMillis()
+                // Stopping a video: its file was made when recording started, so there's nothing
+                // newer to wait for (waiting for one kept a just-recorded video from opening).
+                if (isShutter) lastShutterAt = if ("stop" in label || "stop" in id) 0L else System.currentTimeMillis()
             }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> if (isCamera(pkg) && !refreshPending) {
                 // Back at the camera after the button was tapped: put it back at once.
@@ -703,7 +705,8 @@ class CameraThumbnailService : AccessibilityService() {
         val data = MediaStore.MediaColumns.DATA
         val where = "(${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE} OR " +
                 "${MediaStore.Files.FileColumns.MEDIA_TYPE} = ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}) AND " +
-                "$data LIKE '%/DCIM/Camera/%'"
+                "$data LIKE '%/DCIM/Camera/%' AND $data NOT LIKE '%/DCIM/Camera/.%'"
+        // (Not hidden files: Samsung's camera keeps an empty ".temp-….mp4" there while ready to record.)
         val projection = arrayOf(MediaStore.Files.FileColumns._ID, data, MediaStore.MediaColumns.DATE_ADDED, MediaStore.MediaColumns.IS_PENDING)
         val order = "${MediaStore.MediaColumns.DATE_ADDED} DESC, ${MediaStore.Files.FileColumns._ID} DESC"
         return runCatching {
