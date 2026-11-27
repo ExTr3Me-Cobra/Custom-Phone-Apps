@@ -17,6 +17,9 @@ class TrainingReportStore(private val ctx: Context) {
 
     fun hasPhoto(id: String) = File(dir, "$id.jpg").exists()
 
+    /** Forgets scan [id] entirely (its entry and photo). */
+    fun remove(id: String) { File(dir, "$id.txt").delete(); File(dir, "$id.jpg").delete() }
+
     fun count(): Int = files("txt").size
 
     fun photos(): List<File> = files("jpg")

@@ -49,6 +49,12 @@ class ScanCrops(ctx: Context) {
         labels.writeText(header + "\n" + lines.joinToString("") { it + "\n" })
     }
 
+    /** Forgets scan [scan]'s crops. */
+    fun remove(scan: String) {
+        dir.listFiles { f -> f.name.startsWith("${scan}_") }?.forEach { it.delete() }
+        if (labels.exists()) labels.writeText(header + "\n" + labels.readLines().drop(1).filter { it.isNotBlank() && it.split(',').getOrNull(1) != scan }.joinToString("") { it + "\n" })
+    }
+
     fun count(): Int = dir.listFiles { f -> f.extension == "png" }?.size ?: 0
     fun files(): List<File> = dir.listFiles().orEmpty().toList()
     fun clear() { dir.listFiles()?.forEach { it.delete() } }

@@ -72,7 +72,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val frames = _frames.value
         viewModelScope.launch(Dispatchers.IO) {
             val st = settings()
-            if (st.saveTrainingCrops || st.learnFromIntact) runCatching { barcodeExamples.save(tracking, out, frames, truthFrom) }
+            if (st.saveTrainingCrops || st.learnFromIntact) runCatching { if (barcodeExamples.save(tracking, out, frames, truthFrom)) scanSavedBarcode = tracking }
         }
     }
 
@@ -86,6 +86,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _reportPhotos = MutableStateFlow(0)
     val reportPhotos: StateFlow<Int> = _reportPhotos
     @Volatile private var scanId: String? = null
+    @Volatile private var scanStartMs = 0L
+    /** The barcode example this scan saved, if any (so a discard can remove it). */
+    @Volatile private var scanSavedBarcode: String? = null
     @Volatile private var scanTime: String = ""
     @Volatile private var scanConfirmed: String? = null
     @Volatile private var scanPasted: String? = null
@@ -410,6 +413,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val now = java.util.Date()
         scanId = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(now)
+        scanStartMs = System.currentTimeMillis(); scanSavedBarcode = null
         scanTime = java.text.DateFormat.getDateTimeInstance().format(now)
         scanConfirmed = null; scanPasted = null
         lastRanked = null
@@ -497,6 +501,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
+
+    /**
+     * Forgets the current scan entirely: stops it if it's still reading, and removes everything it
+     * left behind (report entry and photo, full-resolution crops, any digit crops or barcode
+     * example it saved, a number confirmed during it). Learned barcode positions are kept: they
+     * only come from intact labels, where the barcode proved them.
+     */
+    fun discardScan(onDone: () -> Unit) {
+        cancelRecovery()
+        val id = scanId; val start = scanStartMs; val conf = scanConfirmed; val bc = scanSavedBarcode
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    id?.let { report.remove(it); scanCrops.remove(it) }
+                    bc?.let { barcodeExamples.remove(it) }
+                    conf?.let { t ->
+                        crops.removeTracking(t)
+                        db.confirmed().allOnce().filter { it.tracking == t && it.confirmedAt >= start }.forEach { db.confirmed().delete(it.id) }
+                    }
+                }
+            }
+            scanId = null; scanConfirmed = null; scanPasted = null; scanSavedBarcode = null; lastRanked = null
+            clearFrames(); photo.clear(); photoOutput = null; currentLog = null; _noResult.value = null
+            _stickerUps.value = null; _stickerAsked.value = false; _liveLog.value = emptyList()
+            _reportCount.value = withContext(Dispatchers.IO) { report.count() }; _reportPhotos.value = withContext(Dispatchers.IO) { report.photos().size }; _reportPhoto.value = null
+            _message.value = "Scan discarded: nothing from it is kept."
+            onDone()
+        }
+    }
 
     // ---- UPS routing sticker (when both the UPS and the USPS number are unsure) ----
     private val _stickerUps = MutableStateFlow<com.labelrescue.core.ups.UpsNumber?>(null)

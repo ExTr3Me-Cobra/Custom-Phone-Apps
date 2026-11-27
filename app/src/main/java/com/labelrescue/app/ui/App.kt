@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
         }
     }
     val dev by vm.devMode.collectAsStateWithLifecycle()
+    var askDiscard by remember { mutableStateOf(false) }
     fun back() {
         if (screen == Screen.BARCODE) { screen = Screen.RESULTS; return }
         // User mode: scan → reading → result, and back to the start (the scan is forgotten).
@@ -88,6 +90,13 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
     val ctx = LocalContext.current
     val message by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(message) { message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.messageShown() } }
+    if (askDiscard) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { askDiscard = false },
+        title = { Text("Discard this scan?") },
+        text = { Text("Everything from it is forgotten: the photos, the digits it read, your picks, and anything it saved for training. You go back to the start.", style = androidx.compose.material3.MaterialTheme.typography.bodyLarge) },
+        confirmButton = { androidx.compose.material3.Button(onClick = { askDiscard = false; vm.discardScan { screen = Screen.HOME } }) { Text("Discard") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { askDiscard = false }) { Text("Keep it") } },
+    )
     // An export too big for one upload was split: say so plainly, with the number of files.
     val split by vm.splitExport.collectAsStateWithLifecycle()
     split?.let { sp ->
@@ -115,6 +124,11 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
             if (screen != Screen.HOME && screen != Screen.CAMERA && screen != Screen.BARCODE) TopAppBar(
                 title = { Text(screen.title) },
                 navigationIcon = { IconButton(onClick = { back() }) { Icon(AppIcons.ArrowBack, "Back") } },
+                // Forget this scan entirely (photos, digits, picks, anything saved from it).
+                actions = {
+                    if (screen == Screen.PROCESSING || screen == Screen.RESULTS || screen == Screen.MANUAL)
+                        androidx.compose.material3.TextButton(onClick = { askDiscard = true }) { Text("Discard scan", style = androidx.compose.material3.MaterialTheme.typography.titleMedium) }
+                },
             )
         },
     ) { pad ->

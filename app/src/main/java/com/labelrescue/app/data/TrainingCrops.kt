@@ -82,6 +82,9 @@ class TrainingCrops(ctx: Context) {
 
     fun deleteUntrusted() { for (i in items()) if (!i.trusted) delete(i) }
 
+    /** Forgets every crop saved from [tracking] (a discarded scan). */
+    fun removeTracking(tracking: String) { for (i in items()) if (i.tracking == tracking) delete(i) }
+
     fun count(): Int = items().size
 
     /**

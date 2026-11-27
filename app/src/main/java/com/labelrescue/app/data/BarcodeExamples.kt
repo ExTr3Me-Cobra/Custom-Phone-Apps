@@ -46,6 +46,12 @@ class BarcodeExamples(ctx: Context) {
         return true
     }
 
+    /** Forgets the example of [tracking]. */
+    fun remove(tracking: String) {
+        dir.listFiles { f -> f.name.startsWith(tracking + "_") }?.forEach { it.delete() }
+        writeRows(readRows().filter { it.getOrNull(1) != tracking })
+    }
+
     fun count(): Int = readRows().size
 
     fun files(): List<File> = dir.listFiles().orEmpty().toList()
