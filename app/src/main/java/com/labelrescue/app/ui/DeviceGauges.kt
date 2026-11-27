@@ -52,6 +52,7 @@ fun DeviceGauges() {
     var gpu by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(Unit) {
         val gpuFile = withContext(Dispatchers.IO) { gpuSource() }
+        com.labelrescue.app.data.CrashLog.note("GPU counter: ${gpuFile?.path ?: "none readable"}; PaddleOCR on ${com.labelrescue.app.pipeline.OnDeviceModels.paddleOn ?: "not loaded yet"}")
         var lastCpu = cpuNanos(); var lastWall = SystemClock.elapsedRealtimeNanos()
         var smooth = -1f
         while (true) {
@@ -68,7 +69,7 @@ fun DeviceGauges() {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Gauge(cpu / 100f, "${cpu.toInt()}%", "CPU")
         Spacer(Modifier.weight(1f))
-        gpu?.let { Gauge(it / 100f, "${it.toInt()}%", "GPU") }
+        gpu?.let { Gauge(it / 100f, "%.1f%%".format(it), "GPU") }
     }
 }
 

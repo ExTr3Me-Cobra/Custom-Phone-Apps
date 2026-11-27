@@ -95,6 +95,8 @@ object OnDeviceModels {
     @Volatile private var cached: Models? = null
     @Volatile private var paddle: PaddleLineRecognizer? = null
     @Volatile private var paddleTried = false
+    /** Where PaddleOCR runs: "GPU", "CPU", or null before it's loaded. */
+    @Volatile var paddleOn: String? = null; private set
 
     /**
      * PaddleOCR PP-OCRv5 mobile recognizer (converted to LiteRT) as the second OCR engine, or null if
@@ -105,6 +107,7 @@ object OnDeviceModels {
             paddleTried = true
             paddle = try {
                 val runner = LiteRtRunner(ctx, "models/ppocr/rec.tflite")
+                paddleOn = if (runner.usesGpu) "GPU" else "CPU"
                 val dict = ctx.assets.open("models/ppocr/dict.txt").bufferedReader().use { r -> r.readLines() }
                 val classes = dict.size + 2 // CTC blank + characters + space
                 PaddleLineRecognizer(
@@ -156,7 +159,7 @@ object OnDeviceModels {
             regions = runner(Models.REGIONS)?.let { RegionModel(it) },
         )
         status = (if (parts.isEmpty()) "no LiteRT model passed the benchmark" else parts.joinToString()) +
-            (if (runCatching { ctx.assets.open("models/ppocr/rec.tflite").close() }.isSuccess) "; PaddleOCR (2nd OCR, LiteRT)" else "")
+            (if (runCatching { ctx.assets.open("models/ppocr/rec.tflite").close() }.isSuccess) "; PaddleOCR (2nd OCR, LiteRT${paddleOn?.let { " on $it" } ?: ""})" else "")
         return models
     }
 }

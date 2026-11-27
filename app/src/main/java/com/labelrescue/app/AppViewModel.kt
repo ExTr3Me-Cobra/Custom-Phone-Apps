@@ -438,7 +438,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             log.line("learned barcode positions: ${layout?.size ?: 0}")
                             log.section("Label Rescue ${com.labelrescue.app.BuildConfig.VERSION_NAME} diagnostic log")
                             log.line("device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${Runtime.getRuntime().availableProcessors()} cores")
-                            log.line("models: ${OnDeviceModels.status}")
+                            log.line("models: ${OnDeviceModels.status}; PaddleOCR runs on ${OnDeviceModels.paddleOn ?: "(not loaded)"}")
                             RecoveryPipeline(
                                 listOf(mb, ZxingCppDecoder(), ZxingDecoder()), mt,
                                 models = models, text2 = paddle, log = log,
