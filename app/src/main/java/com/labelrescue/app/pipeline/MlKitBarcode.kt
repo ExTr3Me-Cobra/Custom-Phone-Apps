@@ -14,13 +14,18 @@ import java.util.concurrent.TimeUnit
 
 /** ML Kit Barcode Scanning (bundled model): Code 128 and DataMatrix. Call off the main thread. */
 class MlKitBarcode : BarcodeDecoder, AutoCloseable {
-    private val client = BarcodeScanning.getClient(
-        BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_CODE_128, Barcode.FORMAT_DATA_MATRIX).build(),
-    )
+    private val client get() = shared
+
+    companion object {
+        /** One scanner for the app's life, never closed (see [MlKitText]). */
+        private val shared by lazy {
+            BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_CODE_128, Barcode.FORMAT_DATA_MATRIX).build())
+        }
+    }
 
     override fun decode(img: GrayImage): List<BarcodeRead> {
         val input = InputImage.fromByteArray(Images.toNv21(img), img.width, img.height, 0, InputImage.IMAGE_FORMAT_NV21)
-        val result = try { Tasks.await(client.process(input), 20, TimeUnit.SECONDS) } catch (e: Exception) { return emptyList() }
+        val result = client.process(input).awaitFully(20_000) ?: return emptyList()
         return result.mapNotNull { b ->
             val text = b.rawValue ?: b.displayValue ?: return@mapNotNull null
             val kind = when (b.format) {
@@ -32,5 +37,6 @@ class MlKitBarcode : BarcodeDecoder, AutoCloseable {
         }
     }
 
-    override fun close() = client.close()
+    /** Nothing to close: the scanner is shared and lives as long as the app. */
+    override fun close() {}
 }

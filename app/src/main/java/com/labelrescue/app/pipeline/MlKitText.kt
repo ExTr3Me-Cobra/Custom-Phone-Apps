@@ -19,12 +19,23 @@ import java.util.concurrent.TimeUnit
  * confidence and boxes. Must be called off the main thread.
  */
 class MlKitText : TextRecognizer, AutoCloseable {
-    private val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val client get() = shared
 
     override fun recognize(img: GrayImage): OcrPage {
         val input = InputImage.fromByteArray(Images.toNv21(img), img.width, img.height, 0, InputImage.IMAGE_FORMAT_NV21)
-        val text = try { Tasks.await(client.process(input), 30, TimeUnit.SECONDS) } catch (e: Exception) { return OcrPage(emptyList()) }
+        // At most two reads at once: steadier memory and CPU on full-resolution frames.
+        gate.acquireUninterruptibly()
+        val text = try { client.process(input).awaitFully(30_000) } finally { gate.release() } ?: return OcrPage(emptyList())
         return map(text)
+    }
+
+    companion object {
+        /**
+         * One recognizer for the app's life, never closed: closing it while ML Kit was still
+         * working on an image (a stopped scan's leftover work) crashed the app in native code.
+         */
+        private val shared by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+        private val gate = java.util.concurrent.Semaphore(2)
     }
 
     private fun map(t: Text): OcrPage = OcrPage(t.textBlocks.flatMap { b ->
@@ -43,5 +54,6 @@ class MlKitText : TextRecognizer, AutoCloseable {
 
     private fun android.graphics.Rect.toRect() = IntRect(left, top, right, bottom)
 
-    override fun close() = client.close()
+    /** Nothing to close: the recognizer is shared and lives as long as the app. */
+    override fun close() {}
 }
