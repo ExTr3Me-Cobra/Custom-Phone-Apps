@@ -37,62 +37,63 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Developer Mode only: live CPU use while a scan runs. The big circle is the app's share of all
- * cores; the small ones are each core. Apps can't read the whole system's CPU use (since Android
- * 8), but they can read their own threads: each thread's CPU time and the core it last ran on
- * (/proc/self/task/<tid>/stat), which gives the app's use of each core. During a scan the app is
- * nearly all the load.
+ * Developer Mode only: live CPU use (top left) while a scan runs, and GPU use (top right) where
+ * the phone lets apps read it.
+ * CPU is the app's own share of all cores (apps can't read the whole system's since Android 8,
+ * and the app is the load during a scan), from the process's total CPU time (1 ms steps), sampled 5
+ * times a second and lightly smoothed so it's steady but quick.
+ * GPU comes from the GPU driver's busy counter (Adreno's kgsl or Mali's utilization file); many
+ * phones hide it from apps, and then the circle isn't shown.
  */
 @Composable
 fun DeviceGauges() {
     val cores = remember { Runtime.getRuntime().availableProcessors().coerceAtLeast(1) }
     var cpu by remember { mutableStateOf(0f) }
-    var perCore by remember { mutableStateOf(FloatArray(cores)) }
+    var gpu by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(Unit) {
-        var lastCpu = Process.getElapsedCpuTime(); var lastWall = SystemClock.elapsedRealtime()
-        var lastTicks = withContext(Dispatchers.IO) { threadTicks() }
+        val gpuFile = withContext(Dispatchers.IO) { gpuSource() }
+        var lastCpu = cpuNanos(); var lastWall = SystemClock.elapsedRealtimeNanos()
+        var smooth = -1f
         while (true) {
-            delay(800)
-            val c = Process.getElapsedCpuTime(); val w = SystemClock.elapsedRealtime()
-            val ticks = withContext(Dispatchers.IO) { threadTicks() }
-            val dt = (w - lastWall).coerceAtLeast(1)
-            cpu = ((c - lastCpu).toFloat() / (dt * cores) * 100f).coerceIn(0f, 100f)
-            // Per core: CPU ticks (1/100 s) each thread used since last time, on the core it ran on.
-            val use = FloatArray(cores)
-            for ((tid, t) in ticks) {
-                val prev = lastTicks[tid]?.first ?: continue
-                val core = t.second
-                if (core in 0 until cores) use[core] += (t.first - prev).coerceAtLeast(0L).toFloat()
-            }
-            perCore = FloatArray(cores) { (use[it] / (dt / 10f) * 100f).coerceIn(0f, 100f) }
-            lastCpu = c; lastWall = w; lastTicks = ticks
+            delay(200)
+            val c = cpuNanos(); val w = SystemClock.elapsedRealtimeNanos()
+            val now = ((c - lastCpu).toDouble() / ((w - lastWall).coerceAtLeast(1) * cores.toDouble()) * 100.0).toFloat().coerceIn(0f, 100f)
+            lastCpu = c; lastWall = w
+            // A light blend with the last reading: steady, and still within about half a second.
+            smooth = if (smooth < 0) now else smooth * 0.5f + now * 0.5f
+            cpu = smooth
+            if (gpuFile != null) gpu = withContext(Dispatchers.IO) { readGpu(gpuFile) }
         }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Gauge(cpu / 100f, "${cpu.toInt()}%", "CPU")
         Spacer(Modifier.weight(1f))
-        // The cores, in rows of four.
-        Column(horizontalAlignment = Alignment.End) {
-            for (row in 0 until (cores + 3) / 4) Row {
-                for (k in row * 4 until minOf(cores, row * 4 + 4)) Gauge(perCore[k] / 100f, "${perCore[k].toInt()}", "core $k", small = true)
-            }
-        }
+        gpu?.let { Gauge(it / 100f, "${it.toInt()}%", "GPU") }
     }
 }
 
-/** For each of the app's threads: (CPU ticks used so far, core it last ran on). */
-private fun threadTicks(): Map<String, Pair<Long, Int>> {
-    val out = HashMap<String, Pair<Long, Int>>()
-    for (t in File("/proc/self/task").listFiles().orEmpty()) {
-        val line = runCatching { File(t, "stat").readText() }.getOrNull() ?: continue
-        // Fields after the thread name (which is in parentheses and can contain spaces).
-        val f = line.substringAfterLast(')').trim().split(' ')
-        // utime and stime are fields 14 and 15, the last core field 39 (here 11, 12 and 36).
-        val ticks = (f.getOrNull(11)?.toLongOrNull() ?: continue) + (f.getOrNull(12)?.toLongOrNull() ?: 0)
-        val core = f.getOrNull(36)?.toIntOrNull() ?: continue
-        out[t.name] = ticks to core
-    }
-    return out
+/** The process's CPU time (all threads), in nanoseconds (counted in 1 ms steps). */
+private fun cpuNanos(): Long = Process.getElapsedCpuTime() * 1_000_000L
+
+/** A readable GPU busy counter, if the phone exposes one to apps. */
+private fun gpuSource(): File? = listOf(
+    "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage", // Adreno (Snapdragon): "37 %"
+    "/sys/class/kgsl/kgsl-3d0/gpubusy", // Adreno: "busy total"
+    "/sys/kernel/gpu/gpu_busy", // some Samsung / Qualcomm builds
+    "/sys/devices/platform/mali.0/utilization",
+    "/sys/class/misc/mali0/device/utilization", // Mali (Exynos, Tensor): 0-256 or %
+).map { File(it) }.firstOrNull { f -> runCatching { readGpu(f) != null }.getOrDefault(false) }
+
+/** GPU busy in percent from [f], or null if it can't be read. */
+private fun readGpu(f: File): Float? {
+    val t = runCatching { f.readText().trim() }.getOrNull() ?: return null
+    val nums = Regex("\\d+").findAll(t).map { it.value.toLong() }.toList()
+    return when {
+        f.name == "gpubusy" && nums.size >= 2 -> if (nums[1] > 0) nums[0] * 100f / nums[1] else 0f
+        f.name == "utilization" && nums.isNotEmpty() -> (if (nums[0] > 100) nums[0] * 100f / 256f else nums[0].toFloat())
+        nums.isNotEmpty() -> nums[0].toFloat()
+        else -> null
+    }?.coerceIn(0f, 100f)
 }
 
 @Composable
