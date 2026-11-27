@@ -23,47 +23,59 @@ import java.nio.channels.FileChannel
  * supports it, otherwise (or if the delegate fails) the CPU with several threads.
  */
 class LiteRtRunner(ctx: Context, asset: String) : NetRunner, AutoCloseable {
-    private val gpu: GpuDelegate?
-    private val interpreter: Interpreter
-    val usesGpu: Boolean
+    /**
+     * Everything LiteRT does happens on this one thread. A GPU delegate is bound to the thread
+     * that created it: the scan's frame workers used to call the model from up to four threads in
+     * turn, which can corrupt memory and crashed the app (native SIGSEGV during the full reading).
+     */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "litert-${asset.substringAfterLast('/')}").apply { isDaemon = true } }
+    private var gpuDelegate: GpuDelegate? = null
+    private lateinit var interpreter: Interpreter
+    var usesGpu: Boolean = false; private set
+    private lateinit var inShape: IntArray
+    private var outCount = 0
+    private lateinit var inBuf: ByteBuffer
+    private lateinit var outBuf: ByteBuffer
 
     init {
-        val model = map(ctx, asset)
-        var delegate: GpuDelegate? = null
-        var it: Interpreter? = null
-        try {
-            val compat = CompatibilityList()
-            if (compat.isDelegateSupportedOnThisDevice) {
-                delegate = GpuDelegate(compat.bestOptionsForThisDevice)
-                it = Interpreter(model, Interpreter.Options().addDelegate(delegate))
+        onWorker {
+            val model = map(ctx, asset)
+            var delegate: GpuDelegate? = null
+            var it: Interpreter? = null
+            try {
+                val compat = CompatibilityList()
+                if (compat.isDelegateSupportedOnThisDevice) {
+                    delegate = GpuDelegate(compat.bestOptionsForThisDevice)
+                    it = Interpreter(model, Interpreter.Options().addDelegate(delegate))
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "GPU delegate unavailable for $asset, using CPU: ${e.message}")
+                delegate?.close(); delegate = null; it = null
             }
-        } catch (e: Throwable) {
-            Log.w(TAG, "GPU delegate unavailable for $asset, using CPU: ${e.message}")
-            delegate?.close(); delegate = null; it = null
+            gpuDelegate = delegate
+            usesGpu = it != null
+            interpreter = it ?: Interpreter(model, Interpreter.Options().setNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(1, 4)))
+            inShape = interpreter.getInputTensor(0).shape()
+            outCount = interpreter.getOutputTensor(0).shape().fold(1) { a, b -> a * b }
+            inBuf = ByteBuffer.allocateDirect(4 * inShape.fold(1) { a, b -> a * b }).order(ByteOrder.nativeOrder())
+            outBuf = ByteBuffer.allocateDirect(4 * outCount).order(ByteOrder.nativeOrder())
+            Log.i(TAG, "$asset on ${if (usesGpu) "GPU" else "CPU"}")
         }
-        gpu = delegate
-        usesGpu = it != null
-        interpreter = it ?: Interpreter(model, Interpreter.Options().setNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(1, 4)))
-        Log.i(TAG, "$asset on ${if (usesGpu) "GPU" else "CPU"}")
     }
 
-    private val inShape = interpreter.getInputTensor(0).shape()
-    private val outCount = interpreter.getOutputTensor(0).shape().fold(1) { a, b -> a * b }
-    private val inBuf = ByteBuffer.allocateDirect(4 * inShape.fold(1) { a, b -> a * b }).order(ByteOrder.nativeOrder())
-    private val outBuf = ByteBuffer.allocateDirect(4 * outCount).order(ByteOrder.nativeOrder())
+    private fun <T> onWorker(f: () -> T): T = try { worker.submit<T> { f() }.get() } catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }
 
     /** Inputs must match the model's fixed shape (the core wrappers tile/resize to it). */
-    @Synchronized
-    override fun run(input: FloatArray, h: Int, w: Int): FloatArray {
+    override fun run(input: FloatArray, h: Int, w: Int): FloatArray = onWorker {
         require(h == inShape[1] && w == inShape[2]) { "model expects ${inShape[1]}x${inShape[2]}, got ${h}x$w" }
         inBuf.rewind(); inBuf.asFloatBuffer().put(input)
         outBuf.rewind()
         interpreter.run(inBuf, outBuf)
         outBuf.rewind()
-        return FloatArray(outCount).also { outBuf.asFloatBuffer().get(it) }
+        FloatArray(outCount).also { outBuf.asFloatBuffer().get(it) }
     }
 
-    override fun close() { interpreter.close(); gpu?.close() }
+    override fun close() { onWorker { interpreter.close(); gpuDelegate?.close() }; worker.shutdown() }
 
     companion object {
         private const val TAG = "LabelRescueModels"
