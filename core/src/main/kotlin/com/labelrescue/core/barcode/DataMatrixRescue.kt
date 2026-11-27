@@ -36,6 +36,21 @@ object DataMatrixRescue {
 
     fun decode(img: GrayImage, dead: ((Int, Int) -> Boolean)? = null): Result? {
         val squares = inkSquares(img)
+        decodeLocal(img, dead, squares)?.let { return it }
+        // On a big image the patches are found on a shrunken copy, a few pixels off: read each
+        // one again as its own image, with a generous margin (ZXing's detector needs the quiet
+        // zone, and finds the code far more reliably without the rest of the label around it).
+        if (max(img.width, img.height) > 900) for (box in squares) for (frac in doubleArrayOf(0.3, 0.5)) {
+            val m = max(8, (box.width * frac).toInt())
+            val area = com.labelrescue.core.image.IntRect(box.left - m, box.top - m, box.right + m, box.bottom + m).intersect(com.labelrescue.core.image.IntRect(0, 0, img.width, img.height))
+            val crop = img.crop(area)
+            val d = dead?.let { f -> { x: Int, y: Int -> f(x + area.left, y + area.top) } }
+            decodeLocal(crop, d, inkSquares(crop))?.let { return it }
+        }
+        return null
+    }
+
+    private fun decodeLocal(img: GrayImage, dead: ((Int, Int) -> Boolean)?, squares: List<com.labelrescue.core.image.IntRect>): Result? {
         decodeOne(img, dead, squares)?.let { return it }
         // Dead print-head lines can run through every column of modules (each module split by
         // thin white lines, reading half white). Fill thin white gaps across the print direction
@@ -46,6 +61,8 @@ object DataMatrixRescue {
             val crop = img.crop(area)
             val d = dead?.let { f -> { x: Int, y: Int -> f(x + area.left, y + area.top) } }
             val local = listOf(com.labelrescue.core.image.IntRect(box.left - area.left, box.top - area.top, box.right - area.left, box.bottom - area.top))
+            // The patch alone first, then with thin gaps filled.
+            decodeOne(crop, d, local)?.let { return it }
             for (r in 1..3) decodeOne(closeH(crop, r), d, local)?.let { return it }
         }
         return null
@@ -138,12 +155,16 @@ object DataMatrixRescue {
         val w = g.width; val h = g.height
         val v = IntArray(w * h) { g[it % w, it / w] }.sortedArray()
         val thr = (v[(v.size * 0.05).toInt()] + v[(v.size * 0.95).toInt()]) / 2
-        val base = BooleanArray(w * h) { g[it % w, it / w] < thr }
+        val global = BooleanArray(w * h) { g[it % w, it / w] < thr }
+        // Also against the local background: a code under tape, in glare or faded is grayer than
+        // the label's ink elsewhere and falls apart under one global cutoff.
+        val bg = com.labelrescue.core.image.Filters.boxBlur(g, 15)
+        val local = BooleanArray(w * h) { val x = it % w; val y = it / w; g[x, y] < bg[x, y] - 18 }
         val out = ArrayList<Pair<com.labelrescue.core.image.IntRect, Int>>()
         // Light modules and dead lines leave gaps of about a module inside the symbol: bridge
         // them at a few widths (the right one depends on the module size).
-        for (r in intArrayOf(2, 4, 7)) out += inkComponents(base, w, h, r, sc)
-        return out.sortedByDescending { it.second }.distinctBy { it.first }.take(6).map { it.first }
+        for (base in listOf(global, local)) for (r in intArrayOf(2, 4, 7)) out += inkComponents(base, w, h, r, sc)
+        return out.sortedByDescending { it.second }.distinctBy { it.first }.take(10).map { it.first }
     }
 
     private fun inkComponents(base: BooleanArray, w: Int, h: Int, r: Int, sc: Double): List<Pair<com.labelrescue.core.image.IntRect, Int>> {

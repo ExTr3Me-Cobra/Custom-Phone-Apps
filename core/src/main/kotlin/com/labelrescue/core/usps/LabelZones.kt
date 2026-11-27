@@ -15,29 +15,34 @@ import kotlin.math.min
  * that block, to leave out; [usps] is where the USPS barcode should be, to read first.
  * With a [LearnedLayout] (positions measured on intact labels) those take precedence over the rules.
  */
-data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolean = false) {
+data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolean = false, val fedex: IntRect? = null) {
 
     /** Printed text that locates the barcodes. */
     data class Anchors(val upsLine: IntRect?, val uspsLine: IntRect?, val number: IntRect?)
 
-    /** True if [r] lies mostly inside the UPS barcode block. */
-    fun inUps(r: IntRect): Boolean {
-        val u = ups ?: return false
+    /**
+     * True if [r] lies mostly inside the UPS barcode block or the FedEx one (another carrier's
+     * number, not the USPS one). FedEx's site doesn't show the USPS number, so FedEx numbers are
+     * simply left out.
+     */
+    fun inUps(r: IntRect): Boolean = listOfNotNull(ups, fedex).any { u ->
         val i = u.intersect(r)
-        if (i.isEmpty) return false
-        return i.width.toLong() * i.height >= 0.6 * r.width.toLong() * r.height
+        !i.isEmpty && i.width.toLong() * i.height >= 0.6 * r.width.toLong() * r.height
     }
 
-    /** True if the middle of [r] lies inside the UPS block (for thin barcode scan bands). */
-    fun centerInUps(r: IntRect): Boolean {
-        val u = ups ?: return false
+    /** True if the middle of [r] lies inside the UPS or FedEx block (for thin barcode scan bands). */
+    fun centerInUps(r: IntRect): Boolean = listOfNotNull(ups, fedex).any { u ->
         val cy = (r.top + r.bottom) / 2; val cx = (r.left + r.right) / 2
-        return cy in u.top..u.bottom && cx in u.left..u.right
+        cy in u.top..u.bottom && cx in u.left..u.right
     }
 
     companion object {
         val NONE = LabelZones(null, null)
 
+        /** "FedEx Tracking ID# …" (FedEx Ground Economy / SmartPost labels hand off to USPS). */
+        private val FEDEX_LINE = Regex("FED\\s*EX\\s*TRACK|FEDEX\\s*TRK|TRACKING\\s*ID\\s*#?\\s*:?\\s*\\d{4}\\s?\\d{4}\\s?\\d{4}\\b")
+        /** FedEx Ground's own barcode line: "96" + 20 digits, printed with "(000 000 0000)". */
+        private val FEDEX_96 = Regex("^\\s*96\\d{6,}|\\(\\s*0{3}\\s*0{3}\\s*0{4}\\s*\\)")
         private val UPS_LINE = Regex("TRACK\\w*\\s*#?\\s*:?\\s*[1IL]\\s?[Z2]\\s?[0-9A-Z]")
         // Banner text (Publication 199, 4.5): "USPS TRACKING #" or "USPS SIGNATURE TRACKING #", or
         // spelled out "... TRACKING NUMBER" on printers without "#".
@@ -55,7 +60,7 @@ data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolea
             val below = numberLines.filter { upsLine == null || it.top > upsLine.bottom }
             val readsLikeOne = boxed.filter { (t, b) ->
                 val d = t.filter { it.isDigit() }
-                d.length >= 18 && d[0] == '9' && (upsLine == null || b.top > upsLine.bottom)
+                d.length >= 18 && d[0] == '9' && !d.startsWith("96") && !FEDEX_96.containsMatchIn(t) && (upsLine == null || b.top > upsLine.bottom)
             }.map { it.second }
             val number = readsLikeOne.maxByOrNull { it.top }
                 ?: uspsLine?.let { u -> below.filter { it.top > u.bottom }.minByOrNull { it.top } }
@@ -105,7 +110,18 @@ data class LabelZones(val ups: IntRect?, val usps: IntRect?, val learned: Boolea
                 }
                 else -> null
             })?.intersect(bounds)?.takeIf { !it.isEmpty && (ups == null || ups.intersect(it).height < it.height / 2) }
-            return LabelZones(ups, usps, learned = learnedUps != null || (learnedUsps != null && usps == learnedUsps.intersect(bounds)))
+            // FedEx: from the "FedEx Tracking ID" line (or FedEx's own "96…" barcode line) down to
+            // the next USPS text, at most nine line heights: FedEx's barcode sits in there.
+            val fedexLine = boxed.filter { (t, _) -> FEDEX_LINE.containsMatchIn(t) || FEDEX_96.containsMatchIn(t) }.minByOrNull { it.second.top }?.second
+            val fedex = fedexLine?.let { f ->
+                val h = max(12, f.height)
+                val stop = boxed.filter { (t, b) -> b.top > f.bottom + h && ("USPS" in t || "FORWARD" in t || "DELIVER" in t || b == uspsLine) }.minOfOrNull { it.second.top }
+                    ?: number?.top?.takeIf { it > f.bottom }
+                val bottom = min(stop ?: (f.bottom + 9 * h), f.bottom + 9 * h)
+                IntRect(f.left - f.width / 3, f.top - h / 2, f.right + f.width / 3, bottom)
+            }?.intersect(bounds)?.takeIf { !it.isEmpty }
+            val uspsKept = usps?.takeIf { u -> fedex == null || fedex.intersect(u).height < u.height / 2 }
+            return LabelZones(ups, uspsKept, learned = learnedUps != null || (learnedUsps != null && usps == learnedUsps.intersect(bounds)), fedex = fedex)
         }
     }
 }

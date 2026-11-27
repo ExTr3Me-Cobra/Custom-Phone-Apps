@@ -38,19 +38,30 @@ object ScanCropFinder {
         val dms = DataMatrixRescue.inkSquares(frame).filter { side(it) >= 0.03 * frame.width && side(it) <= 0.35 * frame.width }
             .filter { d -> bars.none { b -> !b.rect.intersect(d).isEmpty } }
             // Only patches with a DataMatrix's finder pattern: never a logo or a block of address text.
-            .filter { d ->
-                DataMatrixRescue.looksLikeDataMatrix(frame, d, minFit = 0.68) || run {
-                    // Dead lines through every module column: check again with the thin gaps filled.
-                    val m = max(8, d.width / 6)
-                    val area = IntRect(d.left - m, d.top - m, d.right + m, d.bottom + m).intersect(all)
-                    DataMatrixRescue.looksLikeDataMatrix(DataMatrixRescue.closeH(frame.crop(area), 2), IntRect(d.left - area.left, d.top - area.top, d.right - area.left, d.bottom - area.top), minFit = 0.68)
-                }
-            }
+            .filter { d -> isDataMatrix(frame, d, all) }
         for ((k, d) in dms.take(3).withIndex()) {
             val m = max(6, d.width / 8)
             out += Crop("datamatrix_${k + 1}", IntRect(d.left - m, d.top - m, d.right + m, d.bottom + m).intersect(all))
         }
         return out
+    }
+
+    /**
+     * A DataMatrix's finder pattern and data-like inside at [d], also looked for again in a crop
+     * around it (on a big photo the patch is found on a shrunken copy, a few pixels off) and with
+     * thin gaps filled (dead lines through every module column).
+     */
+    private fun isDataMatrix(frame: GrayImage, d: IntRect, all: IntRect): Boolean {
+        if (DataMatrixRescue.looksLikeDataMatrix(frame, d, minFit = 0.68)) return true
+        val m = max(8, (d.width * 0.3).toInt())
+        val area = IntRect(d.left - m, d.top - m, d.right + m, d.bottom + m).intersect(all)
+        val crop = frame.crop(area)
+        for (img in listOf(crop, DataMatrixRescue.closeH(crop, 2))) {
+            val boxes = DataMatrixRescue.inkSquares(img).filter { b -> b.width >= 0.6 * d.width && b.width <= 1.4 * d.width }
+            if (boxes.any { DataMatrixRescue.looksLikeDataMatrix(img, it, minFit = 0.68) }) return true
+            if (DataMatrixRescue.decode(img) != null) return true
+        }
+        return false
     }
 
     /**

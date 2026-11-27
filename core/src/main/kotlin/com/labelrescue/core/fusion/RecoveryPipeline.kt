@@ -485,8 +485,9 @@ class RecoveryPipeline(
 
         val partials = partialDecoder.decodeAll(evidence.map { it.ev })
         log?.partials(partials)
-        val format = Fusion.chooseFormat(observations, partials)
-        log?.formatVote(Fusion.formatScores(observations, partials), format)
+        val groundSaver = Fusion.GROUND_SAVER.containsMatchIn(labelText) || results.any { it.zones.ups != null }
+        val format = Fusion.chooseFormat(observations, partials, groundSaver)
+        log?.formatVote(Fusion.formatScores(observations, partials, groundSaver), format)
         val partial: PartialResult? = format?.let { Fusion.partialFor(it, partials) }
         stats = stats.copy(ocrObservations = observations.size, millis = System.currentTimeMillis() - t0)
         if (format == null) {
@@ -614,7 +615,7 @@ class RecoveryPipeline(
         val privacy = results.firstOrNull()?.let { Redactor.blankBoxes(it.privacyLines, work[pf].width, work[pf].height) }
         log?.line("privacy: " + (privacy?.let { "${it.size} text areas whited out on frame ${pf + 1}" } ?: "no safe photo (no OCR line positions)"))
         return RecoveryOutput(format, slots, perSource, null, null, zip, labelText, partial, locs, stats, notes, log, finalReads, privacy, pf)
-            .also { it.deadCrossed = crossed; it.suggestions = if (System.getenv("LR_NO_SUGGEST") == null) suggestions(format, partial, ocr) else emptyList() }
+            .also { it.deadCrossed = crossed; it.suggestions = if (System.getenv("LR_NO_SUGGEST") == null) suggestions(format, partial, ocr, groundSaver) else emptyList() }
     }
 
     /**
@@ -661,8 +662,16 @@ class RecoveryPipeline(
      * OCR read it. On a faded label the barcode was right at 20 of 22 digits but the fused digits
      * (outvoted by misread print) never put its number in the list.
      */
-    private fun suggestions(format: TrackingFormat, partial: PartialResult?, ocr: List<SlotDist?>): List<Map<Int, Char>> {
+    private fun suggestions(format: TrackingFormat, partial: PartialResult?, ocr: List<SlotDist?>, groundSaver: Boolean = false): List<Map<Int, Char>> {
         val out = ArrayList<Map<Int, Char>>()
+        // UPS Ground Saver: every known USPS number on one starts 9261290 (UPS's USPS mailer
+        // prefix), and its start is often the part that's lost. Tried with the rest as read.
+        if (groundSaver && format == TrackingFormat.IMPB_26) {
+            val pre = "9261290".withIndex().associate { (i, c) -> i to c }
+            out += pre
+            val read = ocr.mapIndexedNotNull { i, s2 -> s2?.takeIf { i >= 7 && it.bestP >= 0.5 }?.let { i to it.best } }.toMap()
+            out += pre + read
+        }
         val p = partial?.takeIf { it.structure.trackingFormat == format }
         if (p != null) {
             val best = p.trackingDigits.mapIndexed { i, s -> i to s.best }.toMap()
@@ -841,7 +850,7 @@ class RecoveryPipeline(
         w.zones = zones
         // The UPS "TRACKING #: 1Z…" line has enough digits to pass for the number line: drop it.
         lineBoxes.removeAll { zones.centerInUps(it) }
-        if (zones.ups != null || zones.usps != null) log?.line("f$fi label layout${if (zones.learned) " (learned)" else ""}: USPS barcode area ${zones.usps ?: "?"}, UPS barcode area ${zones.ups ?: "none"}")
+        if (zones.ups != null || zones.usps != null || zones.fedex != null) log?.line("f$fi label layout${if (zones.learned) " (learned)" else ""}: USPS barcode area ${zones.usps ?: "?"}, UPS barcode area ${zones.ups ?: "none"}" + (zones.fedex?.let { ", FedEx block $it (left out)" } ?: ""))
 
         // Barcode regions: user crop, the USPS barcode area, detected/located barcodes, the area above
         // the number line, the whole frame.

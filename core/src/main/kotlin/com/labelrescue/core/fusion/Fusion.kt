@@ -190,10 +190,13 @@ object Fusion {
      * it is: a badly damaged barcode can fit the wrong layout with garbage digits, and must not
      * override clear OCR of the printed number.
      */
-    fun chooseFormat(obs: List<Observation>, partials: List<PartialResult>): TrackingFormat? =
-        formatScores(obs, partials).maxByOrNull { it.value }?.key
+    fun chooseFormat(obs: List<Observation>, partials: List<PartialResult>, groundSaver: Boolean = false): TrackingFormat? =
+        formatScores(obs, partials, groundSaver).maxByOrNull { it.value }?.key
 
-    fun formatScores(obs: List<Observation>, partials: List<PartialResult>): Map<TrackingFormat, Double> {
+    /** UPS Ground Saver / SurePost / Mail Innovations: UPS hands the parcel to USPS. */
+    val GROUND_SAVER = Regex("GROUND\\s*SAVER|SURE\\s*POST|MAIL\\s*INNOVATIONS", RegexOption.IGNORE_CASE)
+
+    fun formatScores(obs: List<Observation>, partials: List<PartialResult>, groundSaver: Boolean = false): Map<TrackingFormat, Double> {
         val score = HashMap<TrackingFormat, Double>()
         // A printed number that aligned to a format is strong evidence of its length.
         for (o in obs) if (o.source != Source.DIGIT_MODEL) score.merge(o.format, 3.0 * o.weight, Double::plus)
@@ -204,6 +207,13 @@ object Fusion {
         partials.filter { it.support >= 3 }.maxByOrNull { it.support }?.let { p ->
             val best = partials.filter { it.structure.symbolCount == p.structure.symbolCount }.maxBy { it.selectionScore }
             score.merge(best.structure.trackingFormat, 5.0, Double::plus)
+        }
+        // On UPS Ground Saver labels the USPS number has been 26 digits every time (4 of 4 real
+        // labels), while OCR often reads only its end (tape, wear) and lines that up as 22 digits:
+        // there, 26 wins. A number pasted from usps.com still overrides it.
+        if (groundSaver) {
+            val best = score.filterKeys { it != TrackingFormat.IMPB_26 }.values.maxOrNull() ?: 0.0
+            score[TrackingFormat.IMPB_26] = maxOf((score[TrackingFormat.IMPB_26] ?: 0.0) + 12.0, best * 1.1 + 1.0)
         }
         // The legacy 20-digit layout is rare on current labels: a short partial read aligns to it easily.
         score.computeIfPresent(TrackingFormat.IMPB_20) { _, v -> v * 0.5 }
