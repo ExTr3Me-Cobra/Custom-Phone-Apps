@@ -113,7 +113,7 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
             confirmButton = { androidx.compose.material3.Button(onClick = vm::splitExportShown) { Text("OK, I'll send all ${sp.parts}") } },
         )
     }
-    LaunchedEffect(screen) { if (screen == Screen.SETTINGS) vm.loadSettings() }
+    LaunchedEffect(screen) { com.labelrescue.app.data.CrashLog.note("screen ${screen.name}"); if (screen == Screen.SETTINGS) vm.loadSettings() }
     val reportCount by vm.reportCount.collectAsStateWithLifecycle()
     val reportPhoto by vm.reportPhoto.collectAsStateWithLifecycle()
     val reportPhotos by vm.reportPhotos.collectAsStateWithLifecycle()
@@ -195,6 +195,8 @@ fun LabelRescueApp(vm: AppViewModel = viewModel()) {
                         onQuickScan = vm::setQuickScan,
                         onLearnFromIntact = vm::setLearnFromIntact,
                         onLeaveDevMode = { vm.setDevMode(false); screen = Screen.HOME },
+                        onCopyBugReport = vm::copyBugReport,
+                        onClearCrashLogs = vm::clearCrashLogs,
                     )
                 }
                 Screen.BARCODE -> {

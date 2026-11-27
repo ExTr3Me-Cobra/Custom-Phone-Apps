@@ -395,6 +395,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (frames.isEmpty()) return
         val log = DiagnosticLog()
         currentLog = log
+        com.labelrescue.app.data.CrashLog.current = log
+        com.labelrescue.app.data.CrashLog.note("scan started: ${frames.size} frames " + frames.joinToString(",") { "${it.width}x${it.height}" }.take(200))
         // Live view of the log on the progress screen: names and addresses hidden, recent lines
         // only, refreshed a few times a second (lines arrive from several threads).
         val live = ArrayDeque<String>()
@@ -406,8 +408,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             liveDirty.set(true)
         }
         val ticker = viewModelScope.launch {
+            var n = 0
             while (true) {
                 if (liveDirty.getAndSet(false)) { _liveLog.value = synchronized(live) { live.toList() } }
+                // The scan's log on disk every ~2 s: if the app dies (even in native code), it's there.
+                if (++n % 25 == 0) withContext(Dispatchers.IO) { com.labelrescue.app.data.CrashLog.saveProgress() }
                 kotlinx.coroutines.delay(80)
             }
         }
@@ -452,11 +457,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: Exception) {
                 _status.value = "Something went wrong: ${e.message}"
+                com.labelrescue.app.data.CrashLog.caught(getApplication(), e)
                 null
             } finally {
                 _progress.value = null
                 log.onLine = null
                 ticker.cancel()
+                com.labelrescue.app.data.CrashLog.scanEnded()
             }
             if (out == null) return@launch
             val format = out.format
@@ -500,7 +507,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null }
+    fun cancelRecovery() { job?.cancel(); _progress.value = null; _status.value = null; com.labelrescue.app.data.CrashLog.scanEnded() }
+
+    /** Everything for finding a bug or crash, copied to the clipboard (Developer Mode settings). */
+    fun copyBugReport(redact: Boolean) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) { com.labelrescue.app.data.CrashLog.report(getApplication(), diagnosticLog(redact)) }
+            val cm = getApplication<Application>().getSystemService(android.content.ClipboardManager::class.java)
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Label Rescue bug report", text))
+            _message.value = "Bug report copied (${text.length / 1000}k characters). Paste it to Claude."
+        }
+    }
+
+    fun clearCrashLogs() { com.labelrescue.app.data.CrashLog.clear(getApplication()); _message.value = "Crash logs cleared." }
 
     /**
      * Forgets the current scan entirely: stops it if it's still reading, and removes everything it

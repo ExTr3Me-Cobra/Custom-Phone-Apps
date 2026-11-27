@@ -37,6 +37,8 @@ fun SettingsScreen(
     onQuickScan: (Boolean) -> Unit = {},
     onLearnFromIntact: (Boolean) -> Unit = {},
     onLeaveDevMode: () -> Unit = {},
+    onCopyBugReport: (Boolean) -> Unit = {},
+    onClearCrashLogs: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Developer mode", style = MaterialTheme.typography.titleLarge)
@@ -116,6 +118,14 @@ fun SettingsScreen(
             onClick = { diagnosticLog(redact)?.let { share(ctx, it.take(400_000)) } }, enabled = ui.hasDiagnosticLog,
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) { Text(if (ui.hasDiagnosticLog) "Share last scan's log" else "No scan yet") }
+        Text("Bug report", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "For crashes and bugs, separate from the training export: why the app last stopped (Android's record, native crashes included), " +
+                "any crash it logged, a scan that never finished, and the last scan's log. Copies it to the clipboard: paste it to Claude.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        androidx.compose.material3.Button(onClick = { onCopyBugReport(redact) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Copy bug report") }
+        androidx.compose.material3.OutlinedButton(onClick = onClearCrashLogs, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Clear crash logs") }
         Text("Theme follows the system dark mode setting.", style = MaterialTheme.typography.bodySmall)
     }
 }
