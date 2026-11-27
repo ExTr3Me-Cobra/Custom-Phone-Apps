@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,84 +37,83 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Developer Mode only: live CPU use (top left) and temperature (top right) while a scan runs.
- * CPU is the app's own share of all cores (apps can't read the whole system's since Android 8,
- * and the app is the load during a scan). Heat is the chip's thermal headroom (Android 11+): how
- * close it is to slowing down from heat, 100% = throttling; it follows the chip within seconds.
- * Phones like Samsung's hide the CPU temperature sensors from apps, and the battery's temperature
- * (shown underneath) lags far behind the chip, so it hardly moves during a scan.
+ * Developer Mode only: live CPU use while a scan runs. The big circle is the app's share of all
+ * cores; the small ones are each core. Apps can't read the whole system's CPU use (since Android
+ * 8), but they can read their own threads: each thread's CPU time and the core it last ran on
+ * (/proc/self/task/<tid>/stat), which gives the app's use of each core. During a scan the app is
+ * nearly all the load.
  */
 @Composable
 fun DeviceGauges() {
-    val ctx = LocalContext.current
+    val cores = remember { Runtime.getRuntime().availableProcessors().coerceAtLeast(1) }
     var cpu by remember { mutableStateOf(0f) }
-    var temp by remember { mutableStateOf<Float?>(null) }
-    var tempLabel by remember { mutableStateOf("°C") }
-    var heat by remember { mutableStateOf<Float?>(null) }
+    var perCore by remember { mutableStateOf(FloatArray(cores)) }
     LaunchedEffect(Unit) {
-        val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         var lastCpu = Process.getElapsedCpuTime(); var lastWall = SystemClock.elapsedRealtime()
-        val zones = withContext(Dispatchers.IO) { cpuZones() }
+        var lastTicks = withContext(Dispatchers.IO) { threadTicks() }
         while (true) {
-            delay(1100)
+            delay(800)
             val c = Process.getElapsedCpuTime(); val w = SystemClock.elapsedRealtime()
-            if (w > lastWall) cpu = ((c - lastCpu).toFloat() / ((w - lastWall) * cores) * 100f).coerceIn(0f, 100f)
-            lastCpu = c; lastWall = w
-            val t = withContext(Dispatchers.IO) { readTemp(ctx, zones) }
-            temp = t?.first; tempLabel = t?.second ?: "°C"
-            // Headroom may be asked at most once a second (else it returns NaN).
-            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                val pm = ctx.getSystemService(android.os.PowerManager::class.java)
-                pm?.getThermalHeadroom(0)?.takeIf { !it.isNaN() }?.let { heat = it }
+            val ticks = withContext(Dispatchers.IO) { threadTicks() }
+            val dt = (w - lastWall).coerceAtLeast(1)
+            cpu = ((c - lastCpu).toFloat() / (dt * cores) * 100f).coerceIn(0f, 100f)
+            // Per core: CPU ticks (1/100 s) each thread used since last time, on the core it ran on.
+            val use = FloatArray(cores)
+            for ((tid, t) in ticks) {
+                val prev = lastTicks[tid]?.first ?: continue
+                val core = t.second
+                if (core in 0 until cores) use[core] += (t.first - prev).coerceAtLeast(0L).toFloat()
             }
+            perCore = FloatArray(cores) { (use[it] / (dt / 10f) * 100f).coerceIn(0f, 100f) }
+            lastCpu = c; lastWall = w; lastTicks = ticks
         }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Gauge(cpu / 100f, "${cpu.toInt()}%", "CPU")
         Spacer(Modifier.weight(1f))
-        val t = temp; val hd = heat
-        if (hd != null && !tempLabel.startsWith("CPU")) {
-            // Thermal headroom, with the battery temperature as the small line.
-            Gauge(hd.coerceIn(0f, 1f), "${(hd * 100).toInt()}%", if (t != null) "heat · ${"%.1f".format(t)}°" else "heat")
-        } else {
-            // 25 °C empty, 50 °C full (phones throttle in the 40s).
-            Gauge(if (t == null) 0f else ((t - 25f) / 25f).coerceIn(0f, 1f), if (t == null) "–" else "${t.toInt()}°", tempLabel)
+        // The cores, in rows of four.
+        Column(horizontalAlignment = Alignment.End) {
+            for (row in 0 until (cores + 3) / 4) Row {
+                for (k in row * 4 until minOf(cores, row * 4 + 4)) Gauge(perCore[k] / 100f, "${perCore[k].toInt()}", "core $k", small = true)
+            }
         }
     }
 }
 
+/** For each of the app's threads: (CPU ticks used so far, core it last ran on). */
+private fun threadTicks(): Map<String, Pair<Long, Int>> {
+    val out = HashMap<String, Pair<Long, Int>>()
+    for (t in File("/proc/self/task").listFiles().orEmpty()) {
+        val line = runCatching { File(t, "stat").readText() }.getOrNull() ?: continue
+        // Fields after the thread name (which is in parentheses and can contain spaces).
+        val f = line.substringAfterLast(')').trim().split(' ')
+        // utime and stime are fields 14 and 15, the last core field 39 (here 11, 12 and 36).
+        val ticks = (f.getOrNull(11)?.toLongOrNull() ?: continue) + (f.getOrNull(12)?.toLongOrNull() ?: 0)
+        val core = f.getOrNull(36)?.toIntOrNull() ?: continue
+        out[t.name] = ticks to core
+    }
+    return out
+}
+
 @Composable
-private fun Gauge(fraction: Float, value: String, label: String) {
+private fun Gauge(fraction: Float, value: String, label: String, small: Boolean = false) {
     val color = when {
         fraction < 0.5f -> Color(0xFF2E9E57)
         fraction < 0.8f -> Color(0xFFE0A100)
         else -> Color(0xFFD93025)
     }
     val track = MaterialTheme.colorScheme.surfaceVariant
-    Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(68.dp)) {
-            val sw = 7.dp.toPx()
+    val d = if (small) 40.dp else 68.dp
+    Box(Modifier.size(d), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(d).padding(if (small) 2.dp else 0.dp)) {
+            val sw = (if (small) 4 else 7).dp.toPx()
             drawArc(track, 135f, 270f, false, style = Stroke(sw, cap = StrokeCap.Round))
             drawArc(color, 135f, 270f * fraction.coerceIn(0f, 1f), false, style = Stroke(sw, cap = StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Text(label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontWeight = FontWeight.Bold, fontSize = if (small) 11.sp else 15.sp)
+            Text(label, fontSize = if (small) 7.sp else 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** Readable CPU thermal sensors (often hidden from apps on newer phones). */
-private fun cpuZones(): List<File> = File("/sys/class/thermal").listFiles { f -> f.name.startsWith("thermal_zone") }.orEmpty().filter { z ->
-    val type = runCatching { File(z, "type").readText().trim().lowercase() }.getOrNull() ?: return@filter false
-    ("cpu" in type || "tsens" in type || "soc" in type) && runCatching { File(z, "temp").readText().trim().toFloat() }.isSuccess
-}
-
-/** (°C, label): the hottest readable CPU sensor, else the battery. */
-private fun readTemp(ctx: Context, zones: List<File>): Pair<Float, String>? {
-    val cpu = zones.mapNotNull { z -> runCatching { File(z, "temp").readText().trim().toFloat() }.getOrNull() }
-        .map { if (it > 1000) it / 1000f else it }.filter { it in 10f..120f }.maxOrNull()
-    if (cpu != null) return cpu to "CPU °C"
-    val b = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: return null
-    return if (b == Int.MIN_VALUE) null else b / 10f to "Batt °C"
-}
