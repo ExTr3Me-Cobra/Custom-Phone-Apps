@@ -35,8 +35,10 @@ import com.labelrescue.core.fusion.RecoveryOutput
 import com.labelrescue.core.fusion.Source
 
 @Composable
-fun ProcessingScreen(progress: Progress?, status: String?, onCancel: () -> Unit, live: List<String> = emptyList()) {
+fun ProcessingScreen(progress: Progress?, status: String?, onCancel: () -> Unit, live: List<String> = emptyList(), gauges: Boolean = false) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Developer Mode: live CPU use and temperature.
+        if (gauges) DeviceGauges()
         if (progress != null && progress.total > 0) {
             LinearProgressIndicator({ (progress.done.toFloat() / progress.total).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
         } else LinearProgressIndicator(Modifier.fillMaxWidth())
