@@ -38,8 +38,10 @@ import java.io.File
 /**
  * Developer Mode only: live CPU use (top left) and temperature (top right) while a scan runs.
  * CPU is the app's own share of all cores (apps can't read the whole system's since Android 8,
- * and the app is the load during a scan). Temperature is the CPU's where the phone lets apps read
- * a thermal sensor, else the battery's (always readable, and it tracks the CPU closely).
+ * and the app is the load during a scan). Heat is the chip's thermal headroom (Android 11+): how
+ * close it is to slowing down from heat, 100% = throttling; it follows the chip within seconds.
+ * Phones like Samsung's hide the CPU temperature sensors from apps, and the battery's temperature
+ * (shown underneath) lags far behind the chip, so it hardly moves during a scan.
  */
 @Composable
 fun DeviceGauges() {
@@ -47,25 +49,36 @@ fun DeviceGauges() {
     var cpu by remember { mutableStateOf(0f) }
     var temp by remember { mutableStateOf<Float?>(null) }
     var tempLabel by remember { mutableStateOf("°C") }
+    var heat by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(Unit) {
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         var lastCpu = Process.getElapsedCpuTime(); var lastWall = SystemClock.elapsedRealtime()
         val zones = withContext(Dispatchers.IO) { cpuZones() }
         while (true) {
-            delay(700)
+            delay(1100)
             val c = Process.getElapsedCpuTime(); val w = SystemClock.elapsedRealtime()
             if (w > lastWall) cpu = ((c - lastCpu).toFloat() / ((w - lastWall) * cores) * 100f).coerceIn(0f, 100f)
             lastCpu = c; lastWall = w
             val t = withContext(Dispatchers.IO) { readTemp(ctx, zones) }
             temp = t?.first; tempLabel = t?.second ?: "°C"
+            // Headroom may be asked at most once a second (else it returns NaN).
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                val pm = ctx.getSystemService(android.os.PowerManager::class.java)
+                pm?.getThermalHeadroom(0)?.takeIf { !it.isNaN() }?.let { heat = it }
+            }
         }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Gauge(cpu / 100f, "${cpu.toInt()}%", "CPU")
         Spacer(Modifier.weight(1f))
-        val t = temp
-        // 25 °C empty, 50 °C full (phones throttle in the 40s).
-        Gauge(if (t == null) 0f else ((t - 25f) / 25f).coerceIn(0f, 1f), if (t == null) "–" else "${t.toInt()}°", tempLabel)
+        val t = temp; val hd = heat
+        if (hd != null && !tempLabel.startsWith("CPU")) {
+            // Thermal headroom, with the battery temperature as the small line.
+            Gauge(hd.coerceIn(0f, 1f), "${(hd * 100).toInt()}%", if (t != null) "heat · ${"%.1f".format(t)}°" else "heat")
+        } else {
+            // 25 °C empty, 50 °C full (phones throttle in the 40s).
+            Gauge(if (t == null) 0f else ((t - 25f) / 25f).coerceIn(0f, 1f), if (t == null) "–" else "${t.toInt()}°", tempLabel)
+        }
     }
 }
 
