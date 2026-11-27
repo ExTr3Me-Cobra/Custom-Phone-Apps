@@ -23,7 +23,8 @@ class MlKitText : TextRecognizer, AutoCloseable {
 
     override fun recognize(img: GrayImage): OcrPage {
         val input = InputImage.fromByteArray(Images.toNv21(img), img.width, img.height, 0, InputImage.IMAGE_FORMAT_NV21)
-        // At most two reads at once: steadier memory and CPU on full-resolution frames.
+        // As many reads at once as the pipeline reads frames (up to 4) on phones with the cores
+        // for it; 2 on smaller ones.
         gate.acquireUninterruptibly()
         val text = try { client.process(input).awaitFully(30_000) } finally { gate.release() } ?: return OcrPage(emptyList())
         return map(text)
@@ -35,7 +36,7 @@ class MlKitText : TextRecognizer, AutoCloseable {
          * working on an image (a stopped scan's leftover work) crashed the app in native code.
          */
         private val shared by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
-        private val gate = java.util.concurrent.Semaphore(2)
+        private val gate = java.util.concurrent.Semaphore((Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4))
     }
 
     private fun map(t: Text): OcrPage = OcrPage(t.textBlocks.flatMap { b ->
